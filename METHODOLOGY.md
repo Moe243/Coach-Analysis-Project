@@ -1,0 +1,95 @@
+# Methodology
+
+## Research estimand
+
+The project estimates how quarterback performance differs from a preseason expectation and how those residual differences are associated with coaching roles after adjustment for observable context. It does not identify a treatment effect in the causal-inference sense.
+
+Analysis covers completed 2010-2025 regular seasons. Data from 1999-2009 may be used only as model warm-up and will not appear in rankings.
+
+## Analytical grains
+
+- **QB game:** one quarterback, team, and game; used by role-specific coach-impact models.
+- **QB season:** one quarterback, team, and season; default ranking grain.
+- **QB environment stint:** one quarterback within a date/week-bounded coaching environment; preserves midseason changes.
+- **Coach assignment:** one coach, team, season, role, and assignment interval.
+
+A quarterback traded midseason produces a separate QB-season row for each team. A staff change can create multiple environment stints beneath one QB-team-season.
+
+## Primary metric
+
+EPA per dropback uses regular-season plays where `qb_dropback = 1`, excluding kneels and spikes. Pass attempts, sacks, and quarterback scrambles are included. The quarterback is resolved to a GSIS ID using passer fields and the scramble rusher where necessary. Plays whose quarterback cannot be resolved remain in a data-quality report and are not assigned by name guessing.
+
+```text
+EPA/dropback = sum(qb_epa) / eligible dropbacks
+```
+
+The project calculation is authoritative even when an upstream season-summary field uses a slightly different definition.
+
+## Secondary metrics
+
+- CPOE: mean play-level CPOE on eligible pass attempts with a non-null value.
+- Passing success rate: eligible dropbacks with `qb_epa > 0` divided by eligible dropbacks.
+- Explosive-pass rate: completed passes gaining at least 20 yards divided by pass attempts.
+- Interception and touchdown rates: events divided by pass attempts.
+- Sack rate: sacks divided by pass attempts plus sacks.
+- Air yards per attempt: the sum of recorded passing air yards divided by all pass attempts. Missing play-level air yards are not imputed; `air_yards_attempts` and `air_yards_coverage_rate` expose the incomplete numerator coverage.
+- First-down rate: passing first downs divided by eligible dropbacks.
+- WPA/dropback: summed QB-attributed WPA divided by eligible dropbacks.
+- Year-over-year change: current value minus the prior NFL season for the same player after combining any multi-team rows; team changes remain visible in the current grain.
+
+Denominators of zero produce null, not zero. Every published rate stores its numerator and denominator or can be reconstructed from stored fields.
+
+Checkpoint three exposes exact season-minus-one prior metrics across the complete consecutive history. It aggregates a player's multi-team prior season before joining, requires 200 prior dropbacks before exposing prior EPA/dropback or CPOE, and never fills a missing year with an older or future season. Warm-up seasons from 1999-2009 seed historical context but are never analysis-qualified.
+
+Eligible plays without finite `qb_epa` are retained in `unresolved_qb_plays` with `resolution_status = invalid_qb_epa` and excluded before metric aggregation. The pipeline warns on the raw gap and separately asserts that every resolved play entering QB metrics has finite EPA.
+
+Before any play filtering or metric aggregation, every seasonal PBP asset must have non-null, unique `(game_id, play_id)` keys. A violation fails the season with separate null counts, duplicate-excess counts, and at most five safe key samples; duplicated source plays can never inflate metric reconciliation silently.
+
+Canonical player identity is always GSIS. Blank identifiers normalize to missing only in Silver; Bronze remains unchanged. An external system/ID pair observed against multiple GSIS players is quarantined in `conflicting_player_external_ids` and excluded from the usable crosswalk.
+
+## Expected-performance model
+
+### Feature timing
+
+Each feature has an `as_of_season`. A prediction for season `S` may use values known before the first regular-season game of `S`, including:
+
+- Draft capital, combine/profile information, age, and experience
+- Career starts and performance through `S-1`
+- Prior usage and injuries
+- Team change, career stage, and prior-year team environment
+- Preseason-known coaching continuity indicators, but not coach identity effects
+
+Current-season results, honors, injuries, supporting-cast production, or revised future data are forbidden as preseason features.
+
+### Models and evaluation
+
+Elastic Net is the primary model. Histogram gradient boosting is the challenger. Preprocessing, imputation, scaling, and hyperparameter tuning occur inside expanding-season folds. The simpler model wins when its mean absolute error is within one standard error of the challenger.
+
+Published predictions are out of sample: every prediction for season `S` is generated by a model trained only on seasons earlier than `S`. Metrics include MAE, RMSE, R-squared, calibration intercept/slope, and stability by season, career stage, and volume.
+
+```text
+QB Performance Above Expectation = actual EPA/dropback - expected EPA/dropback
+```
+
+## Coach-impact models
+
+The primary analysis fits one mixed model per coaching role at the QB-game level. The focal coach and quarterback receive partially pooled random intercepts; team/franchise and season/context terms address repeated environments. Uncertainty uses block bootstrap samples drawn by QB-season.
+
+Role-specific estimates describe the association attached to a coach occupying that role, including inseparable staff effects. A crossed-role joint model is a sensitivity analysis only. Effects are suppressed or flagged when role overlap produces weak identification or unstable estimates.
+
+Same-season team offensive EPA is reported as context but excluded as a control because it contains the QB outcome. Same-season protection, receiving, rushing, injury, defense, and schedule measures may appear only in retrospective models and must be labeled contextual or post-treatment.
+
+## Ranking and uncertainty
+
+- Default QB qualification: at least 200 eligible dropbacks.
+- Default coach qualification: at least three qualifying QB seasons and two distinct quarterbacks.
+- Below-threshold records remain queryable but are not assigned a default rank.
+- Coach output includes adjusted estimate, interval, qualifying QB seasons, distinct QBs, average PAE, offensive context, continuity, and warning flags.
+
+## Star teammates
+
+Star teammates are identified without subjective labels. A player qualifies from prior-year, position-standardized production using a documented composite and minimum usage. The exact composite and percentile are versioned when implemented. Current-season Pro Bowl/All-Pro selections are not preseason predictors.
+
+## Reproducibility
+
+Every derived table records an immutable `data_version`; metric facts also record `metric_version`. Source assets record URLs, retrieval timestamps, SHA-256 digests, byte/row counts, and schemas. Pipeline joins assert their expected cardinality and emit unresolved/conflicting-ID reports. Output is published by an atomic directory rename only after all hard checks pass.

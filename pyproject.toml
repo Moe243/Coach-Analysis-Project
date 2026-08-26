@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.25,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nfl-coaching-impact-engine"
+version = "0.1.0"
+description = "A leakage-aware NFL quarterback and coaching impact analytics platform"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "All rights reserved until a repository license is selected." }
+authors = [{ name = "Project owner" }]
+dependencies = [
+  "certifi>=2026.7.22",
+  "polars>=1.44,<2",
+]
+
+[project.scripts]
+nfl-coaching-impact = "nfl_coaching_impact.cli:main"
+
+[project.optional-dependencies]
+analytics = [
+  "nflreadpy>=0.1.5,<0.2",
+  "duckdb>=1,<2",
+  "scikit-learn>=1.5,<2",
+  "statsmodels>=0.14,<1",
+]
+application = [
+  "alembic>=1.13,<2",
+  "fastapi>=0.115,<1",
+  "psycopg[binary]>=3.2,<4",
+  "sqlalchemy>=2,<3",
+  "uvicorn[standard]>=0.30,<1",
+]
+dev = [
+  "mypy>=1.11,<2",
+  "pytest>=8,<9",
+  "ruff>=0.6,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nfl_coaching_impact"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,115 @@
+# NFL Coaching Impact Engine
+
+The NFL Coaching Impact Engine is a sports analytics portfolio project that asks:
+
+> Which coaches consistently help quarterbacks outperform expectations, and how large is their impact compared with player talent and team environment?
+
+The project will follow NFL quarterbacks across seasons, teams, and coaching staffs. It will estimate adjusted associations rather than claim that observational data proves causation.
+
+## Project status
+
+Checkpoint three is complete. One deterministic CLI builds the validated 1999-2025 NFL history from exact official nflverse release assets. It performs storage/download preflight, publishes each season independently, preserves byte-identical Bronze and canonical Silver layers, then atomically assembles complete QB game and team-season facts plus source coverage and season-level quality reports. It intentionally contains no coaching assignments, fitted model, PAE, rankings, API, or frontend.
+
+- Analysis seasons: 2010-2025
+- Warm-up only: 1999-2009
+- Default QB threshold: 200 dropbacks
+- Primary outcome: EPA per quarterback dropback
+- Default coach-ranking threshold: three qualifying QB seasons and two distinct quarterbacks
+
+The validated official run produced data version `c3-f6c1aa118ff43b90`: 140 source assets, 7,276 games, 17,255 QB-team-games, 2,899 QB-team-seasons, 15,930 GSIS players, and 517,712 resolved dropbacks. One 2019 play with invalid EPA was quarantined rather than imputed. All 27 seasons passed hard non-null and uniqueness checks for source `(game_id, play_id)` keys. A clean fixture rebuild into a second empty output directory produced byte-identical deterministic artifacts. Read [the checkpoint-three report](docs/CHECKPOINT_3_REPORT.md) for season-by-season results and the exact next checkpoint.
+
+## Football decision supported
+
+The eventual application is designed for analysts and football-operations staff evaluating whether quarterback performance changed beyond a reasonable preseason expectation while a coach held a particular role. The answer must always be read alongside player history, supporting cast, team context, sample size, and uncertainty.
+
+The first version focuses on quarterbacks and four coaching roles:
+
+- Head coach
+- Offensive coordinator
+- Primary or shared offensive play-caller
+- Quarterbacks coach
+
+## Repository map
+
+```text
+.
+├── data/manual/                 # Human-verified, source-backed inputs
+├── db/schema.sql                # PostgreSQL analytical and serving schema
+├── docs/                        # Audit, architecture, project plan, checkpoint report
+├── scripts/audit_sources.py     # Independent boundary/source smoke audit
+├── src/nfl_coaching_impact/     # Source, transform, validation, pipeline, and CLI code
+├── tests/                       # Offline pipeline/contract and PostgreSQL behavior tests
+├── requirements.lock            # Exact ingestion Python environment
+├── DATA_SOURCES.md
+├── METHODOLOGY.md
+├── LIMITATIONS.md
+├── MODEL_CARD.md
+└── DATA_DICTIONARY.md
+```
+
+Raw and processed data directories are deliberately ignored. Large upstream files and API responses must not be committed.
+
+## Reproduce checkpoint three
+
+Use Python 3.12. Generated assets are ignored by Git.
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.lock
+.venv/bin/python -m pip install --no-deps -e .
+make PYTHON=.venv/bin/python historical-preflight
+make PYTHON=.venv/bin/python historical
+```
+
+The preflight resolves every expected asset and checks conservative storage capacity before downloading. The build downloads only cache misses, validates and publishes each season independently, and atomically publishes the complete version only after all seasons pass. Once all assets are cached, prove a network-free checksum-identical rerun with:
+
+```bash
+make PYTHON=.venv/bin/python historical-offline
+```
+
+`data/processed/historical/LATEST` names the immutable current version. Inside it, `bronze/` contains exact upstream Parquet bytes, `silver/` contains derived and partitioned context tables, and the root contains deterministic JSON/Markdown build evidence plus checksums for every published output. A cached version is reused only after all those checksums pass. Execution timestamps, cache status, retrieval headers, preflight measurements, and reuse status live separately in mutable `data/processed/historical/EXECUTION_LOG.json`; they may differ without changing the analytical version. The cache and all generated Parquet remain local.
+
+Run deterministic tests and lint with:
+
+```bash
+make PYTHON=.venv/bin/python test
+make PYTHON=.venv/bin/python test-network
+.venv/bin/ruff check src tests
+```
+
+The database contract is tested against a disposable PostgreSQL database, not by inspecting SQL text. Install the PostgreSQL driver, create an empty test database with permission to install `btree_gist`, and run:
+
+```bash
+python3 -m pip install -e '.[application]'
+TEST_DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching_test make test-postgres
+```
+
+The optional PostgreSQL runner creates and removes an isolated schema inside that database. It proves alias and assignment interval constraints, citation requirements, environment lineage, and eligible-only ranking behavior.
+
+To repeat the network smoke checks:
+
+```bash
+python3 scripts/audit_sources.py --network
+python3 scripts/audit_sources.py --network --download-samples
+```
+
+`--download-samples` downloads three small 2025 CSV files into a temporary directory and streams bounded 2010 and 2025 play-by-play samples. It validates required columns, `qb_dropback`, finite `qb_epa`, and resolved passer/scrambler GSIS IDs, then removes the temporary files. It does not retain or fully download either play-by-play season.
+
+The planned later stack adds scikit-learn, statsmodels, PostgreSQL, SQLAlchemy, Alembic, FastAPI, and Next.js/TypeScript only in their approved checkpoints. DuckDB remains an embedded analysis option; the implemented ingestion uses Polars.
+
+Secrets will be loaded from environment variables. Copy `.env.example` to `.env` only when a later checkpoint needs credentials, and never commit `.env`.
+
+## Documentation
+
+- [Data feasibility](docs/FEASIBILITY_AUDIT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Data sources](DATA_SOURCES.md)
+- [Methodology](METHODOLOGY.md)
+- [Limitations](LIMITATIONS.md)
+- [Model card](MODEL_CARD.md)
+- [Data dictionary](DATA_DICTIONARY.md)
+- [Phased project plan](docs/PROJECT_PLAN.md)
+
+## Interpretation standard
+
+Coach estimates will be described as adjusted associations. They can be affected by hiring and firing decisions, coach-quarterback matching, roster construction, overlapping staff responsibilities, injuries, schedule, measurement error, and small samples. The application will show uncertainty and supporting evidence rather than a single context-free leaderboard.
