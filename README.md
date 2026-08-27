@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint four is complete. The repository now contains a compact, source-backed 2010-2025 coaching dataset covering all 512 team-seasons. It records 1,323 verified assignment intervals for 285 coaches: 540 observed head-coach stints, 401 formal offensive-coordinator designations, and 382 primary quarterback-coach designations. Each verified row has a normalized citation, confidence level, interval basis, and evidence locator. The 753-row manual-review queue includes every play-caller because that duty is never inferred from a job title, plus missing or ambiguous formal staff roles. No model, PAE, ranking, API, or frontend was created.
+Checkpoint four remains pending approval after its review fixes. The compact, source-backed 2010-2025 layer covers all 512 team-seasons with 1,340 assignment rows for 281 canonical coaches. Of those, 564 intervals are verified and 776 preseason OC/QB designations are provisional. Eight play-caller intervals have direct evidence; unsupported and partially covered duties remain in the 1,526-row review queue. No model, PAE, ranking, API, or frontend was created.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -58,11 +58,13 @@ make PYTHON=.venv/bin/python coaching-validate
 make PYTHON=.venv/bin/python test
 ```
 
-The separately callable network check verifies that the 16 source-book URLs still resolve:
+The separately callable network check verifies the 16 source books and all 30 additional assignment-source URLs, then checks live page content for representative interval, identity, compound-title, and play-caller evidence:
 
 ```bash
 make PYTHON=.venv/bin/python coaching-sources
 ```
+
+To load the validated compact layer into an existing PostgreSQL schema whose teams are already populated, use `DATABASE_URL=... make coaching-load`. The loader writes `interval_basis` with every assignment and commits verified rows with their citations in one transaction.
 
 ## Reproduce checkpoint three
 

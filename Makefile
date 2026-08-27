@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -47,3 +47,7 @@ coaching-validate:
 
 coaching-sources:
 	PYTHONPATH=src $(PYTHON) scripts/check_coaching_sources.py
+
+coaching-load:
+	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 2)
+	PYTHONPATH=src $(PYTHON) scripts/load_coaching_data.py --database-url "$$DATABASE_URL"

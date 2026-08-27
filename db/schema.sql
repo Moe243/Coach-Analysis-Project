@@ -1,5 +1,5 @@
 -- NFL Coaching Impact Engine
--- Checkpoint-one PostgreSQL contract. Alembic migrations begin when loading is implemented.
+-- PostgreSQL contract evolved through checkpoint four. Alembic begins with the application phase.
 
 BEGIN;
 
@@ -20,6 +20,12 @@ CREATE TYPE verification_status AS ENUM (
 );
 
 CREATE TYPE assignment_confidence AS ENUM ('low', 'medium', 'high');
+
+CREATE TYPE assignment_interval_basis AS ENUM (
+    'observed_game_weeks',
+    'season_designation',
+    'dated_source_weeks'
+);
 
 CREATE TYPE model_kind AS ENUM (
     'expected_performance',
@@ -155,6 +161,7 @@ CREATE TABLE coach_assignments (
     is_retained boolean,
     verification_status verification_status NOT NULL DEFAULT 'unverified',
     confidence_level assignment_confidence NOT NULL DEFAULT 'low',
+    interval_basis assignment_interval_basis NOT NULL DEFAULT 'season_designation',
     notes text,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),

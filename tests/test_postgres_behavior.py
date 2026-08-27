@@ -5,6 +5,9 @@ import secrets
 import unittest
 from pathlib import Path
 
+from nfl_coaching_impact.coaching_loader import load_coaching_data
+from nfl_coaching_impact.constants import CANONICAL_TEAM_IDS
+
 try:
     import psycopg
     from psycopg import sql
@@ -130,6 +133,69 @@ class PostgreSQLBehaviorTest(unittest.TestCase):
             VALUES (%s, 'SHARED', 2025, 'play_caller', 13, 18, false)
             """,
             (coaches[2],),
+        )
+
+    def test_assignment_interval_basis_is_persisted_and_constrained(self) -> None:
+        self.insert_team("BASIS")
+        coach_id = self.insert_coach("Interval Basis Coach")
+        assignment_id = self.connection.execute(
+            """
+            INSERT INTO coach_assignments
+                (coach_id, team_id, season, role, start_week, end_week, interval_basis)
+            VALUES (%s, 'BASIS', 2025, 'offensive_coordinator', 1, 9,
+                    'observed_game_weeks')
+            RETURNING assignment_id
+            """,
+            (coach_id,),
+        ).fetchone()[0]
+        value = self.connection.execute(
+            "SELECT interval_basis::text FROM coach_assignments WHERE assignment_id = %s",
+            (assignment_id,),
+        ).fetchone()[0]
+        self.assertEqual(value, "observed_game_weeks")
+
+        with self.assertRaises(psycopg.Error):
+            with self.connection.transaction():
+                self.connection.execute(
+                    """
+                    INSERT INTO coach_assignments
+                        (coach_id, team_id, season, role, start_week, end_week, interval_basis)
+                    VALUES (%s, 'BASIS', 2024, 'offensive_coordinator', 1, 18,
+                            'unsupported_basis')
+                    """,
+                    (coach_id,),
+                )
+
+    def test_coaching_loader_preserves_interval_basis(self) -> None:
+        for team_id in CANONICAL_TEAM_IDS:
+            self.connection.execute(
+                """
+                INSERT INTO teams (team_id, display_name, franchise_name)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (team_id) DO NOTHING
+                """,
+                (team_id, team_id, team_id),
+            )
+        with self.connection.transaction():
+            count = load_coaching_data(self.connection, ROOT)
+        self.assertGreater(count, 1300)
+        rows = self.connection.execute(
+            """
+            SELECT ca.role::text, ca.interval_basis::text
+              FROM coach_assignments ca
+              JOIN coaches c ON c.coach_id = ca.coach_id
+             WHERE ca.team_id = 'HOU' AND ca.season = 2020
+               AND c.canonical_name = 'Tim Kelly'
+             ORDER BY ca.role
+            """
+        ).fetchall()
+        self.assertEqual(
+            rows,
+            [
+                ("offensive_coordinator", "season_designation"),
+                ("play_caller", "season_designation"),
+                ("quarterbacks_coach", "season_designation"),
+            ],
         )
 
     def test_reassigning_a_citation_cannot_orphan_a_verified_assignment(self) -> None:

@@ -76,13 +76,16 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 | File | Grain | Purpose |
 |---|---|---|
 | `data/manual/coaches.csv` | Canonical coach | Stable `coach-<normalized-name>` identity used by the manual layer |
-| `data/manual/coaching_assignments.csv` | Coach-team-season-role-interval | Verified role fact, confidence, interval basis, flags, primary URL, and notes |
+| `data/manual/coach_aliases.csv` | Observed spelling variant | Source spelling mapped to exactly one canonical coach identity |
+| `data/manual/coaching_assignments.csv` | Coach-team-season-role-interval | Verified fact or provisional designation, confidence, interval basis, flags, primary URL, and notes |
 | `data/manual/coach_assignment_sources.csv` | Assignment-citation | Normalized URL, title, source type, access date, evidence locator, and evidence note |
+| `data/manual/coaching_change_audit.csv` | Dated coordinator stint | Source-backed in-season split retained for audit |
 | `data/manual/coaching_review_queue.csv` | Team-season-role issue | Missing, multiple, or explicit-play-caller evidence work without guessed values |
 | `data/manual/coaching_role_definitions.csv` | Role | Definition, acceptance rule, and commonly confused role |
+| `data/manual/coaching_source_content_checks.csv` | Representative evidence check | Assignment keys, live source URL, and required content terms |
 | `data/manual/coaching_source_registry.csv` | Season source book | URL, access date, SHA-256, and raw-commit prohibition |
 
-`confidence_level` is `high`, `medium`, or `low`. `interval_basis = observed_game_weeks` means game evidence bounded the interval. `interval_basis = season_designation` means the official preseason book designated the coach for that season; the week range is the nominal season scope and is not independent evidence that no in-season change occurred.
+`confidence_level` is `high`, `medium`, or `low`. `interval_basis = observed_game_weeks` means game evidence bounded the interval. `interval_basis = dated_source_weeks` means a dated source establishes the change boundary used for the interval. `interval_basis = season_designation` means a preseason source designated the coach for that season; its nominal week range is not evidence that no in-season change occurred. Season-designation OC/QB rows therefore remain `provisional` unless independent evidence verifies the full interval.
 
 ## Cross-row integrity contracts
 

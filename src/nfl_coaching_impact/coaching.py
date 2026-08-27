@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,12 +11,18 @@ from urllib.parse import urlparse
 
 from .constants import ANALYSIS_SEASONS, CANONICAL_TEAM_IDS
 
-ROLES = frozenset(
-    {"head_coach", "offensive_coordinator", "play_caller", "quarterbacks_coach"}
-)
+ROLES = frozenset({"head_coach", "offensive_coordinator", "play_caller", "quarterbacks_coach"})
 CONFIDENCE_LEVELS = frozenset({"high", "medium", "low"})
-INTERVAL_BASES = frozenset({"observed_game_weeks", "season_designation"})
+INTERVAL_BASES = frozenset({"observed_game_weeks", "season_designation", "dated_source_weeks"})
 VERIFICATION_STATUSES = frozenset({"unverified", "provisional", "verified", "conflicting"})
+REVIEW_ISSUE_TYPES = frozenset(
+    {
+        "explicit_play_caller_evidence_required",
+        "missing_formal_role",
+        "partial_interval_unresolved",
+        "season_interval_verification_required",
+    }
+)
 
 
 class CoachingDataError(ValueError):
@@ -42,6 +49,23 @@ def _valid_url(value: str) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc)
 
 
+def normalize_coach_name(value: str) -> str:
+    """Return the stable identity key used by the committed manual dataset."""
+
+    return re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
+
+
+def validate_source_content(content: str, required_terms: str, evidence_id: str) -> None:
+    """Require every pipe-delimited evidence term in fetched source content."""
+
+    normalized = " ".join(content.casefold().split())
+    missing = [term for term in required_terms.split("|") if term.casefold() not in normalized]
+    if missing:
+        raise CoachingDataError(
+            f"source content check {evidence_id} is missing required terms: {missing}"
+        )
+
+
 def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
     """Validate identities, intervals, citations, role coverage, and review routing."""
 
@@ -49,9 +73,11 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
     assignments = _read(manual / "coaching_assignments.csv")
     citations = _read(manual / "coach_assignment_sources.csv")
     coaches = _read(manual / "coaches.csv")
+    aliases = _read(manual / "coach_aliases.csv")
     reviews = _read(manual / "coaching_review_queue.csv")
     definitions = _read(manual / "coaching_role_definitions.csv")
     registry = _read(manual / "coaching_source_registry.csv")
+    content_checks = _read(manual / "coaching_source_content_checks.csv")
 
     assignment_keys = [row["assignment_key"] for row in assignments]
     if len(assignment_keys) != len(set(assignment_keys)):
@@ -59,6 +85,23 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
     coach_ids = {row["coach_id"] for row in coaches}
     if len(coach_ids) != len(coaches):
         raise CoachingDataError("coach_id values must be unique")
+    normalized_names = [row["normalized_name"] for row in coaches]
+    if len(normalized_names) != len(set(normalized_names)):
+        raise CoachingDataError("canonical coach identities must have unique normalized names")
+    for row in coaches:
+        expected = normalize_coach_name(row["canonical_name"])
+        if row["normalized_name"] != expected or row["coach_id"] != f"coach-{expected}":
+            raise CoachingDataError(f"noncanonical coach identity: {row['coach_id']}")
+    alias_names = [row["normalized_alias"] for row in aliases]
+    if len(alias_names) != len(set(alias_names)):
+        raise CoachingDataError("coach aliases must have unique normalized values")
+    coach_names_by_id = {row["coach_id"]: row["canonical_name"] for row in coaches}
+    if any(
+        row["coach_id"] not in coach_ids
+        or row["canonical_name"] != coach_names_by_id[row["coach_id"]]
+        for row in aliases
+    ):
+        raise CoachingDataError("coach alias references an unresolved canonical identity")
     citation_keys = {row["assignment_key"] for row in citations}
     if any(not _valid_url(row["source_url"]) for row in citations):
         raise CoachingDataError("every citation must contain an HTTPS source URL")
@@ -68,6 +111,16 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
         raise CoachingDataError("source registry must cover every 2010-2025 season")
     if any(row["local_raw_committed"] != "false" for row in registry):
         raise CoachingDataError("raw source books must not be committed")
+    for row in content_checks:
+        if not _valid_url(row["source_url"]):
+            raise CoachingDataError(f"invalid content-check URL: {row['evidence_id']}")
+        referenced = set(row["assignment_keys"].split("|"))
+        if not referenced <= set(assignment_keys):
+            raise CoachingDataError(
+                f"content check references unknown assignment: {row['evidence_id']}"
+            )
+        if not all(term.strip() for term in row["required_terms"].split("|")):
+            raise CoachingDataError(f"content check has empty evidence terms: {row['evidence_id']}")
 
     intervals: dict[tuple[int, str, str], list[tuple[int, int, bool, str]]] = defaultdict(list)
     covered: set[tuple[int, str]] = set()
@@ -89,6 +142,10 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
             raise CoachingDataError(f"invalid week interval for {row['assignment_key']}")
         if row["coach_id"] not in coach_ids or not row["coach_canonical_name"].strip():
             raise CoachingDataError(f"unresolved coach identity for {row['assignment_key']}")
+        if row["coach_id"] != f"coach-{normalize_coach_name(row['coach_canonical_name'])}":
+            raise CoachingDataError(
+                f"assignment uses a noncanonical coach identity: {row['assignment_key']}"
+            )
         if row["verification_status"] == "verified" and row["assignment_key"] not in citation_keys:
             raise CoachingDataError(f"verified assignment lacks citation: {row['assignment_key']}")
         if not _valid_url(row["primary_source_url"]):
@@ -111,13 +168,22 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
     if len(review_ids) != len(set(review_ids)):
         raise CoachingDataError("review_id values must be unique")
     review_grains = set()
+    review_issues = set()
     for row in reviews:
         season, team, role = int(row["season"]), row["team_id"], row["role"]
         if season not in ANALYSIS_SEASONS or team not in CANONICAL_TEAM_IDS or role not in ROLES:
             raise CoachingDataError(f"invalid review queue grain: {row['review_id']}")
         if row["status"] not in {"open", "resolved", "rejected"}:
             raise CoachingDataError(f"invalid review status: {row['review_id']}")
+        if (
+            row["issue_type"] not in REVIEW_ISSUE_TYPES
+            or row["priority"] not in CONFIDENCE_LEVELS
+            or not _valid_url(row["source_url"])
+            or not row["notes"].strip()
+        ):
+            raise CoachingDataError(f"invalid review metadata: {row['review_id']}")
         review_grains.add((season, team, role))
+        review_issues.add((season, team, role, row["issue_type"]))
         covered.add((season, team))
 
     expected_team_seasons = {
@@ -132,10 +198,57 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
                 raise CoachingDataError(
                     f"role is neither assigned nor queued: {season}-{team}-{role}"
                 )
-    if role_counts["play_caller"]:
-        raise CoachingDataError(
-            "checkpoint four must not infer play callers without explicit evidence"
+    for row in assignments:
+        grain = (int(row["season"]), row["team_id"], row["role"])
+        if row["verification_status"] == "provisional" and row["interval_basis"] == (
+            "season_designation"
+        ):
+            if (*grain, "season_interval_verification_required") not in review_issues:
+                raise CoachingDataError(
+                    f"provisional season interval is not queued: {row['assignment_key']}"
+                )
+        if row["role"] == "play_caller":
+            evidence = " ".join(
+                citation["evidence_note"]
+                for citation in citations
+                if citation["assignment_key"] == row["assignment_key"]
+            ).casefold()
+            evidence = " ".join(evidence.replace("-", " ").split())
+            if (
+                row["verification_status"] != "verified"
+                or row["confidence_level"] != "high"
+                or "play call" not in evidence
+            ):
+                raise CoachingDataError(
+                    f"play-caller assignment lacks explicit high-confidence evidence: "
+                    f"{row['assignment_key']}"
+                )
+        if row["interval_basis"] == "dated_source_weeks" and (
+            row["verification_status"] != "verified" or row["confidence_level"] != "high"
+        ):
+            raise CoachingDataError(
+                f"dated interval is not high-confidence verified: {row['assignment_key']}"
+            )
+
+    # Compound formal titles must expand into each checkpoint role they name.
+    assignment_grains = {
+        (int(row["season"]), row["team_id"], row["coach_id"], row["role"]) for row in assignments
+    }
+    for citation in citations:
+        note = citation["evidence_note"].casefold()
+        if "offensive coordinator/quarterbacks" not in note:
+            continue
+        assignment = next(
+            row for row in assignments if row["assignment_key"] == citation["assignment_key"]
         )
+        required = {
+            (int(assignment["season"]), assignment["team_id"], assignment["coach_id"], role)
+            for role in ("offensive_coordinator", "quarterbacks_coach")
+        }
+        if not required <= assignment_grains:
+            raise CoachingDataError(
+                f"compound title was not expanded for {assignment['coach_canonical_name']}"
+            )
 
     return CoachingValidationResult(
         assignments=len(assignments),

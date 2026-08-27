@@ -27,9 +27,12 @@ class RepositoryContractTest(unittest.TestCase):
             "docs/CHECKPOINT_4_REPORT.md",
             "db/schema.sql",
             "data/manual/coaching_assignments.csv",
+            "data/manual/coach_aliases.csv",
             "data/manual/coach_assignment_sources.csv",
+            "data/manual/coaching_change_audit.csv",
             "data/manual/coaching_review_queue.csv",
             "data/manual/coaching_role_definitions.csv",
+            "data/manual/coaching_source_content_checks.csv",
             "data/manual/coaching_source_registry.csv",
             "scripts/audit_sources.py",
         }
