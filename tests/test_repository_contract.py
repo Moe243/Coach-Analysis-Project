@@ -24,21 +24,28 @@ class RepositoryContractTest(unittest.TestCase):
             "docs/PROJECT_PLAN.md",
             "docs/CHECKPOINT_1_REPORT.md",
             "docs/CHECKPOINT_2_REPORT.md",
+            "docs/CHECKPOINT_4_REPORT.md",
             "db/schema.sql",
             "data/manual/coaching_assignments.csv",
+            "data/manual/coach_assignment_sources.csv",
+            "data/manual/coaching_review_queue.csv",
+            "data/manual/coaching_role_definitions.csv",
+            "data/manual/coaching_source_registry.csv",
             "scripts/audit_sources.py",
         }
         missing = sorted(path for path in required if not (ROOT / path).is_file())
         self.assertEqual(missing, [])
 
-    def test_manual_template_is_schema_only(self) -> None:
+    def test_manual_assignments_are_source_backed(self) -> None:
         path = ROOT / "data" / "manual" / "coaching_assignments.csv"
         with path.open(newline="", encoding="utf-8") as handle:
             rows = list(csv.reader(handle))
-        self.assertEqual(len(rows), 1, "template must not contain fabricated assignments")
+        self.assertGreater(len(rows), 1, "checkpoint four must contain verified assignments")
         self.assertIn("verification_status", rows[0])
-        self.assertIn("source_url", rows[0])
+        self.assertIn("primary_source_url", rows[0])
         self.assertIn("role", rows[0])
+        self.assertIn("confidence_level", rows[0])
+        self.assertIn("assignment_key", rows[0])
 
     def test_feasibility_classifications_are_documented(self) -> None:
         text = (ROOT / "docs" / "FEASIBILITY_AUDIT.md").read_text(encoding="utf-8").lower()

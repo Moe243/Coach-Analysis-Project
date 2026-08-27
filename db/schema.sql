@@ -19,6 +19,8 @@ CREATE TYPE verification_status AS ENUM (
     'conflicting'
 );
 
+CREATE TYPE assignment_confidence AS ENUM ('low', 'medium', 'high');
+
 CREATE TYPE model_kind AS ENUM (
     'expected_performance',
     'coach_role',
@@ -152,6 +154,7 @@ CREATE TABLE coach_assignments (
     is_shared boolean NOT NULL DEFAULT false,
     is_retained boolean,
     verification_status verification_status NOT NULL DEFAULT 'unverified',
+    confidence_level assignment_confidence NOT NULL DEFAULT 'low',
     notes text,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),

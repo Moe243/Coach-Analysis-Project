@@ -1,6 +1,6 @@
 # Data sources
 
-Last updated: 2026-08-25
+Last updated: 2026-08-27
 
 This register records planned and audited sources. Coverage describes the source, not a guarantee that every row or field is complete. Each ingestion run records its exact asset URL, retrieval timestamp, SHA-256 digest, byte and row counts, and observed schema.
 
@@ -19,6 +19,7 @@ This register records planned and audited sources. Coverage describes the source
 | FTN charting via nflverse | https://nflreadr.nflverse.com/reference/load_ftn_charting.html | Motion, play action, screen/RPO, blitzers, QB-fault sack and charted pass traits | 2022 onward | `nflreadpy.load_ftn_charting` | CC BY-SA 4.0; attribution to FTN Data via nflverse is required | Not available for most of the analysis window; charting is human-generated |
 | CollegeFootballData API | https://api.collegefootballdata.com/ | College production, recruiting, team strength, advanced metrics | Deferred until after the baseline model | Authenticated API using `CFBD_API_KEY` from server environment | Current terms prohibit publishing raw API data as a standalone dataset or bulk mirror; never commit key or raw responses | NFL-to-college identity matching is not reliably turnkey; quotas and historical sparsity apply |
 | Official NFL team sites and media guides | https://www.nfl.com/teams/ | Coaching roles, biographies, staff announcements, interim dates | Manually collected for 2010-2025 | Human verification with source URL and access date | Store factual assignment fields and citations, not copied biographies or documents | Older pages disappear; play-calling responsibilities may be ambiguous or shared |
+| NFL Record & Fact Books | Season-specific URLs in `data/manual/coaching_source_registry.csv` | Preseason head coach and assistant-coach titles | One book for every 2010-2025 season | Manual extraction from official NFL publications; older books use preserved mirrors when no stable NFL URL resolves | Only compact factual assignments, locators, URLs, and file digests are committed; raw PDFs are excluded | Establishes formal preseason staff designation, not weekly tenure or play-calling duty |
 | Pro Football Reference | https://www.pro-football-reference.com/ | Potential historical cross-check only | No automated direct collection | Manual reference only when permitted | Direct scraping is excluded under the Sports Reference data-use policy; PFR-derived nflverse fields retain an upstream concern | Not a source for the public project pipeline unless explicit permission is obtained |
 
 ## Source acceptance rules
@@ -64,3 +65,9 @@ The official full-history run `c3-f6c1aa118ff43b90` validated 140 Parquet assets
 PBP, rosters, and player statistics are expected for 1999-2025. Depth charts are expected from 2001, injuries from 2009, and snap counts from 2012. The 25 earlier dataset-season combinations are recorded as `expected_gap`, not requested and not treated as failures. The official 2012 snap-count asset exists and passes its schema contract but contains zero rows, so it is recorded separately as `ingested_empty`. The 2025 depth-chart schema differs materially from prior seasons; Silver remains partitioned by source season so upstream fields are preserved without coercing incompatible schemas.
 
 Preflight uses cached sizes or HTTPS HEAD responses before any download. The final checkpoint-three run found all 540,760,962 source bytes in the verified cache and required 1,215,739,652 free bytes. Deterministic source manifests retain exact URLs, schemas, row counts, byte sizes, validation status, and SHA-256 values. Execution timestamps, cache status, HTTP retrieval headers, preflight measurements, and reuse status are separated into mutable `data/processed/historical/EXECUTION_LOG.json` outside the content-addressed version directory.
+
+## Checkpoint-four coaching sources
+
+Head-coach stints use the `home_coach` and `away_coach` fields in the already validated nflverse PBP assets. Their intervals are the first and last regular-season game weeks on which that coach is observed for the team. Formal offensive-coordinator and quarterback-coach designations use the corresponding season's NFL Record & Fact Book staff pages. Citation rows record the exact URL, access date (2026-08-27), evidence locator, source type, and evidence note. The source registry records a SHA-256 for every reviewed book and confirms that none of the raw PDFs is committed.
+
+Books reached through an NFL or official club domain receive high source confidence. Older official publications available only through a preserved mirror receive medium confidence even though the document itself is an NFL Record & Fact Book. Confidence describes evidence strength, not estimated coaching impact.

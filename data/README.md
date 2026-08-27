@@ -15,6 +15,8 @@
 - `external/`: restricted or user-supplied local inputs; ignored by Git.
 - `manual/`: small, source-backed human-verified inputs; templates and permitted facts may be committed.
 
+Checkpoint four commits only compact coaching facts in `manual/`: canonical coach identities, assignment intervals, normalized citations, role definitions, source-book URLs/digests, and an explicit review queue. `interval_basis` distinguishes head coaches observed on game weeks from OC/QB-coach season designations in preseason staff books. Raw NFL PDFs and team media guides remain uncommitted.
+
 Never place credentials in this tree. Never commit raw CFBD responses, nflverse bulk files, third-party media guides, database dumps, or model artifacts.
 
 A failed run removes only its unpublished staging directory. For historical ingestion, a season failure cannot alter already completed immutable season versions and never updates the full-history `LATEST` pointer.

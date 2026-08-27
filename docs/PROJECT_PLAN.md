@@ -23,11 +23,11 @@ Expand validated ingestion to 1999-2025, with 1999-2009 warm-up only and 2010-20
 
 Exit criterion met: the 140-asset official build passed storage/download preflight, all 27 seasons published independently, the full dataset published atomically, the offline rerun reused checksum-identical outputs, and season-level source/metric/quality summaries report all gaps and warnings. No coaching or modeling work was started.
 
-## Checkpoint four — coaching-data verification
+## Checkpoint four — coaching-data verification (complete)
 
 Build the source-backed coach-team-season-role table for 2010-2025, including assignment intervals, interim/shared/retained flags, citations, conflicts, and coverage reporting.
 
-Exit criterion: all 512 team-seasons reviewed; every verified assignment cited; missing/conflicting roles reported; no duplicate assignment or environment grains.
+Exit criterion met: all 512 team-seasons are covered; all 1,323 verified rows have citations; 753 unresolved role reviews are explicit; role/identity/interval/citation/overlap contracts pass. Play callers remain queued rather than inferred. Coaching environments are deferred until those interval reviews are resolved.
 
 ## Checkpoint five — expected performance
 

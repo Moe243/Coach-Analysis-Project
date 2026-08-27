@@ -64,12 +64,25 @@ Season rows add `prior_season`, `prior_starts`, `prior_dropbacks`, `prior_qualif
 
 | Table | Grain | Important fields |
 |---|---|---|
-| `coach_assignments` | Coach-team-season-role-interval | role, weeks/dates, interim/shared/retained, verification, notes |
+| `coach_assignments` | Coach-team-season-role-interval | role, weeks/dates, interim/shared/retained, verification, confidence, interval basis, notes |
 | `coach_assignment_sources` | Assignment-source citation | source, URL, access date, evidence note |
 | `coaching_environments` | Team-season interval with a stable staff combination | weeks/dates and environment key |
 | `coaching_environment_members` | Environment-role-coach membership | assignment reference and shared duty |
 
 Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterbacks_coach`. Verification values are `unverified`, `provisional`, `verified`, and `conflicting`.
+
+### Committed checkpoint-four files
+
+| File | Grain | Purpose |
+|---|---|---|
+| `data/manual/coaches.csv` | Canonical coach | Stable `coach-<normalized-name>` identity used by the manual layer |
+| `data/manual/coaching_assignments.csv` | Coach-team-season-role-interval | Verified role fact, confidence, interval basis, flags, primary URL, and notes |
+| `data/manual/coach_assignment_sources.csv` | Assignment-citation | Normalized URL, title, source type, access date, evidence locator, and evidence note |
+| `data/manual/coaching_review_queue.csv` | Team-season-role issue | Missing, multiple, or explicit-play-caller evidence work without guessed values |
+| `data/manual/coaching_role_definitions.csv` | Role | Definition, acceptance rule, and commonly confused role |
+| `data/manual/coaching_source_registry.csv` | Season source book | URL, access date, SHA-256, and raw-commit prohibition |
+
+`confidence_level` is `high`, `medium`, or `low`. `interval_basis = observed_game_weeks` means game evidence bounded the interval. `interval_basis = season_designation` means the official preseason book designated the coach for that season; the week range is the nominal season scope and is not independent evidence that no in-season change occurred.
 
 ## Cross-row integrity contracts
 

@@ -1,0 +1,5 @@
+role,definition,assignment_rule,not_equivalent_to
+head_coach,Coach recorded as the team head coach for observed regular-season games.,Game-level nflverse head-coach fields; intervals use first and last observed regular-season game weeks.,Offensive play caller
+offensive_coordinator,Coach formally titled offensive coordinator or co-offensive coordinator.,Official preseason NFL staff listing; in-season changes require separate dated evidence.,Offensive play caller
+play_caller,Coach with explicit responsibility for communicating the primary offensive play calls during games.,Requires dated explicit evidence and interval; never inferred from HC or OC title.,Head coach or offensive coordinator title alone
+quarterbacks_coach,Primary coach formally assigned to the quarterbacks position group.,Official staff listing; assistant QB coaches are not promoted to this role.,Passing-game coordinator or assistant quarterbacks coach

@@ -32,7 +32,7 @@ Teams select coaches for particular quarterbacks and quarterbacks for particular
 
 ## Coaching data quality
 
-No audited public API supplies complete role histories, play-callers, shared duties, and midseason intervals for 2010-2025. Official pages and media guides can disappear or omit ambiguity. Conflicting assignments will remain marked `conflicting`; missing roles will not be inferred from job titles alone.
+No audited public API supplies complete role histories, play-callers, shared duties, and midseason intervals for 2010-2025. Checkpoint four verifies 540 observed head-coach stints and 783 formal preseason OC/QB-coach designations, but the latter use a `season_designation` interval basis: the source establishes the appointment, not weekly proof that the coach retained the role all season. The open queue preserves 753 unresolved role checks, including all 512 offensive play callers. A formal OC title is never treated as proof of play-calling duty. Older official books available only from preservation mirrors receive medium confidence, and disappearing source URLs may require digest-matched replacement copies.
 
 ## Preseason expectation limitations
 

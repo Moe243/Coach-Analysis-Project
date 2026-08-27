@@ -71,6 +71,14 @@ Published predictions are out of sample: every prediction for season `S` is gene
 QB Performance Above Expectation = actual EPA/dropback - expected EPA/dropback
 ```
 
+## Coaching-assignment verification
+
+Checkpoint four separates a formal staff title from the distinct fact of play-calling duty. Head coaches are accepted from game-level nflverse coach fields and compressed into non-overlapping observed-week stints. Offensive coordinators and primary quarterback coaches are accepted only when one formal candidate appears on the relevant NFL Record & Fact Book staff page. Assistant quarterback coaches are never promoted to the primary role. Missing or multiple candidates enter the review queue.
+
+Every verified assignment must join to at least one citation. Citations retain the exact HTTPS URL, source title/type, access date, page locator, and a short evidence note. Source confidence is high for nflverse or NFL/club-hosted books and medium for an official book available only through a preservation mirror. Play callers require dated, explicit evidence of actual play-calling responsibility and an interval; no HC or OC title is used as a proxy. Consequently all 512 play-caller grains remain open for manual verification at this checkpoint.
+
+The offline validator rejects duplicate keys, unresolved identities, illegal seasons/teams/roles, invalid intervals, overlapping non-shared assignments, verified rows without citations, non-HTTPS sources, incomplete role definitions, and any team-season-role that is neither assigned nor queued.
+
 ## Coach-impact models
 
 The primary analysis fits one mixed model per coaching role at the QB-game level. The focal coach and quarterback receive partially pooled random intercepts; team/franchise and season/context terms address repeated environments. Uncertainty uses block bootstrap samples drawn by QB-season.

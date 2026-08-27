@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -41,3 +41,9 @@ historical:
 
 historical-offline:
 	PYTHONPATH=src $(PYTHON) -m nfl_coaching_impact.cli historical --project-root "$(PROJECT_ROOT)" --offline
+
+coaching-validate:
+	PYTHONPATH=src $(PYTHON) scripts/validate_coaching_data.py
+
+coaching-sources:
+	PYTHONPATH=src $(PYTHON) scripts/check_coaching_sources.py
