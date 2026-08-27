@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint four remains pending approval after its review fixes. The compact, source-backed 2010-2025 layer covers all 512 team-seasons with 1,340 assignment rows for 281 canonical coaches. Of those, 564 intervals are verified and 776 preseason OC/QB designations are provisional. Eight play-caller intervals have direct evidence; unsupported and partially covered duties remain in the 1,526-row review queue. No model, PAE, ranking, API, or frontend was created.
+Checkpoint four remains pending approval after its review fixes. The compact, source-backed 2010-2025 layer covers all 512 team-seasons with 1,343 assignment rows for 281 canonical coaches. Of those, 566 intervals are verified and 777 assignments are provisional. Ten play-caller intervals have direct evidence and one is provisional; unsupported, shared, and partially covered duties remain in the 1,527-row review queue. No model, PAE, ranking, API, or frontend was created.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -58,7 +58,7 @@ make PYTHON=.venv/bin/python coaching-validate
 make PYTHON=.venv/bin/python test
 ```
 
-The separately callable network check verifies the 16 source books and all 30 additional assignment-source URLs, then checks live page content for representative interval, identity, compound-title, and play-caller evidence:
+The separately callable network check verifies the 16 source books and all additional assignment-source URLs, then checks live page content for the verified play-caller intervals as well as representative interval, identity, and compound-title evidence:
 
 ```bash
 make PYTHON=.venv/bin/python coaching-sources

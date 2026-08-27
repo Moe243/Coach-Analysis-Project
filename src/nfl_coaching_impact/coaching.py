@@ -21,6 +21,7 @@ REVIEW_ISSUE_TYPES = frozenset(
         "missing_formal_role",
         "partial_interval_unresolved",
         "season_interval_verification_required",
+        "shared_duty_verification_required",
     }
 )
 
@@ -103,6 +104,11 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
     ):
         raise CoachingDataError("coach alias references an unresolved canonical identity")
     citation_keys = {row["assignment_key"] for row in citations}
+    unknown_citation_keys = citation_keys - set(assignment_keys)
+    if unknown_citation_keys:
+        raise CoachingDataError(
+            f"citation references unknown assignment: {sorted(unknown_citation_keys)[:3]}"
+        )
     if any(not _valid_url(row["source_url"]) for row in citations):
         raise CoachingDataError("every citation must contain an HTTPS source URL")
     if {row["role"] for row in definitions} != ROLES:
@@ -121,6 +127,9 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
             )
         if not all(term.strip() for term in row["required_terms"].split("|")):
             raise CoachingDataError(f"content check has empty evidence terms: {row['evidence_id']}")
+    content_checked_keys = {
+        key for row in content_checks for key in row["assignment_keys"].split("|")
+    }
 
     intervals: dict[tuple[int, str, str], list[tuple[int, int, bool, str]]] = defaultdict(list)
     covered: set[tuple[int, str]] = set()
@@ -138,6 +147,9 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
             raise CoachingDataError(f"invalid interval basis for {row['assignment_key']}")
         if row["verification_status"] not in VERIFICATION_STATUSES:
             raise CoachingDataError(f"invalid verification status for {row['assignment_key']}")
+        boolean_fields = ("is_interim", "is_shared", "is_retained")
+        if any(row[field] not in {"true", "false"} for field in boolean_fields):
+            raise CoachingDataError(f"invalid boolean flag for {row['assignment_key']}")
         if not 1 <= start <= end <= 25:
             raise CoachingDataError(f"invalid week interval for {row['assignment_key']}")
         if row["coach_id"] not in coach_ids or not row["coach_canonical_name"].strip():
@@ -203,7 +215,12 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
         if row["verification_status"] == "provisional" and row["interval_basis"] == (
             "season_designation"
         ):
-            if (*grain, "season_interval_verification_required") not in review_issues:
+            expected_issue = (
+                "shared_duty_verification_required"
+                if row["role"] == "play_caller"
+                else "season_interval_verification_required"
+            )
+            if (*grain, expected_issue) not in review_issues:
                 raise CoachingDataError(
                     f"provisional season interval is not queued: {row['assignment_key']}"
                 )
@@ -214,15 +231,50 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
                 if citation["assignment_key"] == row["assignment_key"]
             ).casefold()
             evidence = " ".join(evidence.replace("-", " ").split())
-            if (
-                row["verification_status"] != "verified"
-                or row["confidence_level"] != "high"
-                or "play call" not in evidence
-            ):
+            verified = row["verification_status"] == "verified"
+            allowed_provisional = (
+                row["verification_status"] == "provisional"
+                and row["confidence_level"] in {"medium", "low"}
+                and (*grain, "shared_duty_verification_required") in review_issues
+            )
+            if not (verified or allowed_provisional) or "play call" not in evidence:
                 raise CoachingDataError(
-                    f"play-caller assignment lacks explicit high-confidence evidence: "
+                    f"play-caller assignment lacks explicit evidence or review routing: "
                     f"{row['assignment_key']}"
                 )
+            if verified and (
+                row["confidence_level"] != "high"
+                or row["assignment_key"] not in content_checked_keys
+            ):
+                raise CoachingDataError(
+                    f"verified play-caller lacks high-confidence content check: "
+                    f"{row['assignment_key']}"
+                )
+        if row["is_interim"] == "true":
+            if row["role"] == "head_coach":
+                has_predecessor = any(
+                    other["season"] == row["season"]
+                    and other["team_id"] == row["team_id"]
+                    and other["role"] == "head_coach"
+                    and int(other["end_week"]) < int(row["start_week"])
+                    for other in assignments
+                )
+                if int(row["start_week"]) == 1 or not has_predecessor:
+                    raise CoachingDataError(
+                        "interim head coach is not a temporary replacement: "
+                        f"{row['assignment_key']}"
+                    )
+            else:
+                interim_evidence = " ".join(
+                    f"{citation['source_title']} {citation['evidence_note']}"
+                    for citation in citations
+                    if citation["assignment_key"] == row["assignment_key"]
+                ).casefold()
+                if not any(
+                    phrase in interim_evidence
+                    for phrase in ("interim", "remainder of season", "remainder of the season")
+                ):
+                    raise CoachingDataError(f"unsupported interim label: {row['assignment_key']}")
         if row["interval_basis"] == "dated_source_weeks" and (
             row["verification_status"] != "verified" or row["confidence_level"] != "high"
         ):

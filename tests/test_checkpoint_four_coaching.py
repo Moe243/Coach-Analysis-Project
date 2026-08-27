@@ -46,8 +46,9 @@ class CheckpointFourCoachingTest(unittest.TestCase):
     def test_committed_dataset_passes_all_contracts(self) -> None:
         result = validate_coaching_data(ROOT)
         self.assertEqual(result.covered_team_seasons, 512)
-        self.assertEqual(result.assignments, result.citations)
-        self.assertGreaterEqual(result.role_counts["play_caller"], 8)
+        self.assertEqual(result.assignments, 1343)
+        self.assertGreaterEqual(result.citations, result.assignments)
+        self.assertEqual(result.role_counts["play_caller"], 11)
         self.assertGreater(result.role_counts["head_coach"], 512)
         self.assertGreater(result.open_reviews, 512)
 
@@ -82,7 +83,74 @@ class CheckpointFourCoachingTest(unittest.TestCase):
             {row["role"] for row in rows},
             {"offensive_coordinator", "quarterbacks_coach", "play_caller"},
         )
-        self.assertTrue(all(row["verification_status"] == "verified" for row in rows))
+        play_callers = [row for row in rows if row["role"] == "play_caller"]
+        self.assertEqual(
+            [
+                (
+                    row["start_week"],
+                    row["end_week"],
+                    row["is_shared"],
+                    row["verification_status"],
+                    row["interval_basis"],
+                )
+                for row in play_callers
+            ],
+            [
+                ("1", "3", "false", "verified", "dated_source_weeks"),
+                ("4", "4", "true", "verified", "dated_source_weeks"),
+                ("5", "17", "false", "provisional", "season_designation"),
+            ],
+        )
+        reviews = self._read("coaching_review_queue.csv")
+        self.assertTrue(
+            any(
+                row["review_id"] == "2020-HOU-play_caller-shared-duty" and row["status"] == "open"
+                for row in reviews
+            )
+        )
+
+    def test_replacement_coaches_are_not_automatically_interim(self) -> None:
+        assignments = self._read("coaching_assignments.csv")
+        expected_noninterim = {
+            "2012-BAL-offensive_coordinator-15-17-jim-caldwell",
+            "2012-TEN-offensive_coordinator-13-17-dowell-loggains",
+            "2015-DET-offensive_coordinator-08-17-jim-bob-cooter",
+            "2015-IND-offensive_coordinator-09-17-rob-chudzinski",
+            "2016-BAL-offensive_coordinator-06-17-marty-mornhinweg",
+            "2016-JAX-offensive_coordinator-09-17-nathaniel-hackett",
+        }
+        flags = {row["assignment_key"]: row["is_interim"] for row in assignments}
+        self.assertEqual({flags[key] for key in expected_noninterim}, {"false"})
+        self.assertEqual(flags["2016-MIN-offensive_coordinator-09-17-pat-shurmur"], "true")
+
+    def test_shared_play_caller_interval_requires_both_shared_flags(self) -> None:
+        rows = [
+            row
+            for row in self._read("coaching_assignments.csv")
+            if row["season"] == "2020"
+            and row["team_id"] == "HOU"
+            and row["role"] == "play_caller"
+            and row["start_week"] == "4"
+        ]
+        self.assertEqual(
+            {(row["coach_canonical_name"], row["is_shared"]) for row in rows},
+            {("Bill O'Brien", "true"), ("Tim Kelly", "true")},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._copy(Path(tmp))
+            path = root / "data" / "manual" / "coaching_assignments.csv"
+
+            def remove_shared_flag(values):
+                target = next(
+                    row
+                    for row in values
+                    if row["assignment_key"] == "2020-HOU-play_caller-04-04-bill-o-brien"
+                )
+                target["is_shared"] = "false"
+
+            self._mutate(path, remove_shared_flag)
+            with self.assertRaisesRegex(CoachingDataError, "overlapping non-shared"):
+                validate_coaching_data(root)
 
     def test_spelling_variants_resolve_to_one_canonical_identity(self) -> None:
         coaches = self._read("coaches.csv")
@@ -137,14 +205,26 @@ class CheckpointFourCoachingTest(unittest.TestCase):
 
     def test_loading_path_preserves_each_interval_basis(self) -> None:
         connection = _RecordingConnection()
-        self.assertEqual(load_coaching_data(connection, ROOT), 1340)
-        loaded = {
-            (parameters[1], parameters[2], parameters[3]): parameters[13]
+        self.assertEqual(load_coaching_data(connection, ROOT), 1343)
+        loaded = [
+            parameters
             for parameters in connection.assignment_parameters
-        }
-        self.assertEqual(loaded[("HOU", 2020, "play_caller")], "season_designation")
-        self.assertEqual(loaded[("BAL", 2012, "offensive_coordinator")], "dated_source_weeks")
-        self.assertEqual(loaded[("BAL", 2012, "head_coach")], "observed_game_weeks")
+            if parameters[1] == "HOU" and parameters[2] == 2020
+        ]
+        self.assertEqual(
+            [parameters[13] for parameters in loaded if parameters[3] == "play_caller"],
+            [
+                "dated_source_weeks",
+                "dated_source_weeks",
+                "dated_source_weeks",
+                "season_designation",
+            ],
+        )
+        all_bases = {parameters[13] for parameters in connection.assignment_parameters}
+        self.assertEqual(
+            all_bases,
+            {"season_designation", "dated_source_weeks", "observed_game_weeks"},
+        )
 
     def _copy(self, directory: Path) -> Path:
         target = directory / "project" / "data" / "manual"
@@ -190,6 +270,23 @@ class CheckpointFourCoachingTest(unittest.TestCase):
             with self.assertRaisesRegex(CoachingDataError, "overlapping non-shared"):
                 validate_coaching_data(root)
 
+    def test_unsupported_interim_label_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._copy(Path(tmp))
+            path = root / "data" / "manual" / "coaching_assignments.csv"
+
+            def infer_interim_from_replacement(values):
+                target = next(
+                    row
+                    for row in values
+                    if row["assignment_key"] == "2012-BAL-offensive_coordinator-15-17-jim-caldwell"
+                )
+                target["is_interim"] = "true"
+
+            self._mutate(path, infer_interim_from_replacement)
+            with self.assertRaisesRegex(CoachingDataError, "unsupported interim label"):
+                validate_coaching_data(root)
+
     def test_missing_role_must_be_in_review_queue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = self._copy(Path(tmp))
@@ -200,6 +297,14 @@ class CheckpointFourCoachingTest(unittest.TestCase):
             target = next(row for row in rows if row["role"] == "quarterbacks_coach")
             self._mutate(
                 assignments,
+                lambda values: values.__setitem__(
+                    slice(None),
+                    [row for row in values if row["assignment_key"] != target["assignment_key"]],
+                ),
+            )
+            citations = root / "data" / "manual" / "coach_assignment_sources.csv"
+            self._mutate(
+                citations,
                 lambda values: values.__setitem__(
                     slice(None),
                     [row for row in values if row["assignment_key"] != target["assignment_key"]],

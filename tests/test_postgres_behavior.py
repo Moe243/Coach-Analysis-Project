@@ -186,13 +186,15 @@ class PostgreSQLBehaviorTest(unittest.TestCase):
               JOIN coaches c ON c.coach_id = ca.coach_id
              WHERE ca.team_id = 'HOU' AND ca.season = 2020
                AND c.canonical_name = 'Tim Kelly'
-             ORDER BY ca.role
+             ORDER BY ca.role, ca.start_week, c.canonical_name
             """
         ).fetchall()
         self.assertEqual(
             rows,
             [
                 ("offensive_coordinator", "season_designation"),
+                ("play_caller", "dated_source_weeks"),
+                ("play_caller", "dated_source_weeks"),
                 ("play_caller", "season_designation"),
                 ("quarterbacks_coach", "season_designation"),
             ],

@@ -87,6 +87,8 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 
 `confidence_level` is `high`, `medium`, or `low`. `interval_basis = observed_game_weeks` means game evidence bounded the interval. `interval_basis = dated_source_weeks` means a dated source establishes the change boundary used for the interval. `interval_basis = season_designation` means a preseason source designated the coach for that season; its nominal week range is not evidence that no in-season change occurred. Season-designation OC/QB rows therefore remain `provisional` unless independent evidence verifies the full interval.
 
+`is_interim = true` requires either direct citation language supporting an interim/remainder-of-season appointment or an observed head-coach stint that clearly begins after a prior head coach and serves as the season's temporary replacement. A midseason promotion alone is not enough. `is_shared = true` requires overlapping responsibility supported for every overlapping row. The review issue `shared_duty_verification_required` preserves cases where a sourced shared interval does not resolve the surrounding weekly division of duties.
+
 ## Cross-row integrity contracts
 
 - Validity ranges for the same `team_aliases.source_system` and `alias` cannot overlap.
