@@ -149,7 +149,7 @@ class CheckpointFourCoachingTest(unittest.TestCase):
                 target["is_shared"] = "false"
 
             self._mutate(path, remove_shared_flag)
-            with self.assertRaisesRegex(CoachingDataError, "overlapping non-shared"):
+            with self.assertRaisesRegex(CoachingDataError, "audited split"):
                 validate_coaching_data(root)
 
     def test_spelling_variants_resolve_to_one_canonical_identity(self) -> None:
@@ -202,6 +202,105 @@ class CheckpointFourCoachingTest(unittest.TestCase):
             validate_source_content(
                 "Tim Kelly was offensive coordinator.", "quarterbacks", "fixture"
             )
+
+    def test_houston_content_checks_prove_each_interval_boundary(self) -> None:
+        checks = self._read("coaching_source_content_checks.csv")
+        fixtures = {
+            "tim-kelly-2020-opening": (
+                "With an 0-3 start, Bill O'Brien was attempting to take a step back "
+                "from both to begin the season."
+            ),
+            "tim-kelly-2020-week4-shared": (
+                "Bill O'Brien will be far more involved in game-planning and play-calling. "
+                "Tim Kelly will still physically relay the plays, while O'Brien will take a "
+                "heavy hand in which plays are called."
+            ),
+            "tim-kelly-2020-provisional-designation": (
+                "Kelly would take over play-calling duties for the upcoming season."
+            ),
+            "tim-kelly-2020-post-week4-boundary": (
+                "The Texans fired coach and general manager Bill O'Brien after more than "
+                "six seasons following an 0-4 start."
+            ),
+        }
+        for row in checks:
+            if row["evidence_id"] in fixtures:
+                validate_source_content(
+                    fixtures[row["evidence_id"]], row["required_terms"], row["evidence_id"]
+                )
+
+    def test_generic_houston_play_calling_text_fails_boundary_check(self) -> None:
+        row = next(
+            row
+            for row in self._read("coaching_source_content_checks.csv")
+            if row["evidence_id"] == "tim-kelly-2020-week4-shared"
+        )
+        with self.assertRaisesRegex(CoachingDataError, "missing required terms"):
+            validate_source_content(
+                "Tim Kelly and Bill O'Brien shared play-calling in 2020.",
+                row["required_terms"],
+                row["evidence_id"],
+            )
+
+    def test_sourced_interim_head_coach_passes(self) -> None:
+        result = validate_coaching_data(ROOT)
+        self.assertEqual(result.assignments, 1343)
+        assignments = self._read("coaching_assignments.csv")
+        self.assertEqual(
+            next(
+                row["is_interim"]
+                for row in assignments
+                if row["assignment_key"] == "2023-LV-head_coach-09-18-antonio-pierce"
+            ),
+            "true",
+        )
+
+    def test_unrelated_citation_cannot_support_interim_head_coach(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._copy(Path(tmp))
+            checks = root / "data" / "manual" / "coaching_source_content_checks.csv"
+            citations = root / "data" / "manual" / "coach_assignment_sources.csv"
+            self._mutate(
+                checks,
+                lambda rows: rows.__setitem__(
+                    slice(None),
+                    [row for row in rows if row["evidence_id"] != "2010-jason-garrett-interim"],
+                ),
+            )
+            self._mutate(
+                citations,
+                lambda rows: [
+                    row.update(
+                        evidence_note="Unrelated citation text with no temporary designation."
+                    )
+                    for row in rows
+                    if row["assignment_key"] == "2010-DAL-head_coach-10-17-jason-garrett"
+                ],
+            )
+            with self.assertRaisesRegex(CoachingDataError, "unsupported interim label"):
+                validate_coaching_data(root)
+
+    def test_permanent_midseason_head_coach_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._copy(Path(tmp))
+            assignments = root / "data" / "manual" / "coaching_assignments.csv"
+            checks = root / "data" / "manual" / "coaching_source_content_checks.csv"
+            self._mutate(
+                assignments,
+                lambda rows: next(
+                    row
+                    for row in rows
+                    if row["assignment_key"] == "2010-DAL-head_coach-10-17-jason-garrett"
+                ).update(is_interim="false"),
+            )
+            self._mutate(
+                checks,
+                lambda rows: rows.__setitem__(
+                    slice(None),
+                    [row for row in rows if row["evidence_id"] != "2010-jason-garrett-interim"],
+                ),
+            )
+            self.assertEqual(validate_coaching_data(root).assignments, 1343)
 
     def test_loading_path_preserves_each_interval_basis(self) -> None:
         connection = _RecordingConnection()

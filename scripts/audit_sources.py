@@ -22,7 +22,6 @@ from typing import Final
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-
 RELEASE_ROOT: Final = "https://github.com/nflverse/nflverse-data/releases/download"
 
 

@@ -25,6 +25,68 @@ REVIEW_ISSUE_TYPES = frozenset(
     }
 )
 
+HOUSTON_2020_PLAY_CALLER_INTERVALS = {
+    "2020-HOU-play_caller-01-03-tim-kelly": (1, 3, False, "verified"),
+    "2020-HOU-play_caller-04-04-bill-o-brien": (4, 4, True, "verified"),
+    "2020-HOU-play_caller-04-04-tim-kelly": (4, 4, True, "verified"),
+    "2020-HOU-play_caller-05-17-tim-kelly": (5, 17, False, "provisional"),
+}
+
+HOUSTON_2020_CONTENT_CHECK_CONTRACTS = {
+    "tim-kelly-2020-opening": {
+        "assignment_keys": {"2020-HOU-play_caller-01-03-tim-kelly"},
+        "required_terms": {
+            "with an 0-3 start",
+            "attempting to take a step back from both to begin the season",
+        },
+    },
+    "tim-kelly-2020-week4-shared": {
+        "assignment_keys": {
+            "2020-HOU-play_caller-04-04-bill-o-brien",
+            "2020-HOU-play_caller-04-04-tim-kelly",
+        },
+        "required_terms": {
+            "far more involved in game-planning and play-calling",
+            "tim kelly will still physically relay the plays",
+            "o'brien will take a heavy hand in which plays are called",
+        },
+    },
+    "tim-kelly-2020-provisional-designation": {
+        "assignment_keys": {"2020-HOU-play_caller-05-17-tim-kelly"},
+        "required_terms": {
+            "kelly would take over play-calling duties for the upcoming season",
+        },
+    },
+    "tim-kelly-2020-post-week4-boundary": {
+        "assignment_keys": {"2020-HOU-play_caller-05-17-tim-kelly"},
+        "required_terms": {
+            "fired coach and general manager bill o'brien",
+            "after more than six seasons",
+            "0-4 start",
+        },
+    },
+}
+
+AFFIRMATIVE_TEMPORARY_TERMS = (
+    "interim coach",
+    "interim head coach",
+    "interim offensive coordinator",
+    "interim play-caller",
+    "temporary coach",
+    "temporary head coach",
+    "temporary replacement",
+    "remainder of season",
+    "remainder of the season",
+)
+NEGATED_TEMPORARY_TERMS = (
+    "not interim",
+    "not an interim",
+    "without an interim",
+    "does not designate interim",
+    "does not designate the coach interim",
+    "rather than an interim",
+)
+
 
 class CoachingDataError(ValueError):
     """Raised when a committed coaching-data contract is violated."""
@@ -59,12 +121,106 @@ def normalize_coach_name(value: str) -> str:
 def validate_source_content(content: str, required_terms: str, evidence_id: str) -> None:
     """Require every pipe-delimited evidence term in fetched source content."""
 
-    normalized = " ".join(content.casefold().split())
+    normalized = " ".join(content.casefold().replace("’", "'").split())
     missing = [term for term in required_terms.split("|") if term.casefold() not in normalized]
     if missing:
         raise CoachingDataError(
             f"source content check {evidence_id} is missing required terms: {missing}"
         )
+
+
+def _normalized_terms(required_terms: str) -> set[str]:
+    return {" ".join(term.casefold().split()) for term in required_terms.split("|")}
+
+
+def _has_direct_temporary_evidence(
+    assignment_key: str,
+    content_checks_by_assignment: dict[str, list[dict[str, str]]],
+) -> bool:
+    checked_terms = " ".join(
+        term
+        for row in content_checks_by_assignment.get(assignment_key, [])
+        for term in _normalized_terms(row["required_terms"])
+    )
+    if any(phrase in checked_terms for phrase in NEGATED_TEMPORARY_TERMS):
+        return False
+    return any(phrase in checked_terms for phrase in AFFIRMATIVE_TEMPORARY_TERMS)
+
+
+def _is_structurally_temporary_head_coach(
+    row: dict[str, str], assignments: list[dict[str, str]]
+) -> bool:
+    """Return whether observed seasons prove a temporary replacement boundary."""
+
+    season = int(row["season"])
+    team = row["team_id"]
+    start_week = int(row["start_week"])
+    end_week = int(row["end_week"])
+    same_season = [
+        other
+        for other in assignments
+        if int(other["season"]) == season
+        and other["team_id"] == team
+        and other["role"] == "head_coach"
+    ]
+    has_predecessor = any(int(other["end_week"]) < start_week for other in same_season)
+    finishes_team_season = end_week == max(int(other["end_week"]) for other in same_season)
+
+    next_season = [
+        other
+        for other in assignments
+        if int(other["season"]) == season + 1
+        and other["team_id"] == team
+        and other["role"] == "head_coach"
+    ]
+    if not next_season:
+        return False
+    first_next_week = min(int(other["start_week"]) for other in next_season)
+    next_appointments = [
+        other for other in next_season if int(other["start_week"]) == first_next_week
+    ]
+    later_permanent_appointment = any(
+        other["coach_id"] != row["coach_id"]
+        and other["is_interim"] == "false"
+        and other["verification_status"] == "verified"
+        and other["interval_basis"] == "observed_game_weeks"
+        for other in next_appointments
+    )
+    return (
+        row["interval_basis"] == "observed_game_weeks"
+        and row["verification_status"] == "verified"
+        and start_week > 1
+        and has_predecessor
+        and finishes_team_season
+        and later_permanent_appointment
+    )
+
+
+def _validate_houston_2020_contracts(
+    assignments: list[dict[str, str]], content_checks: list[dict[str, str]]
+) -> None:
+    houston_rows = {
+        row["assignment_key"]: (
+            int(row["start_week"]),
+            int(row["end_week"]),
+            row["is_shared"] == "true",
+            row["verification_status"],
+        )
+        for row in assignments
+        if row["season"] == "2020" and row["team_id"] == "HOU" and row["role"] == "play_caller"
+    }
+    if houston_rows != HOUSTON_2020_PLAY_CALLER_INTERVALS:
+        raise CoachingDataError("Houston 2020 play-caller intervals do not match the audited split")
+
+    checks_by_id = {row["evidence_id"]: row for row in content_checks}
+    for evidence_id, contract in HOUSTON_2020_CONTENT_CHECK_CONTRACTS.items():
+        row = checks_by_id.get(evidence_id)
+        if row is None:
+            raise CoachingDataError(f"missing Houston 2020 content check: {evidence_id}")
+        if set(row["assignment_keys"].split("|")) != contract["assignment_keys"]:
+            raise CoachingDataError(f"incorrect Houston assignment scope: {evidence_id}")
+        if not contract["required_terms"] <= _normalized_terms(row["required_terms"]):
+            raise CoachingDataError(f"insufficient Houston boundary terms: {evidence_id}")
 
 
 def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
@@ -117,6 +273,10 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
         raise CoachingDataError("source registry must cover every 2010-2025 season")
     if any(row["local_raw_committed"] != "false" for row in registry):
         raise CoachingDataError("raw source books must not be committed")
+    citation_urls_by_key: dict[str, set[str]] = defaultdict(set)
+    for row in citations:
+        citation_urls_by_key[row["assignment_key"]].add(row["source_url"])
+    content_checks_by_assignment: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in content_checks:
         if not _valid_url(row["source_url"]):
             raise CoachingDataError(f"invalid content-check URL: {row['evidence_id']}")
@@ -127,6 +287,13 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
             )
         if not all(term.strip() for term in row["required_terms"].split("|")):
             raise CoachingDataError(f"content check has empty evidence terms: {row['evidence_id']}")
+        for assignment_key in referenced:
+            if row["source_url"] not in citation_urls_by_key[assignment_key]:
+                raise CoachingDataError(
+                    f"content check URL is not cited by assignment: {row['evidence_id']}"
+                )
+            content_checks_by_assignment[assignment_key].append(row)
+    _validate_houston_2020_contracts(assignments, content_checks)
     content_checked_keys = {
         key for row in content_checks for key in row["assignment_keys"].split("|")
     }
@@ -251,30 +418,14 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
                     f"{row['assignment_key']}"
                 )
         if row["is_interim"] == "true":
-            if row["role"] == "head_coach":
-                has_predecessor = any(
-                    other["season"] == row["season"]
-                    and other["team_id"] == row["team_id"]
-                    and other["role"] == "head_coach"
-                    and int(other["end_week"]) < int(row["start_week"])
-                    for other in assignments
-                )
-                if int(row["start_week"]) == 1 or not has_predecessor:
-                    raise CoachingDataError(
-                        "interim head coach is not a temporary replacement: "
-                        f"{row['assignment_key']}"
-                    )
-            else:
-                interim_evidence = " ".join(
-                    f"{citation['source_title']} {citation['evidence_note']}"
-                    for citation in citations
-                    if citation["assignment_key"] == row["assignment_key"]
-                ).casefold()
-                if not any(
-                    phrase in interim_evidence
-                    for phrase in ("interim", "remainder of season", "remainder of the season")
-                ):
-                    raise CoachingDataError(f"unsupported interim label: {row['assignment_key']}")
+            directly_sourced = _has_direct_temporary_evidence(
+                row["assignment_key"], content_checks_by_assignment
+            )
+            structurally_temporary = row["role"] == "head_coach" and (
+                _is_structurally_temporary_head_coach(row, assignments)
+            )
+            if not directly_sourced and not structurally_temporary:
+                raise CoachingDataError(f"unsupported interim label: {row['assignment_key']}")
         if row["interval_basis"] == "dated_source_weeks" and (
             row["verification_status"] != "verified" or row["confidence_level"] != "high"
         ):

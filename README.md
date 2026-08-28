@@ -58,7 +58,7 @@ make PYTHON=.venv/bin/python coaching-validate
 make PYTHON=.venv/bin/python test
 ```
 
-The separately callable network check verifies the 16 source books and all additional assignment-source URLs, then checks live page content for the verified play-caller intervals as well as representative interval, identity, and compound-title evidence:
+The separately callable network check verifies the 16 source books and all additional assignment-source URLs, then checks live page content for the verified play-caller intervals, exact Houston 2020 boundaries, directly sourced interim head coaches, and representative interval, identity, and compound-title evidence:
 
 ```bash
 make PYTHON=.venv/bin/python coaching-sources
