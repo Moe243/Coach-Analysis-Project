@@ -33,7 +33,7 @@ Exit criterion met after review fixes: all 512 team-seasons are covered by 1,343
 
 Build timing-safe prior/career features, three shrinkage baselines, a tuned Ridge candidate, expanding-window evaluation, out-of-sample predictions, uncertainty, and leakage/stability reports. Validated college/draft data was absent and remains explicitly missing.
 
-Exit criterion implemented: all 1,689 published PAE rows are out of sample and exclude warm-up seasons; career performance was selected from four candidates using documented accuracy/calibration scoring; deterministic clean-rebuild, leakage, arithmetic, cardinality, missingness, and atomic-failure contracts pass; the model card contains actual results. Approval remains required before checkpoint six.
+Exit criterion implemented: all 1,689 published PAE rows are out of sample and exclude warm-up seasons; career performance was selected from four candidates using documented accuracy/calibration scoring; opening-week team snapshots prevent midseason-destination leakage; roster experience is separate from prior QB history; complete parameter/source/code identity controls immutable versions; deterministic clean-rebuild, leakage, arithmetic, cardinality, missingness, and atomic-failure contracts pass. Approval remains required before checkpoint six.
 
 ## Checkpoint six — coach impact
 

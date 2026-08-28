@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint five is implemented and pending approval. The leakage-safe expanding-window build produces 1,689 out-of-sample 2010-2025 QB-team-season PAE rows from the approved historical layer; 582 meet the documented 200-dropback eligibility threshold and 1,107 remain visible with low-reliability warnings. The career-performance baseline was selected over Ridge and the other baselines on the declared out-of-sample accuracy/calibration score. No coach effects, coach rankings, final quarterback rankings, API, or frontend were created.
+Checkpoint five is implemented and pending approval. The leakage-safe expanding-window build produces 1,689 out-of-sample 2010-2025 QB-team-season PAE rows from the approved historical layer; 582 meet the documented 200-dropback eligibility threshold and 1,107 remain visible with low-reliability warnings. Opening-week depth charts prevent later destinations from entering the team-change feature, while roster experience fields distinguish true rookies from veterans without prior QB dropbacks. The career-performance baseline was selected over Ridge and the other baselines on the declared out-of-sample accuracy/calibration score. No coach effects, coach rankings, final quarterback rankings, API, or frontend were created.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -16,7 +16,7 @@ Checkpoint five is implemented and pending approval. The leakage-safe expanding-
 - Primary outcome: EPA per quarterback dropback
 - Default coach-ranking threshold: three qualifying QB seasons and two distinct quarterbacks
 
-The validated historical run remains data version `c3-f6c1aa118ff43b90`; checkpoint five is `c5-98c98cdcc8492333` with model version `expected-performance-98c98cdcc8492333`. Read [the checkpoint-five report](docs/CHECKPOINT_5_REPORT.md) for model comparisons, leakage controls, missingness, uncertainty, and the exact next checkpoint.
+The validated historical run remains data version `c3-f6c1aa118ff43b90`; corrected checkpoint five is `c5-0ebaff47c63c6910` with model version `expected-performance-0ebaff47c63c6910`. Read [the checkpoint-five report](docs/CHECKPOINT_5_REPORT.md) for model comparisons, leakage controls, missingness, uncertainty, and the exact next checkpoint.
 
 ## Football decision supported
 

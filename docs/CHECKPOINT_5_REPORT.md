@@ -7,16 +7,16 @@ Date: 2026-08-28
 Checkpoint five is implemented and pending approval. One deterministic command builds leakage-safe preseason features, four expanding-window candidates, out-of-sample expectations, uncertainty, evaluation tables, and normalized PAE output. No coach effects, coach rankings, final quarterback rankings, API, frontend, college ingestion, or checkpoint-six work was added.
 
 - Source data: `c3-f6c1aa118ff43b90`
-- Checkpoint-five data: `c5-98c98cdcc8492333`
-- Model: `expected-performance-98c98cdcc8492333`
-- Feature version: `qb-preseason-v1`
+- Checkpoint-five data: `c5-0ebaff47c63c6910`
+- Model: `expected-performance-0ebaff47c63c6910`
+- Feature version: `qb-preseason-v2`
 - Build command: `make PYTHON=.venv/bin/python expected-performance`
 
 ## College and feature availability
 
 No validated college-performance dataset exists. The repository contains only a profile college-name field, which is not used as production evidence. College production, draft position, and draft round remain null with explicit missing indicators; no values were fabricated or backfilled.
 
-The fitted features are age, observed NFL experience, exact season-minus-one starts/dropbacks and EPA/CPOE/success/sack/interception/touchdown rates, career starts/dropbacks and the same career rates through `S-1`, team change, and prior injury-report/out weeks. Coaching assignments, coach identities, current-season results, records, rankings, supporting-cast results, and future seasons are absent from the model feature contract.
+The fitted features are age, roster-reported NFL experience/rookie status, prior QB-season count and no-history flag, exact season-minus-one starts/dropbacks and EPA/CPOE/success/sack/interception/touchdown rates, career starts/dropbacks and the same career rates through `S-1`, opening-week team change, and prior injury-report/out weeks. Coaching assignments, coach identities, current-season results, records, rankings, supporting-cast results, and future seasons are absent from the model feature contract.
 
 Analysis-season missingness is:
 
@@ -25,12 +25,19 @@ Analysis-season missingness is:
 | Exact prior season | 662 |
 | Prior CPOE | 688 |
 | Prior injury information | 804 |
+| Team-change information | 794 |
 | Draft position | 1,689 |
 | Draft round | 1,689 |
 | College production | 1,689 |
 | Age | 0 |
 
-There are 455 rookie rows, 265 with one prior observed season, 969 veteran rows, and 290 team-change rows.
+Roster metadata identifies 187 true-rookie rows, 191 one-prior-NFL-season rows, and 1,311 veteran rows. Performance history is tracked independently: 455 rows have no prior QB performance, 265 have one prior QB season, and 969 have multiple prior QB seasons. A unique opening-week team is available for 1,441 rows; 248 lack that snapshot. Among rows with both an opening team and prior QB-team history, 208 are team changes and 687 are continuations.
+
+## Review-finding corrections
+
+- **Target-season destinations:** `changed_team` uses only a unique Week 1 regular-season depth-chart team and is identical across every player-season stint. Trent Edwards' 2010 Buffalo and Jacksonville rows both retain Buffalo as the opening team; Jacksonville cannot affect Ridge features, 2010 predictions, or later training.
+- **Rookie versus performance history:** `years_exp`, `entry_year`, and `rookie_year` distinguish actual rookies from veterans without prior recorded QB dropbacks. Austin Davis, Trevor Siemian, Jeff Driskel, and Mason Rudolph are correctly non-rookies with `no_prior_qb_performance = true`; a true rookie remains in the rookie group.
+- **Content versioning:** source Parquet checksums, all declared shrinkage/selection/interval/reliability/sensitivity/weight parameters, modeling-library versions, and relevant source-code hashes participate in the data/model version. A career-shrinkage change creates and rebuilds a different immutable directory.
 
 ## Models and selection
 
@@ -39,11 +46,11 @@ All published predictions are expanding-window OOS: season `S` uses only seasons
 | Candidate | MAE | RMSE | R² | Correlation | Calibration intercept | Calibration slope | Interval coverage | Selection score |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Career performance (selected) | 0.09172 | 0.11752 | 0.18925 | 0.44673 | 0.00707 | 0.82192 | 94.50% | 0.09705 |
-| Ridge | 0.09209 | 0.11907 | 0.16762 | 0.44447 | 0.01769 | 0.72057 | 94.85% | 0.10210 |
 | Recent performance | 0.09519 | 0.12135 | 0.13541 | 0.41666 | 0.01580 | 0.68326 | 95.19% | 0.10547 |
+| Ridge | 0.09398 | 0.12104 | 0.13985 | 0.43562 | 0.02288 | 0.66433 | 94.67% | 0.10642 |
 | League average | 0.10565 | 0.13273 | -0.03435 | -0.01722 | 0.06944 | -0.31157 | 93.47% | 0.14924 |
 
-Career performance won the declared score: OOS MAE plus penalties for absolute calibration intercept and slope departure from one. Its advantage over Ridge is small, so both outputs and diagnostics remain published. A mixed-effects expectation model was not added because the required candidates were reliable and the extra hierarchy was not necessary for checkpoint five.
+Career performance won the declared score: OOS MAE plus penalties for absolute calibration intercept and slope departure from one. Both Ridge and every baseline remain published for audit. A mixed-effects expectation model was not added because the required candidates were reliable and the extra hierarchy was not necessary for checkpoint five.
 
 ## PAE, eligibility, and uncertainty
 
@@ -53,7 +60,7 @@ The output contains 1,689 analysis-season PAE rows and 6,756 candidate predictio
 PAE = actual EPA/dropback - expected EPA/dropback
 ```
 
-Recent and career baselines shrink small histories toward the prior league average with 200 and 500 pseudo-dropbacks. Rookies and missing-history cases fall back to that average. Intervals use only earlier-season OOS residual RMSE, with prior-training outcome dispersion as the early fallback. The mean 95% interval width is 0.47506 EPA/dropback.
+Recent and career baselines shrink small histories toward the prior league average with 200 and 500 pseudo-dropbacks. True rookies and veterans without QB-performance history both fall back to that average in these baselines but remain distinct Ridge inputs. Intervals use only earlier-season OOS residual RMSE, with prior-training outcome dispersion as the early fallback. The mean 95% interval width is 0.47506 EPA/dropback.
 
 Representative eligible rows demonstrate output shape, not a ranking:
 
@@ -67,15 +74,15 @@ Representative eligible rows demonstrate output shape, not a ranking:
 
 ## Validation and reproducibility
 
-Hard checks reject target/future feature seasons, any `as_of_season` other than `S-1`, duplicate QB seasons or predictions, non-finite actual/expected/PAE values, arithmetic or dropback mismatch, warm-up PAE, forbidden coaching/current-result features, and valid-looking partial output after failure. The explicit adversarial leakage test changes a target-season EPA value and proves every expectation for that season is unchanged.
+Hard checks reject target/future performance seasons, any `as_of_season` other than `S-1`, destination-dependent model features within a player-season, duplicate QB seasons or predictions, non-finite actual/expected/PAE values, arithmetic or dropback mismatch, warm-up PAE, forbidden coaching/current-result features, and valid-looking partial output after failure. Adversarial tests change target-season EPA and a midseason destination independently and prove expectations/training remain unchanged.
 
-The content version hashes the historical QB-season, player, and injury inputs plus the full feature/model specification. Deterministic artifacts contain no timestamps or cache state. `EXECUTION_LOG.json` is outside the immutable version and may legitimately differ. A two-empty-directory fixture test compares every deterministic Parquet, JSON, checksum, and version byte-for-byte.
+The content version hashes the historical QB-season, player, injury, roster, and depth-chart inputs plus the full feature/model specification, relevant code, and modeling dependencies. Deterministic artifacts contain no timestamps or cache state. `EXECUTION_LOG.json` is outside the immutable version and may legitimately differ. A two-empty-directory fixture test compares every deterministic Parquet, JSON, checksum, and version byte-for-byte.
 
 The real historical build was also rebuilt into a second empty directory. Its data/model versions, every Parquet and JSON artifact, checksum manifest, and `LATEST` value were byte-identical. A normal rerun validated all checksums and reused the existing immutable version.
 
 ## Test results
 
-The complete discovery run found 67 tests: 56 passed and 11 skipped. Nine behavioral PostgreSQL tests were skipped because `TEST_DATABASE_URL`, a PostgreSQL client/server, and `psycopg` were unavailable. Two deliberately opt-in checkpoint-three/four network tests were skipped because checkpoint five requires no network inputs. All 11 checkpoint-five offline tests passed. The checkpoint-four validator still reports 1,343 assignments, 1,349 citations, 281 coaches, 512 team-seasons, and 1,527 open reviews. Ruff lint passed, Ruff formatting reported all 41 Python files formatted, and `git diff --check` passed.
+The complete discovery run found 70 tests: 59 passed and 11 skipped. Nine behavioral PostgreSQL tests were skipped because `TEST_DATABASE_URL`, a PostgreSQL client/server, and `psycopg` remain unavailable; the updated checkpoint-five schema behavior is therefore still an integration risk, not a silently claimed pass. Two deliberately opt-in checkpoint-three/four network tests were skipped because checkpoint five requires no network inputs. All 14 checkpoint-five offline tests passed, including the Trent Edwards, roster-status, parameter-version, and two-clean-build regressions. The real historical output also rebuilt into a second empty directory with the same version and byte-identical Parquet, JSON, checksum, and `LATEST` artifacts. Ruff lint passed, Ruff formatting reported all 41 Python files formatted, and `git diff --check` passed.
 
 ## Files created or changed
 
@@ -88,7 +95,7 @@ Generated PAE, features, evaluation tables, and execution logs remain under igno
 
 ## Remaining limitations
 
-The selected baseline narrowly beats Ridge and is not proof that career EPA is the universally best forecast. Rookie performance is poorly explained, validated draft/college features are absent, and intervals are not player-specific. PAE can reflect supporting cast, scheme, injuries, opponent mix, and chance; it is not a causal or intrinsic-quality measure. Smaller samples remain noisy even though they are stored.
+The selected baseline beats corrected Ridge but is not proof that career EPA is universally best. True-rookie performance is poorly explained, 794 rows lack a team-change value under the conservative cutoff, validated draft/college features are absent, and intervals are not player-specific. PAE can reflect supporting cast, scheme, injuries, opponent mix, and chance; it is not a causal or intrinsic-quality measure. Smaller samples remain noisy even though they are stored.
 
 ## Exact next checkpoint
 

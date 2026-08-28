@@ -571,6 +571,10 @@ CREATE TABLE qb_preseason_features (
     as_of_season smallint NOT NULL,
     age numeric,
     nfl_experience integer,
+    prior_qb_seasons integer,
+    no_prior_qb_performance boolean,
+    experience_group text,
+    performance_history_group text,
     career_starts integer,
     career_dropbacks integer,
     career_epa_per_dropback numeric,
@@ -582,6 +586,9 @@ CREATE TABLE qb_preseason_features (
     previous_interception_rate numeric,
     previous_touchdown_rate numeric,
     changed_team boolean,
+    changed_team_missing boolean,
+    preseason_team_id text REFERENCES teams(team_id),
+    preseason_team_status text,
     is_rookie boolean,
     prior_injury_report_weeks integer,
     prior_injury_out_weeks integer,
@@ -594,6 +601,38 @@ CREATE TABLE qb_preseason_features (
     PRIMARY KEY (player_id, team_id, season, feature_version),
     CHECK (as_of_season < season),
     CHECK (nfl_experience IS NULL OR nfl_experience >= 0),
+    CHECK (prior_qb_seasons IS NULL OR prior_qb_seasons >= 0),
+    CHECK (
+        experience_group IS NULL
+        OR experience_group IN ('rookie', 'one_prior_nfl_season', 'veteran', 'experience_unknown')
+    ),
+    CHECK (
+        performance_history_group IS NULL
+        OR performance_history_group IN (
+            'no_prior_qb_performance',
+            'one_prior_qb_season',
+            'multiple_prior_qb_seasons'
+        )
+    ),
+    CHECK (
+        preseason_team_status IS NULL
+        OR preseason_team_status IN (
+            'available',
+            'unavailable_ambiguous',
+            'unavailable_no_week_1_snapshot'
+        )
+    ),
+    CHECK (changed_team_missing IS DISTINCT FROM false OR changed_team IS NOT NULL),
+    CHECK (is_rookie IS DISTINCT FROM true OR nfl_experience IN (0)),
+    CHECK (
+        no_prior_qb_performance IS NULL
+        OR (no_prior_qb_performance AND prior_qb_seasons = 0)
+        OR (NOT no_prior_qb_performance AND prior_qb_seasons > 0)
+    ),
+    CHECK (
+        preseason_team_status IS DISTINCT FROM 'available'
+        OR preseason_team_id IS NOT NULL
+    ),
     CHECK (career_starts IS NULL OR career_starts >= 0),
     CHECK (career_dropbacks IS NULL OR career_dropbacks >= 0),
     CHECK (previous_dropbacks IS NULL OR previous_dropbacks >= 0),

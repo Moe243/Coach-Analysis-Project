@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+import sklearn
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
@@ -30,8 +31,8 @@ from .pipeline import (
 )
 from .sources import sha256_file
 
-FEATURE_VERSION = "qb-preseason-v1"
-MODEL_PIPELINE_VERSION = "checkpoint-5.0"
+FEATURE_VERSION = "qb-preseason-v2"
+MODEL_PIPELINE_VERSION = "checkpoint-5.1"
 MODEL_NAMES = (
     "league_average",
     "recent_performance",
@@ -44,6 +45,15 @@ ELIGIBILITY_DROPBACKS = 200
 RECENT_SHRINKAGE_DROPBACKS = 200.0
 CAREER_SHRINKAGE_DROPBACKS = 500.0
 SENSITIVITY_THRESHOLDS = (50, 100, 200, 300, 400)
+SELECTION_INTERCEPT_WEIGHT = 0.25
+SELECTION_SLOPE_WEIGHT = 0.02
+INTERVAL_MULTIPLIER = 1.96
+INTERVAL_FALLBACK_RESIDUALS = 20
+RELIABILITY_CAREER_DROPBACKS = 600
+MINIMUM_PREDICTION_SIGMA = 0.01
+TRAINING_WEIGHT_MINIMUM = 50.0
+TRAINING_WEIGHT_MAXIMUM = 600.0
+TRAINING_WEIGHT_SCALE = 200.0
 FORBIDDEN_FEATURE_TERMS = (
     "coach",
     "current_season",
@@ -57,6 +67,9 @@ FORBIDDEN_FEATURE_TERMS = (
 MODEL_FEATURE_COLUMNS = (
     "age",
     "nfl_experience",
+    "is_rookie",
+    "prior_qb_seasons",
+    "no_prior_qb_performance",
     "prior_starts",
     "prior_dropbacks",
     "prior_epa_per_dropback",
@@ -74,12 +87,15 @@ MODEL_FEATURE_COLUMNS = (
     "career_interception_rate",
     "career_touchdown_rate",
     "changed_team",
+    "changed_team_missing",
     "prior_injury_report_weeks",
     "prior_injury_out_weeks",
     "draft_position",
     "draft_round",
     "college_production",
     "age_missing",
+    "nfl_experience_missing",
+    "rookie_status_missing",
     "prior_season_missing",
     "prior_cpoe_missing",
     "prior_injury_missing",
@@ -194,6 +210,62 @@ def _age_on_season_start(birth_date: object, season: int) -> float | None:
     return (date(season, 9, 1) - birth_date).days / 365.2425
 
 
+def _roster_profile_lookup(
+    rosters: pl.DataFrame | None,
+) -> dict[tuple[str, int], dict[str, int | None]]:
+    if rosters is None or rosters.is_empty():
+        return {}
+    required = {"gsis_id", "source_season", "years_exp", "entry_year", "rookie_year"}
+    if not required <= set(rosters.columns):
+        raise PipelineError(
+            f"roster input lacks required columns: {sorted(required - set(rosters.columns))}"
+        )
+    profiles: dict[tuple[str, int], dict[str, int | None]] = {}
+    for key, group in (
+        rosters.select(sorted(required))
+        .drop_nulls("gsis_id")
+        .group_by("gsis_id", "source_season", maintain_order=True)
+    ):
+        player_id, season = str(key[0]), int(key[1])
+        values: dict[str, int | None] = {}
+        for column in ("years_exp", "entry_year", "rookie_year"):
+            distinct = sorted({int(value) for value in group[column].drop_nulls().to_list()})
+            values[column] = distinct[0] if len(distinct) == 1 else None
+        profiles[(player_id, season)] = values
+    return profiles
+
+
+def _preseason_team_lookup(
+    depth_charts: pl.DataFrame | None,
+) -> dict[tuple[str, int], tuple[str, ...]]:
+    if depth_charts is None or depth_charts.is_empty():
+        return {}
+    required = {
+        "canonical_player_id",
+        "canonical_team_id",
+        "source_season",
+        "week",
+        "game_type",
+    }
+    if not required <= set(depth_charts.columns):
+        missing = sorted(required - set(depth_charts.columns))
+        raise PipelineError(f"depth-chart input lacks required columns: {missing}")
+    preseason = depth_charts.filter(
+        (pl.col("week") == 1)
+        & (pl.col("game_type") == "REG")
+        & pl.col("canonical_player_id").is_not_null()
+        & pl.col("canonical_team_id").is_not_null()
+    )
+    lookup: dict[tuple[str, int], tuple[str, ...]] = {}
+    for key, group in preseason.group_by(
+        "canonical_player_id", "source_season", maintain_order=True
+    ):
+        lookup[(str(key[0]), int(key[1]))] = tuple(
+            sorted({str(value) for value in group["canonical_team_id"].to_list()})
+        )
+    return lookup
+
+
 def validate_feature_frame(features: pl.DataFrame) -> None:
     grain = ("player_id", "team_id", "season")
     if features.select(grain).n_unique() != features.height:
@@ -216,12 +288,31 @@ def validate_feature_frame(features: pl.DataFrame) -> None:
     for column in MODEL_FEATURE_COLUMNS:
         if column not in features.columns:
             raise PipelineError(f"missing expectation-model feature column: {column}")
+    multi_team = features.group_by("player_id", "season").len().filter(pl.col("len") > 1)
+    if not multi_team.is_empty():
+        multi_team_features = features.join(
+            multi_team.select("player_id", "season"),
+            on=["player_id", "season"],
+            validate="m:1",
+        )
+        for column in MODEL_FEATURE_COLUMNS:
+            inconsistent = (
+                multi_team_features.group_by("player_id", "season")
+                .agg(pl.col(column).n_unique().alias("distinct_values"))
+                .filter(pl.col("distinct_values") > 1)
+            )
+            if inconsistent.height:
+                raise PipelineError(
+                    f"target-season destination changed preseason model feature: {column}"
+                )
 
 
 def build_preseason_features(
     qb_seasons: pl.DataFrame,
     players: pl.DataFrame,
     injuries: pl.DataFrame | None = None,
+    rosters: pl.DataFrame | None = None,
+    depth_charts: pl.DataFrame | None = None,
 ) -> pl.DataFrame:
     """Build one deterministic row per QB-team-season using seasons strictly before target."""
 
@@ -253,6 +344,8 @@ def build_preseason_features(
         for row in players.select("player_id", "display_name", "birth_date").iter_rows(named=True)
     }
     injury_lookup = _injury_history(injuries)
+    roster_lookup = _roster_profile_lookup(rosters)
+    preseason_team_lookup = _preseason_team_lookup(depth_charts)
     rows = qb_seasons.sort("season", "player_id", "team_id").to_dicts()
     by_player: dict[str, list[dict[str, object]]] = defaultdict(list)
     records: list[dict[str, object]] = []
@@ -265,6 +358,19 @@ def build_preseason_features(
         career = _aggregate_history(history) if history else None
         player = player_lookup.get(player_id, {})
         injury_value = injury_lookup.get((player_id, season - 1))
+        roster_profile = roster_lookup.get((player_id, season))
+        nfl_experience = None if roster_profile is None else roster_profile.get("years_exp")
+        rookie_year = None if roster_profile is None else roster_profile.get("rookie_year")
+        entry_year = None if roster_profile is None else roster_profile.get("entry_year")
+        is_rookie: bool | None = None
+        if roster_profile is not None:
+            is_rookie = rookie_year == season and nfl_experience in (0, None)
+            if rookie_year is None and entry_year == season and nfl_experience == 0:
+                is_rookie = True
+        prior_qb_seasons = len({int(item["season"]) for item in history})
+        no_prior_qb_performance = not history
+        preseason_teams = preseason_team_lookup.get((player_id, season), ())
+        preseason_team_id = preseason_teams[0] if len(preseason_teams) == 1 else None
         actual_epa = row.get("epa_per_dropback")
         if not _finite(actual_epa) or int(row["dropbacks"]) <= 0:
             raise PipelineError(
@@ -287,14 +393,25 @@ def build_preseason_features(
             "dropbacks": int(row["dropbacks"]),
             "starts": int(row.get("starts") or 0),
             "age": age,
-            "nfl_experience": len({int(item["season"]) for item in history}),
-            "is_rookie": not history,
+            "nfl_experience": nfl_experience,
+            "is_rookie": is_rookie,
+            "prior_qb_seasons": prior_qb_seasons,
+            "no_prior_qb_performance": no_prior_qb_performance,
             "experience_group": (
                 "rookie"
-                if not history
-                else "one_prior_season"
-                if len({int(item["season"]) for item in history}) == 1
+                if is_rookie is True
+                else "one_prior_nfl_season"
+                if nfl_experience == 1
                 else "veteran"
+                if nfl_experience is not None and nfl_experience >= 2
+                else "experience_unknown"
+            ),
+            "performance_history_group": (
+                "no_prior_qb_performance"
+                if no_prior_qb_performance
+                else "one_prior_qb_season"
+                if prior_qb_seasons == 1
+                else "multiple_prior_qb_seasons"
             ),
             "prior_starts": None if prior is None else prior["starts"],
             "prior_dropbacks": None if prior is None else prior["dropbacks"],
@@ -312,13 +429,28 @@ def build_preseason_features(
             "career_sack_rate": None if career is None else career["sack_rate"],
             "career_interception_rate": (None if career is None else career["interception_rate"]),
             "career_touchdown_rate": None if career is None else career["touchdown_rate"],
-            "changed_team": bool(prior and str(row["team_id"]) not in prior["teams"]),
+            "preseason_team_id": preseason_team_id,
+            "preseason_team_status": (
+                "available"
+                if preseason_team_id is not None
+                else "unavailable_ambiguous"
+                if len(preseason_teams) > 1
+                else "unavailable_no_week_1_snapshot"
+            ),
+            "changed_team": (
+                None
+                if prior is None or preseason_team_id is None
+                else preseason_team_id not in prior["teams"]
+            ),
+            "changed_team_missing": prior is None or preseason_team_id is None,
             "prior_injury_report_weeks": None if injury_value is None else injury_value[0],
             "prior_injury_out_weeks": None if injury_value is None else injury_value[1],
             "draft_position": None,
             "draft_round": None,
             "college_production": None,
             "age_missing": age is None,
+            "nfl_experience_missing": nfl_experience is None,
+            "rookie_status_missing": is_rookie is None,
             "prior_season_missing": prior_missing,
             "prior_cpoe_missing": prior_cpoe is None,
             "prior_injury_missing": injury_value is None,
@@ -330,7 +462,10 @@ def build_preseason_features(
             bool(record[column])
             for column in (
                 "age_missing",
+                "nfl_experience_missing",
+                "rookie_status_missing",
                 "prior_season_missing",
+                "changed_team_missing",
                 "prior_cpoe_missing",
                 "prior_injury_missing",
                 "draft_position_missing",
@@ -375,7 +510,14 @@ def _ridge(alpha: float) -> Pipeline:
 
 
 def _training_weights(frame: pl.DataFrame) -> np.ndarray:
-    return np.clip(np.asarray(frame["dropbacks"], dtype=float), 50.0, 600.0) / 200.0
+    return (
+        np.clip(
+            np.asarray(frame["dropbacks"], dtype=float),
+            TRAINING_WEIGHT_MINIMUM,
+            TRAINING_WEIGHT_MAXIMUM,
+        )
+        / TRAINING_WEIGHT_SCALE
+    )
 
 
 def _tune_ridge_alpha(training: pl.DataFrame) -> float:
@@ -453,10 +595,13 @@ def _metrics(rows: list[dict[str, object]]) -> dict[str, float | int | None]:
 
 
 def _prediction_sigma(residual_history: list[float], training: pl.DataFrame) -> float:
-    if len(residual_history) >= 20:
-        return max(0.01, float(np.sqrt(np.mean(np.square(residual_history)))))
+    if len(residual_history) >= INTERVAL_FALLBACK_RESIDUALS:
+        return max(
+            MINIMUM_PREDICTION_SIGMA,
+            float(np.sqrt(np.mean(np.square(residual_history)))),
+        )
     values = np.asarray(training["actual_epa_per_dropback"], dtype=float)
-    return max(0.01, float(np.std(values)))
+    return max(MINIMUM_PREDICTION_SIGMA, float(np.std(values)))
 
 
 def _league_average(training: pl.DataFrame) -> float:
@@ -487,8 +632,8 @@ def _baseline_prediction(row: dict[str, object], league: float, kind: str) -> fl
 def _selection_score(metrics: dict[str, object]) -> float:
     return (
         float(metrics["mae"])
-        + 0.25 * abs(float(metrics["calibration_intercept"]))
-        + 0.02 * abs(float(metrics["calibration_slope"]) - 1.0)
+        + SELECTION_INTERCEPT_WEIGHT * abs(float(metrics["calibration_intercept"]))
+        + SELECTION_SLOPE_WEIGHT * abs(float(metrics["calibration_slope"]) - 1.0)
     )
 
 
@@ -580,8 +725,8 @@ def build_expected_performance_tables(features: pl.DataFrame) -> ExpectedPerform
                         "expected_epa_per_dropback": expected,
                         "performance_above_expectation": actual - expected,
                         "prediction_std_error": sigma,
-                        "prediction_interval_low": expected - 1.96 * sigma,
-                        "prediction_interval_high": expected + 1.96 * sigma,
+                        "prediction_interval_low": expected - INTERVAL_MULTIPLIER * sigma,
+                        "prediction_interval_high": expected + INTERVAL_MULTIPLIER * sigma,
                         "is_out_of_sample": True,
                         "ridge_alpha": alpha if model_name == "ridge" else None,
                     }
@@ -622,7 +767,8 @@ def build_expected_performance_tables(features: pl.DataFrame) -> ExpectedPerform
         .otherwise(pl.lit("below_200_dropbacks"))
         .alias("eligibility_status"),
         pl.when(
-            (pl.col("dropbacks") >= ELIGIBILITY_DROPBACKS) & (pl.col("career_dropbacks") >= 600)
+            (pl.col("dropbacks") >= ELIGIBILITY_DROPBACKS)
+            & (pl.col("career_dropbacks") >= RELIABILITY_CAREER_DROPBACKS)
         )
         .then(pl.lit("high"))
         .when(pl.col("dropbacks") >= ELIGIBILITY_DROPBACKS)
@@ -636,7 +782,7 @@ def build_expected_performance_tables(features: pl.DataFrame) -> ExpectedPerform
         rows = selected.filter(pl.col("dropbacks") >= threshold).to_dicts()
         sensitivity_records.append({"minimum_dropbacks": threshold, **_metrics(rows)})
     experience_records = []
-    for group in ("rookie", "one_prior_season", "veteran"):
+    for group in ("rookie", "one_prior_nfl_season", "veteran", "experience_unknown"):
         rows = selected.filter(
             (pl.col("experience_group") == group) & (pl.col("dropbacks") >= ELIGIBILITY_DROPBACKS)
         ).to_dicts()
@@ -653,6 +799,7 @@ def build_expected_performance_tables(features: pl.DataFrame) -> ExpectedPerform
         "ridge_alpha_by_prediction_season": alpha_by_season,
         "training_minimum_dropbacks": TRAINING_MIN_DROPBACKS,
         "eligibility_dropbacks": ELIGIBILITY_DROPBACKS,
+        "model_specification": _model_specification(),
         "college_data_available": False,
         "college_data_note": (
             "Only a profile college-name field exists; no validated college production data "
@@ -688,6 +835,72 @@ def _read_injuries(historical_version: Path) -> pl.DataFrame | None:
     return pl.concat(frames, how="vertical_relaxed") if frames else None
 
 
+def _read_roster_profiles(historical_version: Path) -> pl.DataFrame | None:
+    paths = sorted((historical_version / "bronze" / "rosters").glob("season=*/roster.parquet"))
+    frames = []
+    required = ["gsis_id", "years_exp", "entry_year", "rookie_year"]
+    for path in paths:
+        frame = pl.read_parquet(path)
+        if set(required) <= set(frame.columns):
+            season = int(path.parent.name.split("=", maxsplit=1)[1])
+            frames.append(
+                frame.select(required).with_columns(pl.lit(season).alias("source_season"))
+            )
+    return pl.concat(frames, how="vertical_relaxed") if frames else None
+
+
+def _read_preseason_depth_charts(historical_version: Path) -> pl.DataFrame | None:
+    paths = sorted((historical_version / "silver" / "depth_charts").glob("season=*/data.parquet"))
+    frames = []
+    required = [
+        "canonical_player_id",
+        "canonical_team_id",
+        "source_season",
+        "week",
+        "game_type",
+    ]
+    for path in paths:
+        schema = pl.read_parquet_schema(path)
+        if set(required) <= set(schema):
+            frames.append(pl.read_parquet(path, columns=required))
+    return pl.concat(frames, how="vertical_relaxed") if frames else None
+
+
+def _model_specification() -> dict[str, object]:
+    source_files = [
+        Path(__file__),
+        Path(__file__).with_name("constants.py"),
+        Path(__file__).with_name("pipeline.py"),
+    ]
+    return {
+        "feature_version": FEATURE_VERSION,
+        "pipeline_version": MODEL_PIPELINE_VERSION,
+        "models": list(MODEL_NAMES),
+        "ridge_alphas": list(RIDGE_ALPHAS),
+        "training_minimum_dropbacks": TRAINING_MIN_DROPBACKS,
+        "eligibility_dropbacks": ELIGIBILITY_DROPBACKS,
+        "recent_shrinkage_dropbacks": RECENT_SHRINKAGE_DROPBACKS,
+        "career_shrinkage_dropbacks": CAREER_SHRINKAGE_DROPBACKS,
+        "selection_intercept_weight": SELECTION_INTERCEPT_WEIGHT,
+        "selection_slope_weight": SELECTION_SLOPE_WEIGHT,
+        "interval_multiplier": INTERVAL_MULTIPLIER,
+        "interval_fallback_residuals": INTERVAL_FALLBACK_RESIDUALS,
+        "reliability_career_dropbacks": RELIABILITY_CAREER_DROPBACKS,
+        "minimum_prediction_sigma": MINIMUM_PREDICTION_SIGMA,
+        "sensitivity_thresholds": list(SENSITIVITY_THRESHOLDS),
+        "training_weight_minimum": TRAINING_WEIGHT_MINIMUM,
+        "training_weight_maximum": TRAINING_WEIGHT_MAXIMUM,
+        "training_weight_scale": TRAINING_WEIGHT_SCALE,
+        "model_features": list(MODEL_FEATURE_COLUMNS),
+        "dependencies": {
+            "numpy": np.__version__,
+            "polars": pl.__version__,
+            "scikit_learn": sklearn.__version__,
+        },
+        "source_sha256": {path.name: sha256_file(path) for path in source_files},
+    }
+
+
 def _historical_version_path(root: Path) -> tuple[str, Path]:
     latest = root / "LATEST"
     if not latest.is_file():
@@ -704,19 +917,15 @@ def _model_version(source_data_version: str, source_path: Path) -> tuple[str, st
         source_path / "silver" / "qb_team_season_performance.parquet",
         source_path / "silver" / "players.parquet",
         *sorted((source_path / "silver" / "injuries").glob("season=*/data.parquet")),
+        *sorted((source_path / "silver" / "depth_charts").glob("season=*/data.parquet")),
+        *sorted((source_path / "bronze" / "rosters").glob("season=*/roster.parquet")),
     ]
     identity = {
         "source_data_version": source_data_version,
         "source_inputs": {
             path.relative_to(source_path).as_posix(): sha256_file(path) for path in source_paths
         },
-        "feature_version": FEATURE_VERSION,
-        "pipeline_version": MODEL_PIPELINE_VERSION,
-        "models": list(MODEL_NAMES),
-        "ridge_alphas": list(RIDGE_ALPHAS),
-        "training_minimum_dropbacks": TRAINING_MIN_DROPBACKS,
-        "eligibility_dropbacks": ELIGIBILITY_DROPBACKS,
-        "model_features": list(MODEL_FEATURE_COLUMNS),
+        "model_specification": _model_specification(),
     }
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:16]
     return f"c5-{digest}", f"expected-performance-{digest}"
@@ -779,7 +988,13 @@ def run_expected_performance_pipeline(
             historical_path / "silver" / "qb_team_season_performance.parquet"
         )
         players = pl.read_parquet(historical_path / "silver" / "players.parquet")
-        features = build_preseason_features(qb_seasons, players, _read_injuries(historical_path))
+        features = build_preseason_features(
+            qb_seasons,
+            players,
+            _read_injuries(historical_path),
+            _read_roster_profiles(historical_path),
+            _read_preseason_depth_charts(historical_path),
+        )
         tables = build_expected_performance_tables(features)
         lineage = [
             pl.lit(data_version).alias("data_version"),

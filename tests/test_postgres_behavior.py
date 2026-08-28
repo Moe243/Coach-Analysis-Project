@@ -498,11 +498,17 @@ class PostgreSQLBehaviorTest(unittest.TestCase):
             """
             INSERT INTO qb_preseason_features
                 (player_id, team_id, season, feature_version, as_of_season,
+                 nfl_experience, prior_qb_seasons, no_prior_qb_performance,
+                 experience_group, performance_history_group,
                  career_dropbacks, previous_success_rate, previous_sack_rate,
-                 is_rookie, missing_feature_count, ingestion_run_id)
+                 changed_team, changed_team_missing, preseason_team_id,
+                 preseason_team_status, is_rookie, missing_feature_count,
+                 ingestion_run_id)
             VALUES
                 ('expect-qb', 'EXPECT', 2025, 'fixture', 2024,
-                 500, 0.45, 0.07, false, 3, %s)
+                 3, 2, false, 'veteran', 'multiple_prior_qb_seasons',
+                 500, 0.45, 0.07, false, false, 'EXPECT',
+                 'available', false, 3, %s)
             """,
             (ingestion_id,),
         )
@@ -514,6 +520,20 @@ class PostgreSQLBehaviorTest(unittest.TestCase):
                         (player_id, team_id, season, feature_version, as_of_season,
                          missing_feature_count, ingestion_run_id)
                     VALUES ('expect-qb', 'EXPECT', 2025, 'leaked', 2025, 0, %s)
+                    """,
+                    (ingestion_id,),
+                )
+        with self.assertRaises(psycopg.Error):
+            with self.connection.transaction():
+                self.connection.execute(
+                    """
+                    INSERT INTO qb_preseason_features
+                        (player_id, team_id, season, feature_version, as_of_season,
+                         nfl_experience, prior_qb_seasons, no_prior_qb_performance,
+                         experience_group, is_rookie, missing_feature_count,
+                         ingestion_run_id)
+                    VALUES ('expect-qb', 'EXPECT', 2026, 'false-rookie', 2025,
+                            2, 0, true, 'rookie', true, 0, %s)
                     """,
                     (ingestion_id,),
                 )
