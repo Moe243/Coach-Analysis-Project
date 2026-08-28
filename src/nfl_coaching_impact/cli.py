@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 
 from .constants import VERTICAL_SLICE_SEASONS
+from .expected_performance import (
+    ExpectedPerformanceConfig,
+    run_expected_performance_pipeline,
+)
 from .historical import (
     HistoricalPipelineConfig,
     run_historical_pipeline,
@@ -46,6 +50,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Report storage and download size without downloading or transforming",
     )
+    expected = subparsers.add_parser(
+        "expected-performance",
+        description="Build checkpoint-five preseason expectations and PAE outputs",
+    )
+    expected.add_argument("--project-root", type=Path, default=Path.cwd())
+    expected.add_argument("--historical-dir", type=Path)
+    expected.add_argument("--output-dir", type=Path)
     return parser
 
 
@@ -101,6 +112,29 @@ def main(argv: list[str] | None = None) -> int:
                         "required_free_bytes": result.preflight.required_free_bytes,
                         "available_free_bytes": result.preflight.available_free_bytes,
                     },
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command == "expected-performance":
+        result = run_expected_performance_pipeline(
+            ExpectedPerformanceConfig(
+                project_root=args.project_root.resolve(),
+                historical_dir=args.historical_dir,
+                output_dir=args.output_dir,
+            )
+        )
+        print(
+            json.dumps(
+                {
+                    "data_version": result.data_version,
+                    "model_version": result.model_version,
+                    "selected_model": result.selected_model,
+                    "output_path": str(result.output_path),
+                    "reused_existing": result.reused_existing,
+                    "table_counts": result.table_counts,
                 },
                 indent=2,
                 sort_keys=True,

@@ -1,5 +1,5 @@
 -- NFL Coaching Impact Engine
--- PostgreSQL contract evolved through checkpoint four. Alembic begins with the application phase.
+-- PostgreSQL contract evolved through checkpoint five. Alembic begins with the application phase.
 
 BEGIN;
 
@@ -572,10 +572,22 @@ CREATE TABLE qb_preseason_features (
     age numeric,
     nfl_experience integer,
     career_starts integer,
+    career_dropbacks integer,
+    career_epa_per_dropback numeric,
     previous_dropbacks integer,
     previous_epa_per_dropback numeric,
     previous_cpoe numeric,
+    previous_success_rate numeric,
+    previous_sack_rate numeric,
+    previous_interception_rate numeric,
+    previous_touchdown_rate numeric,
     changed_team boolean,
+    is_rookie boolean,
+    prior_injury_report_weeks integer,
+    prior_injury_out_weeks integer,
+    draft_position integer,
+    draft_round integer,
+    missing_feature_count integer NOT NULL DEFAULT 0,
     new_coaching_environment boolean,
     feature_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
     ingestion_run_id bigint NOT NULL REFERENCES ingestion_runs(ingestion_run_id),
@@ -583,7 +595,17 @@ CREATE TABLE qb_preseason_features (
     CHECK (as_of_season < season),
     CHECK (nfl_experience IS NULL OR nfl_experience >= 0),
     CHECK (career_starts IS NULL OR career_starts >= 0),
-    CHECK (previous_dropbacks IS NULL OR previous_dropbacks >= 0)
+    CHECK (career_dropbacks IS NULL OR career_dropbacks >= 0),
+    CHECK (previous_dropbacks IS NULL OR previous_dropbacks >= 0),
+    CHECK (previous_success_rate IS NULL OR previous_success_rate BETWEEN 0 AND 1),
+    CHECK (previous_sack_rate IS NULL OR previous_sack_rate BETWEEN 0 AND 1),
+    CHECK (previous_interception_rate IS NULL OR previous_interception_rate BETWEEN 0 AND 1),
+    CHECK (previous_touchdown_rate IS NULL OR previous_touchdown_rate BETWEEN 0 AND 1),
+    CHECK (prior_injury_report_weeks IS NULL OR prior_injury_report_weeks >= 0),
+    CHECK (prior_injury_out_weeks IS NULL OR prior_injury_out_weeks >= 0),
+    CHECK (draft_position IS NULL OR draft_position > 0),
+    CHECK (draft_round IS NULL OR draft_round > 0),
+    CHECK (missing_feature_count >= 0)
 );
 
 CREATE TABLE qb_season_star_teammates (
@@ -625,9 +647,25 @@ CREATE TABLE qb_predictions (
     expected_epa_per_dropback numeric NOT NULL,
     actual_epa_per_dropback numeric,
     performance_above_expectation numeric,
+    prediction_std_error numeric CHECK (prediction_std_error IS NULL OR prediction_std_error >= 0),
+    prediction_interval_low numeric,
+    prediction_interval_high numeric,
+    eligibility_status text,
+    reliability text CHECK (reliability IS NULL OR reliability IN ('low', 'medium', 'high')),
     is_out_of_sample boolean NOT NULL,
     warning_flags text[] NOT NULL DEFAULT '{}',
-    PRIMARY KEY (model_run_id, qb_season_id)
+    PRIMARY KEY (model_run_id, qb_season_id),
+    CHECK (
+        prediction_interval_high IS NULL
+        OR prediction_interval_low IS NULL
+        OR prediction_interval_high >= prediction_interval_low
+    ),
+    CHECK (
+        performance_above_expectation IS NULL
+        OR actual_epa_per_dropback IS NULL
+        OR performance_above_expectation =
+            actual_epa_per_dropback - expected_epa_per_dropback
+    )
 );
 
 CREATE TABLE coach_effect_estimates (

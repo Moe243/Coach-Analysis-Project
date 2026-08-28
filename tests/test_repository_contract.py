@@ -25,6 +25,7 @@ class RepositoryContractTest(unittest.TestCase):
             "docs/CHECKPOINT_1_REPORT.md",
             "docs/CHECKPOINT_2_REPORT.md",
             "docs/CHECKPOINT_4_REPORT.md",
+            "docs/CHECKPOINT_5_REPORT.md",
             "db/schema.sql",
             "data/manual/coaching_assignments.csv",
             "data/manual/coach_aliases.csv",

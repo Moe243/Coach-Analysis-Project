@@ -42,6 +42,23 @@ Checkpoint three also publishes season-partitioned `player_stats`, `injuries`, `
 
 Historical content-addressed version directories contain only deterministic artifacts. The mutable `data/processed/historical/EXECUTION_LOG.json` sits outside those directories and records execution timestamps, cache status, HTTP retrieval metadata, preflight measurements, and reuse status. Those operational facts may legitimately differ between runs and are not included in analytical output checksums.
 
+## Expected-performance output layout
+
+Checkpoint five publishes content-addressed files under `data/processed/expected_performance/<data_version>/`:
+
+| File | Grain | Purpose |
+|---|---|---|
+| `preseason_features.parquet` | QB-team-season, 1999-2025 | Label plus timing-safe prior/career features, missingness, `as_of_season`, and warm-up/analysis scope |
+| `model_predictions.parquet` | Model-QB-team-analysis season | All four out-of-sample candidate expectations, PAE, training cutoff, intervals, and Ridge alpha |
+| `qb_pae.parquet` | QB-team-analysis season | Selected expectation, actual EPA/dropback, PAE, eligibility, reliability, and uncertainty |
+| `model_evaluation.parquet` | Candidate model | OOS MAE, RMSE, R-squared, correlation, calibration, interval coverage, and selection score |
+| `threshold_sensitivity.parquet` | Dropback threshold | Selected-model sensitivity at 50, 100, 200, 300, and 400 dropbacks |
+| `experience_evaluation.parquet` | Experience group | Selected-model diagnostics for rookies, one-prior-season QBs, and veterans |
+
+`feature_version = qb-preseason-v1`. Every feature row has `as_of_season = season - 1`; `feature_source_max_season` must be null or earlier than the target. Explicit features are age, experience, exact prior-season starts/usage/EPA/CPOE/success/sack/interception/touchdown rates, career starts/usage and the same career rates, team change, and prior injury-report/out weeks. Draft position, draft round, and college production are null with missing indicators because no validated repository dataset supplies them. No coaching field or current-season team result is fitted.
+
+`performance_above_expectation = actual_epa_per_dropback - expected_epa_per_dropback`. `eligibility_status = eligible` requires 200 current-season dropbacks; smaller samples remain stored. Reliability is high for eligible rows with at least 600 prior career dropbacks, medium for other eligible rows, and low below 200 current-season dropbacks. Prediction intervals are the expected value plus/minus 1.96 times an expanding residual RMSE (or prior-training outcome dispersion before enough OOS residuals exist).
+
 QB count/component columns are `dropbacks`, `attempts`, `completions`, `sacks`, `scrambles`, `interceptions`, `passing_touchdowns`, `passing_first_downs`, `explosive_completions`, `positive_epa_dropbacks`, `cpoe_attempts`, `wpa_plays`, `air_yards_attempts`, `total_cpoe`, `total_qb_epa`, `total_wpa`, and `total_air_yards`. Derived rate columns are `epa_per_dropback`, `cpoe`, `success_rate`, `explosive_pass_rate`, `interception_rate`, `touchdown_rate`, `sack_rate`, `air_yards_per_attempt`, `air_yards_coverage_rate`, `first_down_rate`, and `wpa_per_dropback`.
 
 Season rows add `prior_season`, `prior_starts`, `prior_dropbacks`, `prior_qualifies_default`, `prior_season_available`, and prior values for every published rate. They also expose `starts_change`, `dropbacks_change`, and a `<rate>_change` column for every published rate. These represent only season-minus-one player aggregates and are null when that boundary season is absent or, for rates, below the prior-volume rule.

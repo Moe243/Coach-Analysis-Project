@@ -27,13 +27,13 @@ Exit criterion met: the 140-asset official build passed storage/download preflig
 
 Build the source-backed coach-team-season-role table for 2010-2025, including assignment intervals, interim/shared/retained flags, citations, conflicts, and coverage reporting.
 
-Exit criterion met: all 512 team-seasons are covered; all 1,323 verified rows have citations; 753 unresolved role reviews are explicit; role/identity/interval/citation/overlap contracts pass. Play callers remain queued rather than inferred. Coaching environments are deferred until those interval reviews are resolved.
+Exit criterion met after review fixes: all 512 team-seasons are covered by 1,343 assignment rows; 566 verified intervals have citations; 777 provisional assignments and 1,527 unresolved reviews remain explicit; identity, interval, interim, source-content, compound-title, overlap, and PostgreSQL contracts pass. Unsupported play callers remain queued rather than inferred.
 
-## Checkpoint five — expected performance
+## Checkpoint five — expected performance (implemented; pending approval)
 
-Build timing-safe features, Elastic Net baseline, gradient-boosting challenger, expanding-window evaluation, out-of-sample predictions, and leakage/stability reports.
+Build timing-safe prior/career features, three shrinkage baselines, a tuned Ridge candidate, expanding-window evaluation, out-of-sample predictions, uncertainty, and leakage/stability reports. Validated college/draft data was absent and remains explicitly missing.
 
-Exit criterion: published PAE rows are out of sample; metrics and calibration documented; model card updated with actual results.
+Exit criterion implemented: all 1,689 published PAE rows are out of sample and exclude warm-up seasons; career performance was selected from four candidates using documented accuracy/calibration scoring; deterministic clean-rebuild, leakage, arithmetic, cardinality, missingness, and atomic-failure contracts pass; the model card contains actual results. Approval remains required before checkpoint six.
 
 ## Checkpoint six — coach impact
 

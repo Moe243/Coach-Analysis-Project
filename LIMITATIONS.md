@@ -36,7 +36,11 @@ No audited public API supplies complete role histories, play-callers, shared dut
 
 ## Preseason expectation limitations
 
-Rookies and low-experience quarterbacks have little NFL history. Draft and combine information is an imperfect talent proxy. College data is deferred initially because identity matching, quotas, coverage, and redistribution rules add risk. Warm-up seasons may have fewer features than analysis seasons, so missingness indicators and era checks are required.
+Rookies and low-experience quarterbacks have little NFL history. No validated college-production, draft, or combine dataset exists in the repository, so those fields remain missing rather than inferred; this particularly weakens rookie expectations. Of 1,689 analysis rows, 662 lack an exact prior NFL season, 688 lack prior CPOE, and 804 lack prior injury-report features. Every row lacks validated draft and college-production features.
+
+The selected career baseline is intentionally simple and outperformed Ridge only narrowly (eligible MAE 0.09172 versus 0.09209). Selection uses the same 2010-2025 expanding-window backtest reported for performance, so it is model-family evaluation rather than a claim about an untouched deployment holdout. Calibration is weaker for rookies (71 eligible rows, negative R-squared) and one-prior-season quarterbacks than for veterans. The normal-style residual intervals achieved 94.50% overall coverage but do not model player-specific heteroskedasticity, injury uncertainty, or structural changes in league play.
+
+PAE is a residual from a limited preseason expectation, not an intrinsic quarterback-quality measure. It can absorb unmeasured roster strength, scheme, opponent mix, health, and random variation. The 200-dropback threshold controls eligibility and reliability only; all 1,689 analysis rows remain stored, including 1,107 low-reliability smaller samples. No final quarterback ranking is produced in checkpoint five.
 
 ## Aggregation
 

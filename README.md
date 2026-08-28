@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint four remains pending approval after its review fixes. The compact, source-backed 2010-2025 layer covers all 512 team-seasons with 1,343 assignment rows for 281 canonical coaches. Of those, 566 intervals are verified and 777 assignments are provisional. Ten play-caller intervals have direct evidence and one is provisional; unsupported, shared, and partially covered duties remain in the 1,527-row review queue. No model, PAE, ranking, API, or frontend was created.
+Checkpoint five is implemented and pending approval. The leakage-safe expanding-window build produces 1,689 out-of-sample 2010-2025 QB-team-season PAE rows from the approved historical layer; 582 meet the documented 200-dropback eligibility threshold and 1,107 remain visible with low-reliability warnings. The career-performance baseline was selected over Ridge and the other baselines on the declared out-of-sample accuracy/calibration score. No coach effects, coach rankings, final quarterback rankings, API, or frontend were created.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -16,7 +16,7 @@ Checkpoint four remains pending approval after its review fixes. The compact, so
 - Primary outcome: EPA per quarterback dropback
 - Default coach-ranking threshold: three qualifying QB seasons and two distinct quarterbacks
 
-The validated historical run remains data version `c3-f6c1aa118ff43b90`. Read [the checkpoint-four report](docs/CHECKPOINT_4_REPORT.md) for role coverage, evidence rules, unresolved work, and the exact next checkpoint.
+The validated historical run remains data version `c3-f6c1aa118ff43b90`; checkpoint five is `c5-98c98cdcc8492333` with model version `expected-performance-98c98cdcc8492333`. Read [the checkpoint-five report](docs/CHECKPOINT_5_REPORT.md) for model comparisons, leakage controls, missingness, uncertainty, and the exact next checkpoint.
 
 ## Football decision supported
 
@@ -48,6 +48,16 @@ The first version focuses on quarterbacks and four coaching roles:
 ```
 
 Raw and processed data directories are deliberately ignored. Large upstream files and API responses must not be committed.
+
+## Build checkpoint five
+
+Install the exact Python 3.12 environment, ensure the checkpoint-three historical `LATEST` build exists, and run:
+
+```bash
+make PYTHON=.venv/bin/python expected-performance
+```
+
+The command builds deterministic preseason features, four expanding-window candidates, evaluation tables, and selected PAE output under `data/processed/expected_performance/<data-version>/`. `LATEST` points to the immutable version. Execution timestamps and reuse status live separately in `EXECUTION_LOG.json`; generated Parquet and model artifacts remain ignored by Git.
 
 ## Validate checkpoint four
 
@@ -91,7 +101,8 @@ Run deterministic tests and lint with:
 ```bash
 make PYTHON=.venv/bin/python test
 make PYTHON=.venv/bin/python test-network
-.venv/bin/ruff check src tests
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
 ```
 
 The database contract is tested against a disposable PostgreSQL database, not by inspecting SQL text. Install the PostgreSQL driver, create an empty test database with permission to install `btree_gist`, and run:
@@ -112,7 +123,7 @@ python3 scripts/audit_sources.py --network --download-samples
 
 `--download-samples` downloads three small 2025 CSV files into a temporary directory and streams bounded 2010 and 2025 play-by-play samples. It validates required columns, `qb_dropback`, finite `qb_epa`, and resolved passer/scrambler GSIS IDs, then removes the temporary files. It does not retain or fully download either play-by-play season.
 
-The planned later stack adds scikit-learn, statsmodels, PostgreSQL, SQLAlchemy, Alembic, FastAPI, and Next.js/TypeScript only in their approved checkpoints. DuckDB remains an embedded analysis option; the implemented ingestion uses Polars.
+Checkpoint five uses scikit-learn Ridge with Polars/NumPy preprocessing and evaluation. The planned later stack adds statsmodels, PostgreSQL, SQLAlchemy, Alembic, FastAPI, and Next.js/TypeScript only in their approved checkpoints. DuckDB remains an embedded analysis option.
 
 Secrets will be loaded from environment variables. Copy `.env.example` to `.env` only when a later checkpoint needs credentials, and never commit `.env`.
 
@@ -127,6 +138,7 @@ Secrets will be loaded from environment variables. Copy `.env.example` to `.env`
 - [Data dictionary](DATA_DICTIONARY.md)
 - [Phased project plan](docs/PROJECT_PLAN.md)
 - [Checkpoint four report](docs/CHECKPOINT_4_REPORT.md)
+- [Checkpoint five report](docs/CHECKPOINT_5_REPORT.md)
 
 ## Interpretation standard
 

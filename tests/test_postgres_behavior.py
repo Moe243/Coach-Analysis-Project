@@ -487,6 +487,105 @@ class PostgreSQLBehaviorTest(unittest.TestCase):
             {coaches[0]: 1, coaches[1]: 2, coaches[2]: None},
         )
 
+    def test_expected_performance_fields_enforce_timing_intervals_and_pae(self) -> None:
+        self.insert_team("EXPECT")
+        ingestion_id = self.insert_ingestion_run("expected-performance-data")
+        self.connection.execute(
+            "INSERT INTO players (player_id, display_name, position) "
+            "VALUES ('expect-qb', 'Expected QB', 'QB')"
+        )
+        self.connection.execute(
+            """
+            INSERT INTO qb_preseason_features
+                (player_id, team_id, season, feature_version, as_of_season,
+                 career_dropbacks, previous_success_rate, previous_sack_rate,
+                 is_rookie, missing_feature_count, ingestion_run_id)
+            VALUES
+                ('expect-qb', 'EXPECT', 2025, 'fixture', 2024,
+                 500, 0.45, 0.07, false, 3, %s)
+            """,
+            (ingestion_id,),
+        )
+        with self.assertRaises(psycopg.Error):
+            with self.connection.transaction():
+                self.connection.execute(
+                    """
+                    INSERT INTO qb_preseason_features
+                        (player_id, team_id, season, feature_version, as_of_season,
+                         missing_feature_count, ingestion_run_id)
+                    VALUES ('expect-qb', 'EXPECT', 2025, 'leaked', 2025, 0, %s)
+                    """,
+                    (ingestion_id,),
+                )
+
+        qb_season_id = self.connection.execute(
+            """
+            INSERT INTO qb_seasons
+                (player_id, team_id, season, games, dropbacks, pass_attempts,
+                 epa_per_dropback, qualifies_default, metric_version, ingestion_run_id)
+            VALUES ('expect-qb', 'EXPECT', 2025, 17, 300, 280,
+                    0.20, true, 'test', %s)
+            RETURNING qb_season_id
+            """,
+            (ingestion_id,),
+        ).fetchone()[0]
+        model_run_id = self.connection.execute(
+            """
+            INSERT INTO model_runs
+                (model_kind, model_name, model_version, data_version, feature_version,
+                 metric_version, training_end_season, code_version)
+            VALUES ('expected_performance', 'career-performance', 'fixture',
+                    'expected-performance-data', 'fixture', 'test', 2024, 'test')
+            RETURNING model_run_id
+            """
+        ).fetchone()[0]
+        self.connection.execute(
+            """
+            INSERT INTO qb_predictions
+                (model_run_id, qb_season_id, prediction_as_of_season,
+                 expected_epa_per_dropback, actual_epa_per_dropback,
+                 performance_above_expectation, prediction_std_error,
+                 prediction_interval_low, prediction_interval_high,
+                 eligibility_status, reliability, is_out_of_sample)
+            VALUES (%s, %s, 2024, 0.10, 0.20, 0.10, 0.05,
+                    0.00, 0.20, 'eligible', 'high', true)
+            """,
+            (model_run_id, qb_season_id),
+        )
+        values = self.connection.execute(
+            """
+            SELECT prediction_std_error, prediction_interval_low,
+                   prediction_interval_high, reliability
+              FROM qb_predictions
+             WHERE model_run_id = %s AND qb_season_id = %s
+            """,
+            (model_run_id, qb_season_id),
+        ).fetchone()
+        self.assertEqual(tuple(map(str, values[:3])), ("0.05", "0.00", "0.20"))
+        self.assertEqual(values[3], "high")
+
+        with self.assertRaises(psycopg.Error):
+            with self.connection.transaction():
+                self.connection.execute(
+                    """
+                    UPDATE qb_predictions
+                       SET prediction_interval_low = 0.30,
+                           prediction_interval_high = 0.20
+                     WHERE model_run_id = %s AND qb_season_id = %s
+                    """,
+                    (model_run_id, qb_season_id),
+                )
+        with self.assertRaises(psycopg.Error):
+            with self.connection.transaction():
+                self.connection.execute(
+                    """
+                    UPDATE qb_predictions
+                       SET performance_above_expectation = 0.50
+                     WHERE model_run_id = %s AND qb_season_id = %s
+                    """,
+                    (model_run_id, qb_season_id),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

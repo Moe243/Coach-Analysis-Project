@@ -1,70 +1,55 @@
-# Model card
+# Expected-quarterback-performance model card
 
-Status: design specification; no model has been trained.
+Status: checkpoint five implemented; pending approval.
 
-## Intended use
+## Version and intended use
 
-The expected-performance model estimates a preseason EPA/dropback expectation for an NFL quarterback-team-season. The coach-impact models estimate partially pooled associations between coaching-role exposure and game-level performance residuals.
+- Data version: `c5-98c98cdcc8492333`
+- Source historical version: `c3-f6c1aa118ff43b90`
+- Model version: `expected-performance-98c98cdcc8492333`
+- Feature version: `qb-preseason-v1`
+- Evaluation seasons: 2010-2025
+- Training warm-up: 1999-2009 for the first published season, expanding through 2024
 
-Intended users are portfolio reviewers, sports analysts, and football-operations practitioners who will inspect the estimate together with uncertainty and context.
+The model estimates preseason EPA/dropback for one NFL QB-team-season. PAE is actual minus expected EPA/dropback. It supports later analysis of performance relative to expectation; it is not a final quarterback ranking, a coach-effect estimate, or causal evidence.
 
-## Out-of-scope uses
+## Population and outputs
 
-- Claiming that a coach caused a player's outcome
-- Personnel, employment, contract, or wagering decisions based on rank alone
-- Evaluation of non-quarterback position coaches in version one
-- In-season prediction using information unavailable at the stated cutoff
-- Replacing film review, medical information, or proprietary tracking data
+The build contains 2,899 feature rows across 1999-2025 and publishes 1,689 analysis-season PAE rows. All analysis rows receive out-of-sample predictions. The 582 rows with at least 200 dropbacks are evaluation-eligible; 1,107 smaller samples remain stored with low reliability. Reliability is high for 417 eligible rows with at least 600 prior career dropbacks and medium for the other 165 eligible rows.
 
-## Training and evaluation population
+Outputs include actual and expected EPA/dropback, PAE, dropbacks, starts, complete prior/career features, target and as-of seasons, model/data/feature versions, prediction intervals, eligibility, reliability, experience group, team-change flag, and missingness indicators. Warm-up rows never appear in `qb_pae.parquet`.
 
-- Published analysis seasons: 2010-2025 regular seasons
-- Warm-up seasons: 1999-2009, used only to train models predicting 2010 onward
-- Default displayed sample: quarterback-team-seasons with at least 200 eligible dropbacks
-- Smaller samples remain stored and are excluded from default rankings
+## Features and timing
 
-## Inputs
+Every feature for season `S` is available by `S-1`. Fitted inputs are age, observed NFL experience, exact prior-season starts/usage and EPA/CPOE/success/sack/interception/touchdown rates, career starts/usage and the same career rates, team change, and prior injury-report/out weeks. Career fields aggregate only seasons earlier than the target.
 
-The expected model may use draft/combine/profile information, age, experience, prior starts, prior performance and usage, prior injuries, team change, and lagged environment features. College features are deferred until the baseline works.
+There is no validated college-production, draft, or combine dataset in the repository. The roster profile college name is not used as performance data. College production, draft position, and draft round are null with missing indicators. Coaching assignments, coach identities, current-season team results, records, rankings, and future data are prohibited features.
 
-Forbidden expected-model inputs include same-season results, same-season honors, future injuries, future depth charts, and any feature computed with seasons at or after the predicted season.
+## Candidate models and selection
 
-## Outputs
+| Candidate | OOS MAE | RMSE | R² | Correlation | Calibration intercept | Calibration slope | 95% interval coverage | Selection score |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Career performance (selected) | 0.09172 | 0.11752 | 0.18925 | 0.44673 | 0.00707 | 0.82192 | 0.94502 | 0.09705 |
+| Ridge | 0.09209 | 0.11907 | 0.16762 | 0.44447 | 0.01769 | 0.72057 | 0.94845 | 0.10210 |
+| Recent performance | 0.09519 | 0.12135 | 0.13541 | 0.41666 | 0.01580 | 0.68326 | 0.95189 | 0.10547 |
+| League average | 0.10565 | 0.13273 | -0.03435 | -0.01722 | 0.06944 | -0.31157 | 0.93471 | 0.14924 |
 
-- Expected EPA/dropback
-- Actual EPA/dropback
-- QB Performance Above Expectation
-- Prediction diagnostics and applicable warning flags
-- Role-specific coach association estimates with uncertainty and exposure counts
+Career performance shrinks prior-career EPA toward the expanding league average with 500 pseudo-dropbacks. It was selected because it achieved the best eligible OOS MAE and best declared composite of MAE and calibration penalties. Ridge uses training-only median imputation, scaling, explicit missing indicators, capped dropback weights, and time-ordered alpha tuning. A mixed-effects expectation model was not added: the four reliable candidates satisfied this checkpoint without introducing an additional fragile dependency or hierarchy.
 
-## Candidate models
+## Small samples and uncertainty
 
-1. Elastic Net with season-safe preprocessing; primary and preferred for interpretability.
-2. Histogram gradient boosting; challenger.
-3. Frequentist mixed-effects models for role-specific coach associations.
-4. Crossed-role mixed model as sensitivity analysis, not the default leaderboard.
+Recent performance shrinks with 200 pseudo-dropbacks; career performance uses 500. Rookies and players with no NFL history fall back to the expanding league average. Exact small prior seasons remain available and are shrunk rather than erased. The 200 current-season dropback threshold affects evaluation eligibility and reliability, never the PAE arithmetic.
 
-Bayesian hierarchical modeling is deferred.
+Prediction intervals are expected EPA plus/minus 1.96 times an expanding residual RMSE calculated only from earlier OOS seasons. Before 20 eligible residuals exist, the model uses prior-training outcome dispersion. This gives 94.50% eligible coverage, but it is not a player-specific probabilistic interval.
 
-## Validation
+## Subgroup and threshold diagnostics
 
-- Expanding-window outer evaluation by season
-- Time-ordered inner tuning
-- No random row split across time
-- MAE, RMSE, R-squared, calibration intercept and slope
-- Stability by season, experience, volume, team change, and missing-feature patterns
-- Leakage tests checking every feature's `as_of_season`
-- Bootstrap intervals clustered by QB-season for coach effects
-- Sensitivity checks for role overlap, threshold choice, and environment controls
+Eligible results are weaker for rookies (71 rows; MAE 0.11789; R² -0.27535; coverage 85.92%) and one-prior-season QBs (75 rows; MAE 0.10752; R² 0.01669; coverage 90.67%) than veterans (436 rows; MAE 0.08475; R² 0.20782; coverage 96.56%). Selected-model MAE declines from 0.12234 at 50 dropbacks to 0.08346 at 400, demonstrating why small samples remain visible but receive lower reliability.
 
-## Fairness and subgroup review
+## Validation and release gate
 
-The model is not about protected traits and must not infer them. Still, systematic missingness can differ by era, draft status, experience, roster position, and data availability. Performance and calibration will be reported for rookies, veterans, low/high draft capital, team changers, and major data-availability eras.
+Regression tests enforce strict feature timing, a target-metric leakage adversary, rookie fallback, team changes, missing prior/college fields, duplicate grains and outputs, finite predictions, exact PAE arithmetic, dropback reconciliation, warm-up exclusion, forbidden coaching/current-result features, deterministic features/model outputs/versioning, byte-identical clean rebuilds, and atomic failure. PostgreSQL behavior tests cover timing, interval bounds, uncertainty fields, reliability, and PAE arithmetic when a database is available.
 
-## Known risks
+## Known risks and prohibited uses
 
-Selection bias, staff collinearity, survivorship, roster quality, measurement error, unequal samples, and post-treatment adjustment can all distort estimates. See `LIMITATIONS.md`.
-
-## Versioning and release gate
-
-Each model run must store code version, data version, feature version, training cutoff, hyperparameters, evaluation metrics, and artifact URI. No model is publishable until leakage tests pass and its model card is updated with actual results.
+PAE is performance relative to a limited expectation, not player or coach quality. It can absorb supporting cast, scheme, injuries, schedule, measurement error, and luck. Model-family selection uses the reported backtest rather than an untouched deployment holdout. Do not use PAE alone for employment, contract, wagering, causal, or medical decisions. See `LIMITATIONS.md`.

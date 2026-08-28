@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -51,3 +51,6 @@ coaching-sources:
 coaching-load:
 	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 2)
 	PYTHONPATH=src $(PYTHON) scripts/load_coaching_data.py --database-url "$$DATABASE_URL"
+
+expected-performance:
+	PYTHONPATH=src $(PYTHON) -m nfl_coaching_impact.cli expected-performance --project-root "$(PROJECT_ROOT)"
