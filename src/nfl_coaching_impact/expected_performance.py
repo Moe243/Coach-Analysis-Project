@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+import scipy
 import sklearn
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Ridge
@@ -895,6 +896,7 @@ def _model_specification() -> dict[str, object]:
         "dependencies": {
             "numpy": np.__version__,
             "polars": pl.__version__,
+            "scipy": scipy.__version__,
             "scikit_learn": sklearn.__version__,
         },
         "source_sha256": {path.name: sha256_file(path) for path in source_files},

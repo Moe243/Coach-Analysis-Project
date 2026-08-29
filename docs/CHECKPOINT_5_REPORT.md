@@ -1,14 +1,14 @@
 # Checkpoint five report — expected quarterback performance and PAE
 
-Date: 2026-08-28
+Date: 2026-08-29
 
 ## Outcome
 
 Checkpoint five is implemented and pending approval. One deterministic command builds leakage-safe preseason features, four expanding-window candidates, out-of-sample expectations, uncertainty, evaluation tables, and normalized PAE output. No coach effects, coach rankings, final quarterback rankings, API, frontend, college ingestion, or checkpoint-six work was added.
 
 - Source data: `c3-f6c1aa118ff43b90`
-- Checkpoint-five data: `c5-0ebaff47c63c6910`
-- Model: `expected-performance-0ebaff47c63c6910`
+- Checkpoint-five data: `c5-8fd5d1aba2598c59`
+- Model: `expected-performance-8fd5d1aba2598c59`
 - Feature version: `qb-preseason-v2`
 - Build command: `make PYTHON=.venv/bin/python expected-performance`
 
@@ -37,7 +37,7 @@ Roster metadata identifies 187 true-rookie rows, 191 one-prior-NFL-season rows, 
 
 - **Target-season destinations:** `changed_team` uses only a unique Week 1 regular-season depth-chart team and is identical across every player-season stint. Trent Edwards' 2010 Buffalo and Jacksonville rows both retain Buffalo as the opening team; Jacksonville cannot affect Ridge features, 2010 predictions, or later training.
 - **Rookie versus performance history:** `years_exp`, `entry_year`, and `rookie_year` distinguish actual rookies from veterans without prior recorded QB dropbacks. Austin Davis, Trevor Siemian, Jeff Driskel, and Mason Rudolph are correctly non-rookies with `no_prior_qb_performance = true`; a true rookie remains in the rookie group.
-- **Content versioning:** source Parquet checksums, all declared shrinkage/selection/interval/reliability/sensitivity/weight parameters, modeling-library versions, and relevant source-code hashes participate in the data/model version. A career-shrinkage change creates and rebuilds a different immutable directory.
+- **Content versioning:** source Parquet checksums, all declared shrinkage/selection/interval/reliability/sensitivity/weight parameters, NumPy/Polars/SciPy/scikit-learn versions, and relevant source-code hashes participate in the data/model version. Career-shrinkage and recorded-SciPy-version regressions each create and rebuild a different immutable directory rather than reusing stale output.
 
 ## Models and selection
 
@@ -76,13 +76,13 @@ Representative eligible rows demonstrate output shape, not a ranking:
 
 Hard checks reject target/future performance seasons, any `as_of_season` other than `S-1`, destination-dependent model features within a player-season, duplicate QB seasons or predictions, non-finite actual/expected/PAE values, arithmetic or dropback mismatch, warm-up PAE, forbidden coaching/current-result features, and valid-looking partial output after failure. Adversarial tests change target-season EPA and a midseason destination independently and prove expectations/training remain unchanged.
 
-The content version hashes the historical QB-season, player, injury, roster, and depth-chart inputs plus the full feature/model specification, relevant code, and modeling dependencies. Deterministic artifacts contain no timestamps or cache state. `EXECUTION_LOG.json` is outside the immutable version and may legitimately differ. A two-empty-directory fixture test compares every deterministic Parquet, JSON, checksum, and version byte-for-byte.
+The content version hashes the historical QB-season, player, injury, roster, and depth-chart inputs plus the full feature/model specification, relevant code, and modeling dependencies. SciPy is recorded explicitly because Ridge depends on its numerical routines. Deterministic artifacts contain no timestamps or cache state. `EXECUTION_LOG.json` is outside the immutable version and may legitimately differ. A two-empty-directory fixture test compares every deterministic Parquet, JSON, checksum, and version byte-for-byte.
 
 The real historical build was also rebuilt into a second empty directory. Its data/model versions, every Parquet and JSON artifact, checksum manifest, and `LATEST` value were byte-identical. A normal rerun validated all checksums and reused the existing immutable version.
 
 ## Test results
 
-The complete discovery run found 70 tests: 59 passed and 11 skipped. Nine behavioral PostgreSQL tests were skipped because `TEST_DATABASE_URL`, a PostgreSQL client/server, and `psycopg` remain unavailable; the updated checkpoint-five schema behavior is therefore still an integration risk, not a silently claimed pass. Two deliberately opt-in checkpoint-three/four network tests were skipped because checkpoint five requires no network inputs. All 14 checkpoint-five offline tests passed, including the Trent Edwards, roster-status, parameter-version, and two-clean-build regressions. The real historical output also rebuilt into a second empty directory with the same version and byte-identical Parquet, JSON, checksum, and `LATEST` artifacts. Ruff lint passed, Ruff formatting reported all 41 Python files formatted, and `git diff --check` passed.
+The complete discovery run found 71 tests: 60 passed and 11 skipped. Nine behavioral PostgreSQL tests were skipped because `TEST_DATABASE_URL`, a PostgreSQL client/server, and `psycopg` remain unavailable; the updated checkpoint-five schema behavior is therefore still an integration risk, not a silently claimed pass. The two opt-in checkpoint-three/four network tests were then run explicitly and both passed. All 15 checkpoint-five offline tests passed, including the Trent Edwards, roster-status, parameter-version, SciPy-version, and two-clean-build regressions. The real historical output also rebuilt into a second empty directory with the same version and byte-identical Parquet, JSON, checksum, and `LATEST` artifacts. Ruff lint passed, Ruff formatting reported all 41 Python files formatted, and `git diff --check` passed.
 
 ## Files created or changed
 

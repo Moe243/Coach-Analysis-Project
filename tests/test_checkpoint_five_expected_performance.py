@@ -542,6 +542,38 @@ class CheckpointFiveExpectedPerformanceTest(unittest.TestCase):
             )
             self.assertGreater(changed.height, 0)
 
+    def test_scipy_version_change_creates_new_version_without_reuse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            historical = _write_historical_fixture(
+                root,
+                self.qb_seasons,
+                self.players,
+                self.rosters,
+                self.depth_charts,
+            )
+            output = root / "output"
+            first = run_expected_performance_pipeline(
+                ExpectedPerformanceConfig(
+                    project_root=root, historical_dir=historical, output_dir=output
+                )
+            )
+            with patch(
+                "nfl_coaching_impact.expected_performance.scipy.__version__",
+                "999.0.0-test",
+            ):
+                second = run_expected_performance_pipeline(
+                    ExpectedPerformanceConfig(
+                        project_root=root, historical_dir=historical, output_dir=output
+                    )
+                )
+            self.assertNotEqual(first.data_version, second.data_version)
+            self.assertNotEqual(first.model_version, second.model_version)
+            self.assertFalse(second.reused_existing)
+            self.assertNotEqual(first.output_path, second.output_path)
+            self.assertTrue(first.output_path.is_dir())
+            self.assertTrue(second.output_path.is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -77,7 +77,7 @@ For every prediction season `S`, training contains only seasons earlier than `S`
 
 Rookies and veterans without prior QB performance both fall back to the expanding league average in the recent and career baselines, but Ridge can distinguish them through roster experience, rookie status, and `no_prior_qb_performance`. One-prior-NFL-season and one-prior-QB-season fields remain distinct. Prediction intervals use only residuals from earlier evaluated seasons, falling back to prior-training outcome dispersion until 20 eligible OOS residuals exist.
 
-The content version hashes every source Parquet that affects features, all declared modeling/shrinkage/selection/interval/reliability/sensitivity parameters, NumPy/Polars/scikit-learn versions, and hashes of the model, constants, and deterministic publishing code. A parameter or relevant source-code change therefore creates a new immutable directory rather than reusing stale outputs.
+The content version hashes every source Parquet that affects features, all declared modeling/shrinkage/selection/interval/reliability/sensitivity parameters, NumPy/Polars/SciPy/scikit-learn versions, and hashes of the model, constants, and deterministic publishing code. SciPy is included explicitly because scikit-learn Ridge uses its numerical routines. A parameter, modeling-dependency, or relevant source-code change therefore creates a new immutable directory rather than reusing stale outputs.
 
 ```text
 QB Performance Above Expectation = actual EPA/dropback - expected EPA/dropback

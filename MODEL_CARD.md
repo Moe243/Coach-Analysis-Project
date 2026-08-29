@@ -4,9 +4,9 @@ Status: checkpoint five implemented; pending approval.
 
 ## Version and intended use
 
-- Data version: `c5-0ebaff47c63c6910`
+- Data version: `c5-8fd5d1aba2598c59`
 - Source historical version: `c3-f6c1aa118ff43b90`
-- Model version: `expected-performance-0ebaff47c63c6910`
+- Model version: `expected-performance-8fd5d1aba2598c59`
 - Feature version: `qb-preseason-v2`
 - Evaluation seasons: 2010-2025
 - Training warm-up: 1999-2009 for the first published season, expanding through 2024
@@ -48,9 +48,9 @@ Eligible results are weaker for true rookies (63 rows; MAE 0.12066; R² -0.27044
 
 ## Validation and release gate
 
-Regression tests enforce strict feature timing, a target-metric leakage adversary, Trent Edwards' 2010 midseason destination invariance, true-rookie versus veteran-no-history cases, missing prior/college fields, duplicate grains and outputs, finite predictions, exact PAE arithmetic, dropback reconciliation, warm-up exclusion, forbidden coaching/current-result features, complete parameter/source versioning, byte-identical clean rebuilds, and atomic failure. PostgreSQL behavior tests cover timing, roster/performance-history fields, interval bounds, uncertainty fields, reliability, and PAE arithmetic when a database is available.
+Regression tests enforce strict feature timing, a target-metric leakage adversary, Trent Edwards' 2010 midseason destination invariance, true-rookie versus veteran-no-history cases, missing prior/college fields, duplicate grains and outputs, finite predictions, exact PAE arithmetic, dropback reconciliation, warm-up exclusion, forbidden coaching/current-result features, complete parameter/source/dependency versioning, byte-identical clean rebuilds, and atomic failure. A dedicated dependency regression changes the recorded SciPy version and proves that a new immutable output is built instead of reusing the prior directory. PostgreSQL behavior tests cover timing, roster/performance-history fields, interval bounds, uncertainty fields, reliability, and PAE arithmetic when a database is available.
 
-The version identity includes all declared model parameters, every feature source, relevant source-code hashes, and modeling-library versions. Changing career shrinkage or any other output-affecting specification creates a new immutable data/model version.
+The version identity includes all declared model parameters, every feature source, relevant source-code hashes, and NumPy, Polars, SciPy, and scikit-learn versions. Changing career shrinkage, the recorded SciPy version, or any other output-affecting specification creates a new immutable data/model version.
 
 ## Known risks and prohibited uses
 
