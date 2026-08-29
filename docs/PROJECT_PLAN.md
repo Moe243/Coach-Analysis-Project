@@ -29,17 +29,17 @@ Build the source-backed coach-team-season-role table for 2010-2025, including as
 
 Exit criterion met after review fixes: all 512 team-seasons are covered by 1,343 assignment rows; 566 verified intervals have citations; 777 provisional assignments and 1,527 unresolved reviews remain explicit; identity, interval, interim, source-content, compound-title, overlap, and PostgreSQL contracts pass. Unsupported play callers remain queued rather than inferred.
 
-## Checkpoint five — expected performance (implemented; pending approval)
+## Checkpoint five — expected performance (complete)
 
 Build timing-safe prior/career features, three shrinkage baselines, a tuned Ridge candidate, expanding-window evaluation, out-of-sample predictions, uncertainty, and leakage/stability reports. Validated college/draft data was absent and remains explicitly missing.
 
-Exit criterion implemented: all 1,689 published PAE rows are out of sample and exclude warm-up seasons; career performance was selected from four candidates using documented accuracy/calibration scoring; opening-week team snapshots prevent midseason-destination leakage; roster experience is separate from prior QB history; complete parameter/source/code identity controls immutable versions; deterministic clean-rebuild, leakage, arithmetic, cardinality, missingness, and atomic-failure contracts pass. Approval remains required before checkpoint six.
+Exit criterion met: all 1,689 published PAE rows are out of sample and exclude warm-up seasons; career performance was selected from four candidates using documented accuracy/calibration scoring; opening-week team snapshots prevent midseason-destination leakage; roster experience is separate from prior QB history; complete parameter/source/code/dependency identity controls immutable versions; deterministic clean-rebuild, leakage, arithmetic, cardinality, missingness, and atomic-failure contracts pass.
 
-## Checkpoint six — coach impact
+## Checkpoint six — coach impact (implemented; pending approval)
 
-Fit role-specific mixed models, block-bootstrap uncertainty, crossed-role sensitivity model, overlap diagnostics, and ranking eligibility/warnings.
+Build interval-compatible QB-coach exposures; compare no-coach, regularized coach fixed-effect, and empirical-Bayes partial-pooling models; produce QB-season block-bootstrap uncertainty, role-specific sensitivities, overlap diagnostics, and preliminary ranking eligibility/warnings.
 
-Exit criterion: estimates include intervals and exposure; unstable attribution is suppressed or flagged; limitations are updated.
+Exit criterion implemented: verified primary estimates include fractional interval exposure and 200-block-bootstrap intervals; provisional/shared/weighting/control/threshold sensitivities remain separate; unsupported QB-coach attribution is suppressed; every rank is preliminary and non-publishable; deterministic clean rebuild and content identity contracts pass. Approval remains required before checkpoint seven.
 
 ## Checkpoint seven — application database and API
 

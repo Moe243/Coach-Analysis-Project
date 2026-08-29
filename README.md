@@ -8,15 +8,15 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint five is implemented and pending approval. The leakage-safe expanding-window build produces 1,689 out-of-sample 2010-2025 QB-team-season PAE rows from the approved historical layer; 582 meet the documented 200-dropback eligibility threshold and 1,107 remain visible with low-reliability warnings. Opening-week depth charts prevent later destinations from entering the team-change feature, while roster experience fields distinguish true rookies from veterans without prior QB dropbacks. The career-performance baseline was selected over Ridge and the other baselines on the declared out-of-sample accuracy/calibration score. No coach effects, coach rankings, final quarterback rankings, API, or frontend were created.
+Checkpoint six is implemented and pending approval. It joins checkpoint-five PAE to source-backed coaching intervals at the QB-game level, aggregates one QB-coach-interval exposure, and compares a no-coach baseline, regularized coach fixed effects, and role-specific empirical-Bayes partial pooling. Verified assignments drive the primary exploratory results; provisional assignments appear only in sensitivity outputs. Rankings are explicitly preliminary and non-publishable. No API, frontend, network graph, production dashboard, or checkpoint-seven work was created.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
 - Default QB threshold: 200 dropbacks
 - Primary outcome: EPA per quarterback dropback
-- Default coach-ranking threshold: three qualifying QB seasons and two distinct quarterbacks
+- Default coach-ranking threshold: three qualifying QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks
 
-The validated historical run remains data version `c3-f6c1aa118ff43b90`; corrected checkpoint five is `c5-0ebaff47c63c6910` with model version `expected-performance-0ebaff47c63c6910`. Read [the checkpoint-five report](docs/CHECKPOINT_5_REPORT.md) for model comparisons, leakage controls, missingness, uncertainty, and the exact next checkpoint.
+The validated historical run is `c3-f6c1aa118ff43b90`; checkpoint five is `c5-8fd5d1aba2598c59`; and checkpoint six is `c6-4037f7ff531cd69f` with model version `coach-impact-4037f7ff531cd69f`. Read [the checkpoint-six report](docs/CHECKPOINT_6_REPORT.md) for exposure coverage, model comparisons, uncertainty, sensitivity, and the exact next checkpoint.
 
 ## Football decision supported
 
@@ -58,6 +58,16 @@ make PYTHON=.venv/bin/python expected-performance
 ```
 
 The command builds deterministic preseason features, four expanding-window candidates, evaluation tables, and selected PAE output under `data/processed/expected_performance/<data-version>/`. `LATEST` points to the immutable version. Execution timestamps and reuse status live separately in `EXECUTION_LOG.json`; generated Parquet and model artifacts remain ignored by Git.
+
+## Build checkpoint six
+
+After the approved historical, expected-performance, and manual coaching layers exist, run:
+
+```bash
+make PYTHON=.venv/bin/python coach-impact
+```
+
+The command publishes interval-compatible exposures, role-specific coach-associated PAE estimates, 200-block-bootstrap intervals, model comparisons, sensitivity results, overlap diagnostics, exclusions, and preliminary non-publishable rankings under `data/processed/coach_impact/<data-version>/`. Verified primary estimates never consume provisional assignments. Generated outputs remain ignored by Git.
 
 ## Validate checkpoint four
 
@@ -123,7 +133,7 @@ python3 scripts/audit_sources.py --network --download-samples
 
 `--download-samples` downloads three small 2025 CSV files into a temporary directory and streams bounded 2010 and 2025 play-by-play samples. It validates required columns, `qb_dropback`, finite `qb_epa`, and resolved passer/scrambler GSIS IDs, then removes the temporary files. It does not retain or fully download either play-by-play season.
 
-Checkpoint five uses scikit-learn Ridge with Polars/NumPy preprocessing and evaluation. The planned later stack adds statsmodels, PostgreSQL, SQLAlchemy, Alembic, FastAPI, and Next.js/TypeScript only in their approved checkpoints. DuckDB remains an embedded analysis option.
+Checkpoints five and six use scikit-learn with Polars/NumPy/SciPy preprocessing, regularization, evaluation, and deterministic empirical-Bayes partial pooling. The planned later stack adds PostgreSQL, SQLAlchemy, Alembic, FastAPI, and Next.js/TypeScript only in their approved checkpoints. DuckDB remains an embedded analysis option.
 
 Secrets will be loaded from environment variables. Copy `.env.example` to `.env` only when a later checkpoint needs credentials, and never commit `.env`.
 
@@ -139,6 +149,7 @@ Secrets will be loaded from environment variables. Copy `.env.example` to `.env`
 - [Phased project plan](docs/PROJECT_PLAN.md)
 - [Checkpoint four report](docs/CHECKPOINT_4_REPORT.md)
 - [Checkpoint five report](docs/CHECKPOINT_5_REPORT.md)
+- [Checkpoint six report](docs/CHECKPOINT_6_REPORT.md)
 
 ## Interpretation standard
 

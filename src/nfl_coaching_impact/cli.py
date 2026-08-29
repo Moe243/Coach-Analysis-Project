@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .coach_impact import CoachImpactConfig, run_coach_impact_pipeline
 from .constants import VERTICAL_SLICE_SEASONS
 from .expected_performance import (
     ExpectedPerformanceConfig,
@@ -57,6 +58,15 @@ def build_parser() -> argparse.ArgumentParser:
     expected.add_argument("--project-root", type=Path, default=Path.cwd())
     expected.add_argument("--historical-dir", type=Path)
     expected.add_argument("--output-dir", type=Path)
+    coach_impact = subparsers.add_parser(
+        "coach-impact",
+        description="Build checkpoint-six coach-associated PAE estimates",
+    )
+    coach_impact.add_argument("--project-root", type=Path, default=Path.cwd())
+    coach_impact.add_argument("--historical-dir", type=Path)
+    coach_impact.add_argument("--expected-performance-dir", type=Path)
+    coach_impact.add_argument("--output-dir", type=Path)
+    coach_impact.add_argument("--bootstrap-replicates", type=int, default=200)
     return parser
 
 
@@ -132,6 +142,30 @@ def main(argv: list[str] | None = None) -> int:
                     "data_version": result.data_version,
                     "model_version": result.model_version,
                     "selected_model": result.selected_model,
+                    "output_path": str(result.output_path),
+                    "reused_existing": result.reused_existing,
+                    "table_counts": result.table_counts,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command == "coach-impact":
+        result = run_coach_impact_pipeline(
+            CoachImpactConfig(
+                project_root=args.project_root.resolve(),
+                historical_dir=args.historical_dir,
+                expected_performance_dir=args.expected_performance_dir,
+                output_dir=args.output_dir,
+                bootstrap_replicates=args.bootstrap_replicates,
+            )
+        )
+        print(
+            json.dumps(
+                {
+                    "data_version": result.data_version,
+                    "model_version": result.model_version,
                     "output_path": str(result.output_path),
                     "reused_existing": result.reused_existing,
                     "table_counts": result.table_counts,

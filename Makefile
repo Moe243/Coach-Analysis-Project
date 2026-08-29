@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -54,3 +54,6 @@ coaching-load:
 
 expected-performance:
 	PYTHONPATH=src $(PYTHON) -m nfl_coaching_impact.cli expected-performance --project-root "$(PROJECT_ROOT)"
+
+coach-impact:
+	PYTHONPATH=src $(PYTHON) -m nfl_coaching_impact.cli coach-impact --project-root "$(PROJECT_ROOT)"

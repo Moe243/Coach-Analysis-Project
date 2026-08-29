@@ -1,6 +1,6 @@
 # Expected-quarterback-performance model card
 
-Status: checkpoint five implemented; pending approval.
+Status: checkpoint six implemented; pending approval.
 
 ## Version and intended use
 
@@ -55,3 +55,17 @@ The version identity includes all declared model parameters, every feature sourc
 ## Known risks and prohibited uses
 
 PAE is performance relative to a limited expectation, not player or coach quality. It can absorb supporting cast, scheme, injuries, schedule, measurement error, and luck. Model-family selection uses the reported backtest rather than an untouched deployment holdout. Do not use PAE alone for employment, contract, wagering, causal, or medical decisions. See `LIMITATIONS.md`.
+
+## Coach-impact extension
+
+- Coach-impact data version: `c6-4037f7ff531cd69f`
+- Coach-impact model version: `coach-impact-4037f7ff531cd69f`
+- Outcome: interval actual EPA/dropback minus the checkpoint-five preseason expectation
+- Primary assignment scope: verified only
+- Selected estimator: role-specific empirical-Bayes partial pooling of adjusted interval residuals
+- Uncertainty: 200 QB-season block-bootstrap replicates
+- Ranking status: preliminary and non-publishable
+
+The coach model uses one QB-coach-assignment interval after joining actual game weeks to supported coaching boundaries. The no-coach baseline and regularized coach fixed-effects candidate are retained for comparison. Controls include timing-safe QB profile/history/injury fields plus repeated-QB, season, and team-season indicators. Same-season offensive EPA, final records, honors, external rankings, and provisional assignments are absent from the primary model.
+
+Verified usable samples are 983 head-coach, 23 offensive-coordinator, 14 play-caller, and one quarterbacks-coach interval after the 25-dropback rule. The QB-coach role is therefore suppressed. Mechanical eligibility produces 81 preliminary head-coach rows and no eligible OC, play-caller, or QB-coach rows. Intervals, exposure, sensitivity, and reliability must be shown with every estimate; ordinal position alone is not a valid interpretation.

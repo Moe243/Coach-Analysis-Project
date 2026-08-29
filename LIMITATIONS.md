@@ -52,6 +52,10 @@ Season averages hide within-season injuries, opponent changes, garbage time, and
 
 Rank order can exaggerate tiny differences. Point estimates, intervals, sample size, and stability matter more than ordinal rank. Coaches below the default exposure thresholds will remain visible but unranked.
 
+Checkpoint six has enough verified exposure to rank 81 head coaches under the mechanical threshold, but zero offensive coordinators, play-callers, or quarterback coaches qualify. Even the head-coach ordering is preliminary and non-publishable: leading intervals commonly cross zero, equal weighting and removal of team-season controls materially reorder coaches, and team-season controls can absorb variation shared with a full-season coach. The descriptive model metrics are in-sample and must not be read as out-of-sample coach predictiveness.
+
+The primary model excludes 1,854 QB-coach intervals below 25 observed dropbacks. Provisional season designations provide broad OC and QB-coach sensitivity coverage but not verified weekly tenure, so they never enter primary ranks. The single verified QB-coach identity cannot support an identified role model; its result is suppressed. No validated full-window offensive-line, receiver-quality, defensive-strength, or opponent-strength table exists yet, so those requested contexts remain unmodeled rather than fabricated. Prior injury counts are timing-safe but coarse, and the team-season indicator is contextual rather than causal.
+
 ## External validity
 
 Results apply to NFL quarterback environments observed in this period. They should not be assumed to measure a coach's effect on other positions, future teams, college players, or unobserved tactical responsibilities.

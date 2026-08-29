@@ -99,18 +99,22 @@ The offline validator rejects duplicate keys, unresolved identities, illegal sea
 
 ## Coach-impact models
 
-The primary analysis fits one mixed model per coaching role at the QB-game level. The focal coach and quarterback receive partially pooled random intercepts; team/franchise and season/context terms address repeated environments. Uncertainty uses block bootstrap samples drawn by QB-season.
+Checkpoint six first joins each QB game to the selected season expectation and to coaching assignments whose team, season, and week interval cover that game. It then aggregates to one QB-coach-assignment interval. This grain preserves midseason changes without pretending a partial stint lasted a full season. Simultaneous sourced shared duties receive separate rows and fractional exposure dropbacks; unsupported overlaps fail validation. Interval PAE is the dropback-weighted game EPA minus the unchanged preseason expectation and must reconcile exactly.
 
-Role-specific estimates describe the association attached to a coach occupying that role, including inseparable staff effects. A crossed-role joint model is a sensitivity analysis only. Effects are suppressed or flagged when role overlap produces weak identification or unstable estimates.
+The primary analysis uses verified assignments only and fits each role separately. A regularized no-coach baseline adjusts for timing-safe age, NFL experience, rookie/history status, prior and career QB performance, opening-team change, prior injuries, season, repeated-quarterback indicators, and team-season context. A regularized coach fixed-effects candidate is compared with a two-stage normal empirical-Bayes model that partially pools the coach-specific residual means toward zero according to verified exposure and residual variance. The partial-pooling estimator is selected because it is deterministic, directly exposes shrinkage, improves the verified head-coach baseline, and avoids forcing an unidentifiable four-role joint score into the sparse OC/play-caller/QB-coach samples.
+
+Uncertainty uses 200 deterministic block-bootstrap samples drawn by QB-season. Sparse roles remain present with a null estimate and `insufficient_role_identification`; checkpoint six does not manufacture a QB-coach estimate from one verified coach. Reported MAE/RMSE/R-squared are descriptive in-sample comparisons, not deployment validation or causal evidence.
+
+Role-specific estimates describe the association attached to a coach occupying that role, including inseparable staff effects. Sensitivities add provisional rows, exclude shared duties, use equal rather than dropback weighting, remove QB effects, remove team-season controls, and require 100 or 200 interval dropbacks. Effects are suppressed or flagged when sparse coverage produces weak identification or unstable estimates. A crossed-role joint model is deferred because the verified non-head-coach sample cannot support it defensibly.
 
 Same-season team offensive EPA is reported as context but excluded as a control because it contains the QB outcome. Same-season protection, receiving, rushing, injury, defense, and schedule measures may appear only in retrospective models and must be labeled contextual or post-treatment.
 
 ## Ranking and uncertainty
 
 - Default QB qualification: at least 200 eligible dropbacks.
-- Default coach qualification: at least three qualifying QB seasons and two distinct quarterbacks.
+- Default coach qualification: at least three qualifying QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks.
 - Below-threshold records remain queryable but are not assigned a default rank.
-- Coach output includes adjusted estimate, interval, qualifying QB seasons, distinct QBs, average PAE, offensive context, continuity, and warning flags.
+- Coach output includes adjusted estimate, interval, qualifying QB seasons, distinct QBs/teams, verified/provisional/shared exposure, reliability, and exclusion reason. All checkpoint-six ranks are `preliminary_non_publishable`.
 
 ## Star teammates
 
@@ -119,3 +123,5 @@ Star teammates are identified without subjective labels. A player qualifies from
 ## Reproducibility
 
 Every derived table records an immutable `data_version`; metric facts also record `metric_version`. Source assets record URLs, retrieval timestamps, SHA-256 digests, byte/row counts, and schemas. Pipeline joins assert their expected cardinality and emit unresolved/conflicting-ID reports. Output is published by an atomic directory rename only after all hard checks pass.
+
+The checkpoint-six identity hashes the historical QB-game input, checkpoint-five PAE, coaching assignments and identities, every model/ranking/bootstrap/sensitivity parameter, NumPy/Polars/SciPy/scikit-learn versions, and relevant source code. Clean builds compare every Parquet, JSON, checksum, and version byte-for-byte; execution timestamps remain outside the immutable directory.
