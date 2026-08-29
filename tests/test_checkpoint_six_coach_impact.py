@@ -13,7 +13,11 @@ import polars as pl
 
 from nfl_coaching_impact.coach_impact import (
     CoachImpactConfig,
+    _bootstrap_intervals,
+    _fit_role,
+    _identification_diagnostic,
     _model_specification,
+    _partial_pool,
     build_coach_exposures,
     build_coach_impact_tables,
     run_coach_impact_pipeline,
@@ -155,6 +159,25 @@ class CheckpointSixExposureTest(unittest.TestCase):
         self.assertTrue((exposures["exposure_fraction"] == 0.5).all())
         self.assertTrue((exposures["exposure_dropbacks"] == 25.0).all())
 
+    def test_shared_exposure_below_threshold_is_excluded(self) -> None:
+        assignments = pl.DataFrame(
+            [
+                _assignment("shared-a", "coach-a", start=4, end=4, role="play_caller", shared=True),
+                _assignment("shared-b", "coach-b", start=4, end=4, role="play_caller", shared=True),
+            ],
+            infer_schema_length=None,
+        )
+        games = _games().with_columns(
+            pl.when(pl.col("week") == 4)
+            .then(pl.lit(40))
+            .otherwise(pl.col("dropbacks"))
+            .alias("dropbacks")
+        )
+        exposures = build_coach_exposures(games, _pae_rows(), assignments)
+        self.assertTrue((exposures["observed_dropbacks"] == 40).all())
+        self.assertTrue((exposures["exposure_dropbacks"] == 20.0).all())
+        self.assertTrue((exposures["exclusion_reason"] == "below_25_interval_dropbacks").all())
+
     def test_illegal_overlap_and_duplicate_assignment_are_rejected(self) -> None:
         overlap = pl.DataFrame(
             [
@@ -230,6 +253,74 @@ class CheckpointSixExposureTest(unittest.TestCase):
                 (pl.col("estimated_effect").abs() <= pl.col("raw_effect").abs() + 1e-12).all()
             ).item()
         )
+
+    def test_partial_pooling_variance_uses_independent_interval_degrees_of_freedom(self) -> None:
+        fixture = pl.DataFrame(
+            {
+                "coach_id": ["a", "a", "b", "b"],
+                "coach_name": ["A", "A", "B", "B"],
+                "role": ["head_coach"] * 4,
+                "coach_interval_pae": [1.0, 1.0, -1.0, -1.0],
+                "exposure_dropbacks": [10.0] * 4,
+            }
+        )
+        effects, _ = _partial_pool(fixture, baseline_prediction=[0.0] * 4)
+        expected_sigma2 = 40.0 / 3.0
+        expected_tau2 = 1.0 - expected_sigma2 / 20.0
+        expected_shrinkage = expected_tau2 / (expected_tau2 + expected_sigma2 / 20.0)
+        self.assertTrue(
+            effects.select(
+                (pl.col("residual_variance") - expected_sigma2).abs().max() < 1e-12
+            ).item()
+        )
+        self.assertTrue(
+            effects.select(
+                (pl.col("shrinkage_weight") - expected_shrinkage).abs().max() < 1e-12
+            ).item()
+        )
+        self.assertEqual(set(effects["residual_degrees_of_freedom"]), {3})
+
+    def test_team_season_confounding_is_diagnosed_and_rankings_are_suppressed(self) -> None:
+        exposures = build_coach_exposures(_games(), _pae_rows(), _assignments())
+        diagnostic = _identification_diagnostic(
+            exposures.filter(pl.col("coach_id") == "coach-a"), "head_coach"
+        )
+        self.assertTrue(diagnostic["near_one_to_one_team_season_confounding"])
+        self.assertFalse(diagnostic["primary_includes_team_season_fixed_effects"])
+        rankings = build_coach_impact_tables(exposures, bootstrap_replicates=2)[
+            "preliminary_coach_rankings"
+        ]
+        self.assertFalse(rankings["rank_eligible"].any())
+        self.assertEqual(set(rankings["ranking_status"]), {"suppressed_exploratory"})
+
+    def test_sparse_bootstrap_support_suppresses_interval_and_is_reproducible(self) -> None:
+        rows = []
+        for index in range(10):
+            rows.append(
+                {
+                    "player_id": f"qb-{index}",
+                    "season": 2020,
+                    "team_id": "team_hou",
+                    "coach_id": "sparse" if index == 0 else "common",
+                    "coach_name": "Sparse" if index == 0 else "Common",
+                    "role": "head_coach",
+                    "coach_interval_pae": 0.1 if index == 0 else -0.01,
+                    "exposure_dropbacks": 100.0,
+                    **CONTROL_VALUES,
+                }
+            )
+        frame = pl.DataFrame(rows, infer_schema_length=None)
+        effects, _ = _fit_role(frame)
+        first = _bootstrap_intervals(frame, effects, 100).sort("coach_id")
+        second = _bootstrap_intervals(frame, effects, 100).sort("coach_id")
+        self.assertTrue(first.equals(second))
+        sparse = first.filter(pl.col("coach_id") == "sparse").row(0, named=True)
+        self.assertLess(sparse["bootstrap_replicates"], 80)
+        self.assertFalse(sparse["bootstrap_interval_available"])
+        self.assertIsNone(sparse["confidence_low"])
+        self.assertIsNone(sparse["confidence_high"])
+        self.assertEqual(sparse["bootstrap_attempted_replicates"], 100)
+        self.assertIn("conditional_on_coach_observed", sparse["interval_estimand"])
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> None:

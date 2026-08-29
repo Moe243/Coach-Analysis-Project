@@ -28,8 +28,8 @@ from .errors import PipelineError
 from .pipeline import _output_checksums, _update_latest, _validate_existing_version, _write_json
 from .sources import sha256_file
 
-COACH_IMPACT_PIPELINE_VERSION = "checkpoint-6.0"
-COACH_IMPACT_MODEL_VERSION = "coach-associated-pae-v1"
+COACH_IMPACT_PIPELINE_VERSION = "checkpoint-6.1"
+COACH_IMPACT_MODEL_VERSION = "coach-associated-pae-v2"
 ROLES = ("head_coach", "offensive_coordinator", "play_caller", "quarterbacks_coach")
 CONTROL_COLUMNS = (
     "age",
@@ -55,9 +55,12 @@ RELIABILITY_MEDIUM_DROPBACKS = 1_500.0
 RELIABILITY_HIGH_DROPBACKS = 3_000.0
 BOOTSTRAP_REPLICATES = 200
 BOOTSTRAP_SEED = 20260829
+BOOTSTRAP_MINIMUM_SUCCESS_RATE = 0.80
+BOOTSTRAP_MINIMUM_SUCCESSFUL_DRAWS = 50
 INTERVAL_MULTIPLIER = 1.96
 SENSITIVITY_MINIMUM_DROPBACKS = (25.0, 100.0, 200.0)
 DETERMINISTIC_DECIMAL_PLACES = 12
+NEAR_ONE_TO_ONE_CONFOUNDING_THRESHOLD = 0.90
 
 
 @dataclass(frozen=True)
@@ -261,7 +264,7 @@ def build_coach_exposures(
             ),
         )
         .with_columns(
-            pl.when(pl.col("observed_dropbacks") < MIN_MODEL_EXPOSURE_DROPBACKS)
+            pl.when(pl.col("exposure_dropbacks") < MIN_MODEL_EXPOSURE_DROPBACKS)
             .then(pl.lit("below_25_interval_dropbacks"))
             .when(pl.col("verification_status") == "conflicting")
             .then(pl.lit("conflicting_assignment"))
@@ -360,7 +363,15 @@ def _partial_pool(
     )
     residual = np.asarray(working["residual"], dtype=float)
     weights = np.asarray(working["exposure_dropbacks"], dtype=float)
-    sigma2 = max(float(np.average(np.square(residual), weights=weights)), 1e-8)
+    independent_intervals = len(residual)
+    residual_degrees_of_freedom = max(independent_intervals - 1, 1)
+    # Each residual is an interval mean with sampling variance sigma2 / dropbacks.
+    # The weighted sum of squared means is therefore divided by the number of
+    # independent intervals (less one degree of freedom), not by total dropbacks.
+    sigma2 = max(
+        float(np.sum(weights * np.square(residual)) / residual_degrees_of_freedom),
+        1e-8,
+    )
     summaries = (
         working.group_by("coach_id", "coach_name", "role")
         .agg(
@@ -373,9 +384,10 @@ def _partial_pool(
     raw = np.asarray(summaries["raw_effect"], dtype=float)
     coach_weights = np.asarray(summaries["total_dropbacks"], dtype=float)
     center = float(np.average(raw, weights=coach_weights))
+    sampling_variances = sigma2 / coach_weights
     tau2 = max(
         float(np.average(np.square(raw - center), weights=coach_weights))
-        - sigma2 / max(float(np.mean(coach_weights)), 1.0),
+        - float(np.average(sampling_variances, weights=coach_weights)),
         1e-8,
     )
     summaries = summaries.with_columns(
@@ -385,6 +397,9 @@ def _partial_pool(
         (sigma2 * pl.col("shrinkage_weight") / pl.col("total_dropbacks"))
         .sqrt()
         .alias("analytic_standard_error"),
+        pl.lit(sigma2).alias("residual_variance"),
+        pl.lit(tau2).alias("between_coach_variance"),
+        pl.lit(residual_degrees_of_freedom).alias("residual_degrees_of_freedom"),
     )
     effect_lookup = dict(summaries.select("coach_id", "estimated_effect").iter_rows())
     predicted = baseline_prediction + np.asarray(
@@ -406,7 +421,7 @@ def _fit_role(
     frame: pl.DataFrame,
     *,
     include_qb: bool = True,
-    include_team_season: bool = True,
+    include_team_season: bool = False,
     weighted: bool = True,
 ) -> tuple[pl.DataFrame, list[dict[str, object]]]:
     baseline, _ = _fit_baseline(
@@ -444,6 +459,9 @@ def _bootstrap_intervals(
                 pl.col("estimated_effect") + INTERVAL_MULTIPLIER * pl.col("analytic_standard_error")
             ).alias("confidence_high"),
             pl.lit(0).alias("bootstrap_replicates"),
+            pl.lit(0).alias("bootstrap_attempted_replicates"),
+            pl.lit(False).alias("bootstrap_interval_available"),
+            pl.lit("analytic_fallback_test_only").alias("interval_estimand"),
         )
     blocks = frame.select("player_id", "season").unique().sort("player_id", "season").to_dicts()
     rng = np.random.default_rng(BOOTSTRAP_SEED)
@@ -459,7 +477,7 @@ def _bootstrap_intervals(
         sample = pl.concat(pieces, how="vertical")
         try:
             baseline, _ = _fit_baseline(
-                sample, include_qb=True, include_team_season=True, weighted=True
+                sample, include_qb=True, include_team_season=False, weighted=True
             )
             bootstrap_effects, _ = _partial_pool(sample, baseline)
         except (ValueError, np.linalg.LinAlgError):
@@ -469,15 +487,26 @@ def _bootstrap_intervals(
         ).iter_rows():
             if str(coach_id) in samples:
                 samples[str(coach_id)].append(float(effect))
+    minimum_successful = min(
+        replicates,
+        max(
+            BOOTSTRAP_MINIMUM_SUCCESSFUL_DRAWS,
+            int(np.ceil(replicates * BOOTSTRAP_MINIMUM_SUCCESS_RATE)),
+        ),
+    )
     intervals = []
     for coach_id in effects["coach_id"]:
         values = samples[str(coach_id)]
+        available = len(values) >= minimum_successful
         intervals.append(
             {
                 "coach_id": coach_id,
-                "confidence_low": float(np.quantile(values, 0.025)) if values else None,
-                "confidence_high": float(np.quantile(values, 0.975)) if values else None,
+                "confidence_low": float(np.quantile(values, 0.025)) if available else None,
+                "confidence_high": float(np.quantile(values, 0.975)) if available else None,
                 "bootstrap_replicates": len(values),
+                "bootstrap_attempted_replicates": replicates,
+                "bootstrap_interval_available": available,
+                "interval_estimand": "conditional_on_coach_observed_in_qb_season_cluster_resample",
             }
         )
     return effects.join(pl.DataFrame(intervals), on="coach_id", validate="1:1")
@@ -516,12 +545,40 @@ def _effect_samples(exposures: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def _identification_diagnostic(frame: pl.DataFrame, role: str) -> dict[str, object]:
+    """Quantify whether team-season indicators nearly encode the coach assignment."""
+
+    team_seasons = (
+        _model_frame(frame)
+        .group_by("team_season")
+        .agg(pl.col("coach_id").n_unique().alias("distinct_coaches"))
+    )
+    single_coach_share = (
+        float((team_seasons["distinct_coaches"] == 1).sum() / team_seasons.height)
+        if team_seasons.height
+        else 1.0
+    )
+    near_one_to_one = single_coach_share >= NEAR_ONE_TO_ONE_CONFOUNDING_THRESHOLD
+    return {
+        "role": role,
+        "team_seasons": team_seasons.height,
+        "single_coach_team_seasons": int((team_seasons["distinct_coaches"] == 1).sum()),
+        "single_coach_team_season_share": single_coach_share,
+        "near_one_to_one_team_season_confounding": near_one_to_one,
+        "primary_includes_team_season_fixed_effects": False,
+        "identified_effect": False,
+        "identification_status": "exploratory_team_environment_confounding",
+    }
+
+
 def _rank(effects: pl.DataFrame, samples: pl.DataFrame) -> pl.DataFrame:
     ranked = (
         effects.join(samples, on=["coach_id", "role"], validate="1:1")
         .with_columns(
             (
                 pl.col("estimated_effect").is_not_null()
+                & pl.col("bootstrap_interval_available")
+                & pl.col("identified_effect")
                 & (pl.col("qualifying_qb_seasons") >= RANK_MIN_QUALIFYING_QB_SEASONS)
                 & (pl.col("distinct_quarterbacks") >= RANK_MIN_DISTINCT_QBS)
                 & (pl.col("verified_dropbacks") >= RANK_MIN_VERIFIED_DROPBACKS)
@@ -530,6 +587,10 @@ def _rank(effects: pl.DataFrame, samples: pl.DataFrame) -> pl.DataFrame:
         .with_columns(
             pl.when(pl.col("estimated_effect").is_null())
             .then(pl.lit("insufficient_role_identification"))
+            .when(~pl.col("identified_effect"))
+            .then(pl.lit("exploratory_team_environment_confounding"))
+            .when(~pl.col("bootstrap_interval_available"))
+            .then(pl.lit("insufficient_bootstrap_support"))
             .when(pl.col("qualifying_qb_seasons") < RANK_MIN_QUALIFYING_QB_SEASONS)
             .then(pl.lit("fewer_than_3_qualifying_qb_seasons"))
             .when(pl.col("distinct_quarterbacks") < RANK_MIN_DISTINCT_QBS)
@@ -544,7 +605,7 @@ def _rank(effects: pl.DataFrame, samples: pl.DataFrame) -> pl.DataFrame:
             .then(pl.lit("medium"))
             .otherwise(pl.lit("low"))
             .alias("reliability"),
-            pl.lit("preliminary_non_publishable").alias("ranking_status"),
+            pl.lit("suppressed_exploratory").alias("ranking_status"),
         )
     )
     eligible = ranked.filter(pl.col("rank_eligible")).with_columns(
@@ -569,12 +630,18 @@ def build_coach_impact_tables(
     primary = usable.filter(pl.col("verification_status") == "verified")
     all_effects: list[pl.DataFrame] = []
     comparisons: list[dict[str, object]] = []
+    identification_records: list[dict[str, object]] = []
     for role in ROLES:
         role_frame = primary.filter(pl.col("role") == role)
+        if role_frame.height:
+            identification_records.append(_identification_diagnostic(role_frame, role))
         if role_frame.height < 3 or role_frame["coach_id"].n_unique() < 2:
             continue
         effects, metrics = _fit_role(role_frame)
-        effects = _bootstrap_intervals(role_frame, effects, bootstrap_replicates)
+        effects = _bootstrap_intervals(role_frame, effects, bootstrap_replicates).with_columns(
+            pl.lit(False).alias("identified_effect"),
+            pl.lit("exploratory_team_environment_confounding").alias("identification_status"),
+        )
         all_effects.append(effects)
         comparisons.extend({"role": role, **row} for row in metrics)
     effects = (
@@ -610,6 +677,11 @@ def build_coach_impact_tables(
             pl.lit(None, dtype=pl.Float64).alias("confidence_low"),
             pl.lit(None, dtype=pl.Float64).alias("confidence_high"),
             pl.lit(0, dtype=pl.Int64).alias("bootstrap_replicates"),
+            pl.lit(bootstrap_replicates, dtype=pl.Int64).alias("bootstrap_attempted_replicates"),
+            pl.lit(False).alias("bootstrap_interval_available"),
+            pl.lit("unavailable").alias("interval_estimand"),
+            pl.lit(False).alias("identified_effect"),
+            pl.lit("insufficient_role_identification").alias("identification_status"),
         )
         effects = pl.concat([effects, sparse_rows], how="diagonal_relaxed")
     samples = _effect_samples(usable)
@@ -620,28 +692,31 @@ def build_coach_impact_tables(
 
     sensitivity_records: list[dict[str, object]] = []
     specifications = (
-        ("verified_primary", False, True, True, True, SENSITIVITY_MINIMUM_DROPBACKS[0]),
+        ("verified_primary", False, True, True, True, False, SENSITIVITY_MINIMUM_DROPBACKS[0]),
         (
             "verified_plus_provisional",
             True,
             True,
             True,
             True,
+            False,
             SENSITIVITY_MINIMUM_DROPBACKS[0],
         ),
-        ("exclude_shared", False, False, True, True, SENSITIVITY_MINIMUM_DROPBACKS[0]),
-        ("equal_weight", False, True, True, False, SENSITIVITY_MINIMUM_DROPBACKS[0]),
+        ("exclude_shared", False, False, True, True, False, SENSITIVITY_MINIMUM_DROPBACKS[0]),
+        ("equal_weight", False, True, True, False, False, SENSITIVITY_MINIMUM_DROPBACKS[0]),
         (
             "without_qb_fixed_effects",
             False,
             True,
             False,
             True,
+            False,
             SENSITIVITY_MINIMUM_DROPBACKS[0],
         ),
         (
-            "without_team_season_controls",
+            "contextual_team_season_nonidentified",
             False,
+            True,
             True,
             True,
             True,
@@ -653,6 +728,7 @@ def build_coach_impact_tables(
             True,
             True,
             True,
+            False,
             SENSITIVITY_MINIMUM_DROPBACKS[1],
         ),
         (
@@ -661,6 +737,7 @@ def build_coach_impact_tables(
             True,
             True,
             True,
+            False,
             SENSITIVITY_MINIMUM_DROPBACKS[2],
         ),
     )
@@ -670,6 +747,7 @@ def build_coach_impact_tables(
         include_shared,
         include_qb,
         weighted,
+        include_team_season,
         minimum_dropbacks,
     ) in specifications:
         subset = usable.filter(
@@ -683,11 +761,10 @@ def build_coach_impact_tables(
             role_frame = subset.filter(pl.col("role") == role)
             if role_frame.height < 3 or role_frame["coach_id"].n_unique() < 2:
                 continue
-            team_controls = name != "without_team_season_controls"
             sensitivity_effects, _ = _fit_role(
                 role_frame,
                 include_qb=include_qb,
-                include_team_season=team_controls,
+                include_team_season=include_team_season,
                 weighted=weighted,
             )
             for row in sensitivity_effects.select(
@@ -731,6 +808,9 @@ def build_coach_impact_tables(
         "model_comparison": pl.DataFrame(comparisons).sort("role", "model_name"),
         "sensitivity_results": sensitivity,
         "overlap_diagnostics": overlap,
+        "identification_diagnostics": pl.DataFrame(
+            identification_records, infer_schema_length=None
+        ).sort("role"),
         "excluded_exposures": exposures.filter(pl.col("exclusion_reason").is_not_null()),
     }
 
@@ -757,9 +837,12 @@ def _model_specification(bootstrap_replicates: int) -> dict[str, object]:
         "reliability_high_dropbacks": RELIABILITY_HIGH_DROPBACKS,
         "bootstrap_replicates": bootstrap_replicates,
         "bootstrap_seed": BOOTSTRAP_SEED,
+        "bootstrap_minimum_success_rate": BOOTSTRAP_MINIMUM_SUCCESS_RATE,
+        "bootstrap_minimum_successful_draws": BOOTSTRAP_MINIMUM_SUCCESSFUL_DRAWS,
         "interval_multiplier": INTERVAL_MULTIPLIER,
         "sensitivity_minimum_dropbacks": list(SENSITIVITY_MINIMUM_DROPBACKS),
         "deterministic_decimal_places": DETERMINISTIC_DECIMAL_PLACES,
+        "near_one_to_one_confounding_threshold": NEAR_ONE_TO_ONE_CONFOUNDING_THRESHOLD,
         "dependencies": {
             "numpy": np.__version__,
             "polars": pl.__version__,

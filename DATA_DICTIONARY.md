@@ -74,14 +74,15 @@ Checkpoint six publishes content-addressed files under `data/processed/coach_imp
 | File | Grain | Purpose |
 |---|---|---|
 | `coach_modeling_exposures.parquet` | QB-coach-assignment interval | Compatible observed weeks, interval PAE, actual/expected EPA, verified/provisional status, shared fraction, exposure dropbacks, preseason controls, eligibility, and exclusions |
-| `coach_effect_estimates.parquet` | Coach-role | Empirical-Bayes estimate, raw effect, shrinkage weight, analytic standard error, block-bootstrap interval, and replicate count; unsupported roles retain null estimates |
-| `preliminary_coach_rankings.parquet` | Coach-role | Estimate plus verified/provisional/shared exposure, QB seasons, quarterbacks, teams, reliability, eligibility, exclusion reason, and preliminary rank |
+| `coach_effect_estimates.parquet` | Coach-role | Exploratory empirical-Bayes estimate, raw effect, corrected residual/between-coach variance, degrees of freedom, shrinkage weight, analytic standard error, conditional block-bootstrap interval, successful/attempted draws, interval availability, and identification status; unsupported roles retain null estimates |
+| `preliminary_coach_rankings.parquet` | Coach-role | Estimate plus interval support, identification status, verified/provisional/shared exposure, QB seasons, quarterbacks, teams, reliability, suppressed eligibility, exclusion reason, and null rank |
 | `model_comparison.parquet` | Role-model | Observation count, MAE, RMSE, and R-squared for the no-coach, fixed-effect, and partial-pooling specifications |
 | `sensitivity_results.parquet` | Specification-coach-role | Estimates under provisional inclusion, shared exclusion, weighting, QB/team controls, and interval-dropback thresholds |
 | `overlap_diagnostics.parquet` | Role-verification-sharing status | Exposure rows, coaches, and fractional exposure dropbacks |
-| `excluded_exposures.parquet` | QB-coach-assignment interval | Explicit modeling exclusions, currently intervals below 25 observed dropbacks |
+| `identification_diagnostics.parquet` | Role | Team-season/coach confounding share, primary team-season-control flag, and identification decision |
+| `excluded_exposures.parquet` | QB-coach-assignment interval | Explicit modeling exclusions, including intervals below 25 fractional exposure dropbacks |
 
-`coach_interval_pae = interval_actual_epa_per_dropback - season_expected_epa_per_dropback`. Shared simultaneous duties retain separate coach rows and divide `exposure_dropbacks` equally; outcome arithmetic continues to use the observed game dropbacks so it remains exact. Primary estimates use only `verification_status = verified`. Ranking eligibility requires an estimable verified role, three eligible QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks. `ranking_status` is always `preliminary_non_publishable` in checkpoint six.
+`coach_interval_pae = interval_actual_epa_per_dropback - season_expected_epa_per_dropback`. Shared simultaneous duties retain separate coach rows and divide `exposure_dropbacks` equally; fractional exposure controls both model weight and minimum-exposure eligibility, while outcome arithmetic uses observed game dropbacks so it remains exact. Primary estimates use only `verification_status = verified`. Mechanical thresholds remain stored, but `identified_effect = false`, `rank_eligible = false`, and `ranking_status = suppressed_exploratory` for every checkpoint-six row.
 
 Every deterministic table includes `data_version` and `coach_model_version`. Timestamps and reuse status are confined to the external `EXECUTION_LOG.json`.
 

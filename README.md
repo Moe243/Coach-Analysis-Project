@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint six is implemented and pending approval. It joins checkpoint-five PAE to source-backed coaching intervals at the QB-game level, aggregates one QB-coach-interval exposure, and compares a no-coach baseline, regularized coach fixed effects, and role-specific empirical-Bayes partial pooling. Verified assignments drive the primary exploratory results; provisional assignments appear only in sensitivity outputs. Rankings are explicitly preliminary and non-publishable. No API, frontend, network graph, production dashboard, or checkpoint-seven work was created.
+Checkpoint six is implemented and pending approval. It joins checkpoint-five PAE to source-backed coaching intervals at the QB-game level, aggregates one QB-coach-interval exposure, and compares a no-coach baseline, regularized coach fixed effects, and role-specific empirical-Bayes partial pooling. The corrected primary specification uses preseason QB controls, season, and repeated-QB indicators without near one-to-one team-season fixed effects. Verified assignments drive the exploratory results; provisional assignments appear only in sensitivity outputs. All coach rankings are suppressed because available team context does not identify coach effects independently. No API, frontend, network graph, production dashboard, or checkpoint-seven work was created.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -16,7 +16,7 @@ Checkpoint six is implemented and pending approval. It joins checkpoint-five PAE
 - Primary outcome: EPA per quarterback dropback
 - Default coach-ranking threshold: three qualifying QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks
 
-The validated historical run is `c3-f6c1aa118ff43b90`; checkpoint five is `c5-8fd5d1aba2598c59`; and checkpoint six is `c6-4037f7ff531cd69f` with model version `coach-impact-4037f7ff531cd69f`. Read [the checkpoint-six report](docs/CHECKPOINT_6_REPORT.md) for exposure coverage, model comparisons, uncertainty, sensitivity, and the exact next checkpoint.
+The validated historical run is `c3-f6c1aa118ff43b90`; checkpoint five is `c5-8fd5d1aba2598c59`; and checkpoint six is `c6-633bf10b86381ce3` with model version `coach-impact-633bf10b86381ce3`. Read [the checkpoint-six report](docs/CHECKPOINT_6_REPORT.md) for exposure coverage, model comparisons, uncertainty, sensitivity, and the exact next checkpoint.
 
 ## Football decision supported
 
@@ -67,7 +67,7 @@ After the approved historical, expected-performance, and manual coaching layers 
 make PYTHON=.venv/bin/python coach-impact
 ```
 
-The command publishes interval-compatible exposures, role-specific coach-associated PAE estimates, 200-block-bootstrap intervals, model comparisons, sensitivity results, overlap diagnostics, exclusions, and preliminary non-publishable rankings under `data/processed/coach_impact/<data-version>/`. Verified primary estimates never consume provisional assignments. Generated outputs remain ignored by Git.
+The command publishes interval-compatible exposures, exploratory role-specific coach-associated PAE estimates, coach-specific conditional 200-draw block-bootstrap intervals where support is adequate, identification diagnostics, model comparisons, sensitivity results, overlap diagnostics, exclusions, and suppressed ranking contracts under `data/processed/coach_impact/<data-version>/`. Verified primary estimates never consume provisional assignments. Generated outputs remain ignored by Git.
 
 ## Validate checkpoint four
 
