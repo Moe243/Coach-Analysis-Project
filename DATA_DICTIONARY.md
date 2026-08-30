@@ -109,6 +109,26 @@ Every deterministic table includes `data_version` and `coach_model_version`. Tim
 
 Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterbacks_coach`. Verification values are `unverified`, `provisional`, `verified`, and `conflicting`.
 
+### Checkpoint-seven serving layer
+
+Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, and coach model/data versions plus the combined manifest digest. `serving_publication` selects exactly one visible load.
+
+| Table/view | Grain or contract |
+|---|---|
+| `serving_teams`, `serving_team_aliases` | Canonical team and source alias per load |
+| `serving_players`, `serving_player_external_ids` | GSIS player and external identifier per load |
+| `serving_games`, `serving_qb_games`, `serving_qb_seasons` | Game, QB-game-team, and QB-team-season facts with scope |
+| `serving_qb_pae` | One out-of-sample expected/actual/PAE record per QB-team-season |
+| `serving_coach_assignments`, `serving_coach_citations` | Source-backed role interval and evidence |
+| `serving_review_queue` | Manual-review item with full source payload |
+| `serving_coach_exposures` | QB-assignment interval with observed and fractional dropbacks |
+| `serving_coach_effects`, `serving_coach_rankings` | Exploratory estimate and suppression contract per coach-role |
+| `serving_source_manifests`, `serving_pipeline_manifests` | Source and pipeline/model provenance |
+| `api_qb_statistics`, `api_qb_pae` | Published analysis-only QB metrics and PAE |
+| `api_coach_impact`, `api_coach_comparisons` | Effects plus identification and suppression fields |
+| `api_coaching_assignments`, `api_coaching_network_edges` | Role intervals and contemporaneous staff edges |
+| `api_source_citations`, `api_review_queue_summary` | Evidence and unresolved-review counts |
+
 ### Committed checkpoint-four files
 
 | File | Grain | Purpose |

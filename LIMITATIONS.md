@@ -60,6 +60,10 @@ The primary model excludes 1,856 QB-coach intervals below 25 fractional exposure
 
 Results apply to NFL quarterback environments observed in this period. They should not be assumed to measure a coach's effect on other positions, future teams, college players, or unobserved tactical responsibilities.
 
+## Database and API
+
+Checkpoint seven is a local read-only research API, not a public production service. It has no authentication, rate limiting, TLS termination, deployment hardening, or availability guarantee. Search is PostgreSQL `ILIKE`, pagination is offset-based, and network endpoints expose contemporaneous staff edges without building or interpreting a graph. PostgreSQL timestamps can differ between clean loads; analytical view content and version identities cannot. The API serves the same exploratory/suppressed coach outputs from checkpoint six and does not improve their identification.
+
 ## Licensing and access
 
 Some nflverse datasets originate from third parties with separate terms. Direct Sports Reference scraping is excluded. CFBD raw responses cannot be published as a bulk dataset. Data availability or terms may change, requiring source re-audit before release.

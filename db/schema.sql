@@ -3,8 +3,6 @@
 
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS btree_gist;
-
 CREATE TYPE coach_role AS ENUM (
     'head_coach',
     'offensive_coordinator',
@@ -59,14 +57,20 @@ CREATE TABLE team_aliases (
     CHECK (valid_to IS NULL OR valid_to >= valid_from)
 );
 
-ALTER TABLE team_aliases
-    ADD CONSTRAINT team_alias_date_ranges_do_not_overlap
-    EXCLUDE USING gist (
-        source_system WITH =,
-        alias WITH =,
-        (daterange(valid_from, COALESCE(valid_to, 'infinity'::date), '[]')) WITH &&
-    )
-    DEFERRABLE INITIALLY IMMEDIATE;
+CREATE FUNCTION reject_overlapping_team_alias() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM team_aliases a
+        WHERE a.source_system = NEW.source_system AND a.alias = NEW.alias
+          AND a.team_alias_id <> COALESCE(NEW.team_alias_id, 0)
+          AND daterange(a.valid_from, COALESCE(a.valid_to, 'infinity'::date), '[]')
+              && daterange(NEW.valid_from, COALESCE(NEW.valid_to, 'infinity'::date), '[]')
+    ) THEN RAISE EXCEPTION 'overlapping team alias interval'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER team_alias_date_ranges_do_not_overlap
+BEFORE INSERT OR UPDATE ON team_aliases FOR EACH ROW EXECUTE FUNCTION reject_overlapping_team_alias();
 
 CREATE INDEX team_alias_lookup_idx ON team_aliases (source_system, alias, valid_from, valid_to);
 
@@ -170,28 +174,22 @@ CREATE TABLE coach_assignments (
     CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 );
 
--- Non-shared assignments for the same team, season, and role may not overlap.
-ALTER TABLE coach_assignments
-    ADD CONSTRAINT coach_assignment_nonshared_overlap
-    EXCLUDE USING gist (
-        team_id WITH =,
-        season WITH =,
-        role WITH =,
-        (int4range(start_week::integer, end_week::integer, '[]')) WITH &&
-    ) WHERE (is_shared = false)
-    DEFERRABLE INITIALLY IMMEDIATE;
-
--- Shared assignments may overlap one another, but never a non-shared assignment.
-ALTER TABLE coach_assignments
-    ADD CONSTRAINT coach_assignment_mixed_overlap
-    EXCLUDE USING gist (
-        team_id WITH =,
-        season WITH =,
-        role WITH =,
-        (int4range(start_week::integer, end_week::integer, '[]')) WITH &&,
-        is_shared WITH <>
-    )
-    DEFERRABLE INITIALLY IMMEDIATE;
+CREATE FUNCTION reject_invalid_coach_assignment_overlap() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM coach_assignments a
+        WHERE a.team_id = NEW.team_id AND a.season = NEW.season AND a.role = NEW.role
+          AND a.assignment_id <> COALESCE(NEW.assignment_id, 0)
+          AND int4range(a.start_week, a.end_week, '[]')
+              && int4range(NEW.start_week, NEW.end_week, '[]')
+          AND (NOT a.is_shared OR NOT NEW.is_shared)
+    ) THEN RAISE EXCEPTION 'invalid overlapping coach assignment'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER coach_assignment_nonshared_overlap
+BEFORE INSERT OR UPDATE ON coach_assignments
+FOR EACH ROW EXECUTE FUNCTION reject_invalid_coach_assignment_overlap();
 
 CREATE TABLE coach_assignment_sources (
     assignment_source_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -881,5 +879,408 @@ GROUP BY season, team_id;
 
 COMMENT ON VIEW v_team_seasons IS
 'Checkpoint-one serving contract for regular-season records and playoff context.';
+
+COMMIT;
+
+-- Checkpoint seven serving layer. These tables preserve immutable analytical
+-- versions while `serving_publication` atomically selects the API-visible load.
+BEGIN;
+
+CREATE TABLE serving_loads (
+    load_id uuid PRIMARY KEY,
+    schema_version text NOT NULL,
+    loader_version text NOT NULL,
+    api_contract_version text NOT NULL,
+    historical_data_version text NOT NULL,
+    expected_data_version text NOT NULL,
+    expected_model_version text NOT NULL,
+    coach_data_version text NOT NULL,
+    coach_model_version text NOT NULL,
+    manifest_sha256 text NOT NULL,
+    loaded_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (
+        schema_version, loader_version, api_contract_version,
+        historical_data_version, expected_data_version, expected_model_version,
+        coach_data_version, coach_model_version
+    )
+);
+
+CREATE TABLE serving_publication (
+    publication_id smallint PRIMARY KEY DEFAULT 1 CHECK (publication_id = 1),
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id),
+    published_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE serving_teams (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    team_id text NOT NULL,
+    team_abbr text NOT NULL,
+    team_name text NOT NULL,
+    nflverse_team_id text,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, team_id)
+);
+
+CREATE TABLE serving_team_aliases (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    source_system text NOT NULL,
+    alias text NOT NULL,
+    team_id text NOT NULL,
+    first_observed_season smallint,
+    last_observed_season smallint,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, source_system, alias),
+    FOREIGN KEY (load_id, team_id) REFERENCES serving_teams(load_id, team_id),
+    CHECK (last_observed_season IS NULL OR first_observed_season IS NULL
+           OR last_observed_season >= first_observed_season)
+);
+
+CREATE TABLE serving_players (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    player_id text NOT NULL,
+    display_name text NOT NULL,
+    position text,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, player_id)
+);
+
+CREATE TABLE serving_player_external_ids (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    player_id text NOT NULL,
+    external_system text NOT NULL,
+    external_id text NOT NULL,
+    PRIMARY KEY (load_id, external_system, external_id),
+    FOREIGN KEY (load_id, player_id) REFERENCES serving_players(load_id, player_id)
+);
+
+CREATE TABLE serving_games (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    game_id text NOT NULL,
+    season smallint NOT NULL,
+    week smallint NOT NULL,
+    game_type text NOT NULL,
+    game_date date NOT NULL,
+    home_team_id text NOT NULL,
+    away_team_id text NOT NULL,
+    scope text NOT NULL CHECK (scope IN ('warmup', 'analysis')),
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, game_id),
+    FOREIGN KEY (load_id, home_team_id) REFERENCES serving_teams(load_id, team_id),
+    FOREIGN KEY (load_id, away_team_id) REFERENCES serving_teams(load_id, team_id),
+    CHECK (season BETWEEN 1999 AND 2100),
+    CHECK (week BETWEEN 1 AND 25),
+    CHECK (home_team_id <> away_team_id)
+);
+
+CREATE TABLE serving_qb_games (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    game_id text NOT NULL,
+    player_id text NOT NULL,
+    team_id text NOT NULL,
+    season smallint NOT NULL,
+    week smallint NOT NULL,
+    dropbacks integer NOT NULL CHECK (dropbacks >= 0),
+    epa_per_dropback double precision,
+    starter boolean,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, game_id, player_id, team_id),
+    FOREIGN KEY (load_id, game_id) REFERENCES serving_games(load_id, game_id),
+    FOREIGN KEY (load_id, player_id) REFERENCES serving_players(load_id, player_id),
+    FOREIGN KEY (load_id, team_id) REFERENCES serving_teams(load_id, team_id)
+);
+
+CREATE TABLE serving_qb_seasons (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    player_id text NOT NULL,
+    team_id text NOT NULL,
+    season smallint NOT NULL,
+    scope text NOT NULL CHECK (scope IN ('warmup', 'analysis')),
+    games integer NOT NULL CHECK (games >= 0),
+    starts integer,
+    dropbacks integer NOT NULL CHECK (dropbacks >= 0),
+    epa_per_dropback double precision,
+    cpoe double precision,
+    success_rate double precision,
+    sack_rate double precision,
+    qualifies_default boolean NOT NULL,
+    metric_version text NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, player_id, team_id, season),
+    FOREIGN KEY (load_id, player_id) REFERENCES serving_players(load_id, player_id),
+    FOREIGN KEY (load_id, team_id) REFERENCES serving_teams(load_id, team_id)
+);
+
+CREATE TABLE serving_qb_pae (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    player_id text NOT NULL,
+    team_id text NOT NULL,
+    season smallint NOT NULL,
+    data_version text NOT NULL,
+    model_version text NOT NULL,
+    expected_epa_per_dropback double precision NOT NULL,
+    actual_epa_per_dropback double precision NOT NULL,
+    performance_above_expectation double precision NOT NULL,
+    prediction_interval_low double precision,
+    prediction_interval_high double precision,
+    eligibility_status text NOT NULL,
+    reliability text NOT NULL,
+    is_out_of_sample boolean NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, player_id, team_id, season),
+    FOREIGN KEY (load_id, player_id, team_id, season)
+        REFERENCES serving_qb_seasons(load_id, player_id, team_id, season),
+    CHECK (performance_above_expectation = actual_epa_per_dropback - expected_epa_per_dropback),
+    CHECK (prediction_interval_high IS NULL OR prediction_interval_low IS NULL
+           OR prediction_interval_high >= prediction_interval_low)
+);
+
+CREATE TABLE serving_coaches (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    coach_id text NOT NULL,
+    canonical_name text NOT NULL,
+    normalized_name text NOT NULL,
+    PRIMARY KEY (load_id, coach_id),
+    UNIQUE (load_id, normalized_name)
+);
+
+CREATE TABLE serving_coach_assignments (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    assignment_key text NOT NULL,
+    coach_id text NOT NULL,
+    team_id text NOT NULL,
+    season smallint NOT NULL,
+    role coach_role NOT NULL,
+    start_week smallint NOT NULL,
+    end_week smallint NOT NULL,
+    interval_basis assignment_interval_basis NOT NULL,
+    verification_status verification_status NOT NULL,
+    confidence_level assignment_confidence NOT NULL,
+    is_interim boolean NOT NULL,
+    is_shared boolean NOT NULL,
+    is_retained boolean NOT NULL,
+    notes text,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, assignment_key),
+    FOREIGN KEY (load_id, coach_id) REFERENCES serving_coaches(load_id, coach_id),
+    FOREIGN KEY (load_id, team_id) REFERENCES serving_teams(load_id, team_id),
+    CHECK (start_week BETWEEN 1 AND 25 AND end_week BETWEEN start_week AND 25)
+);
+
+CREATE FUNCTION reject_invalid_serving_assignment_overlap() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM serving_coach_assignments a
+        WHERE a.load_id = NEW.load_id AND a.team_id = NEW.team_id
+          AND a.season = NEW.season AND a.role = NEW.role
+          AND a.assignment_key <> NEW.assignment_key
+          AND int4range(a.start_week, a.end_week, '[]')
+              && int4range(NEW.start_week, NEW.end_week, '[]')
+          AND (NOT a.is_shared OR NOT NEW.is_shared)
+    ) THEN RAISE EXCEPTION 'invalid overlapping serving coach assignment'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER serving_assignment_nonshared_overlap
+BEFORE INSERT OR UPDATE ON serving_coach_assignments
+FOR EACH ROW EXECUTE FUNCTION reject_invalid_serving_assignment_overlap();
+
+CREATE TABLE serving_coach_citations (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    assignment_key text NOT NULL,
+    source_url text NOT NULL,
+    source_title text,
+    source_type text,
+    source_accessed_at date NOT NULL,
+    evidence_locator text,
+    evidence_note text,
+    PRIMARY KEY (load_id, assignment_key, source_url),
+    FOREIGN KEY (load_id, assignment_key)
+        REFERENCES serving_coach_assignments(load_id, assignment_key) ON DELETE CASCADE,
+    CHECK (source_url LIKE 'https://%')
+);
+
+CREATE FUNCTION enforce_serving_verified_assignment_source()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE target_key text; target_load uuid; target_status verification_status;
+BEGIN
+    target_key := CASE WHEN TG_TABLE_NAME = 'serving_coach_assignments'
+                       THEN NEW.assignment_key ELSE OLD.assignment_key END;
+    target_load := CASE WHEN TG_TABLE_NAME = 'serving_coach_assignments'
+                        THEN NEW.load_id ELSE OLD.load_id END;
+    SELECT verification_status INTO target_status
+      FROM serving_coach_assignments
+     WHERE load_id = target_load AND assignment_key = target_key;
+    IF target_status = 'verified' AND NOT EXISTS (
+        SELECT 1 FROM serving_coach_citations
+         WHERE load_id = target_load AND assignment_key = target_key
+    ) THEN RAISE EXCEPTION 'verified serving assignment must have a citation'; END IF;
+    RETURN COALESCE(NEW, OLD);
+END;
+$$;
+CREATE CONSTRAINT TRIGGER serving_verified_assignment_requires_source
+AFTER INSERT OR UPDATE OF verification_status ON serving_coach_assignments
+DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+EXECUTE FUNCTION enforce_serving_verified_assignment_source();
+CREATE CONSTRAINT TRIGGER serving_verified_source_delete_guard
+AFTER DELETE ON serving_coach_citations
+DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+EXECUTE FUNCTION enforce_serving_verified_assignment_source();
+
+CREATE TABLE serving_review_queue (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    review_key text NOT NULL,
+    team_id text NOT NULL,
+    season smallint NOT NULL,
+    role coach_role NOT NULL,
+    review_status text NOT NULL,
+    issue_type text NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, review_key),
+    FOREIGN KEY (load_id, team_id) REFERENCES serving_teams(load_id, team_id)
+);
+
+CREATE TABLE serving_coach_exposures (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    assignment_key text NOT NULL,
+    player_id text NOT NULL,
+    team_id text NOT NULL,
+    season smallint NOT NULL,
+    coach_id text NOT NULL,
+    role coach_role NOT NULL,
+    verification_status verification_status NOT NULL,
+    start_week smallint NOT NULL,
+    end_week smallint NOT NULL,
+    exposure_fraction double precision NOT NULL,
+    observed_dropbacks integer NOT NULL,
+    exposure_dropbacks double precision NOT NULL,
+    coach_interval_pae double precision,
+    exclusion_reason text,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, assignment_key, player_id, team_id, season),
+    FOREIGN KEY (load_id, assignment_key)
+        REFERENCES serving_coach_assignments(load_id, assignment_key),
+    FOREIGN KEY (load_id, player_id, team_id, season)
+        REFERENCES serving_qb_seasons(load_id, player_id, team_id, season),
+    FOREIGN KEY (load_id, coach_id) REFERENCES serving_coaches(load_id, coach_id),
+    CHECK (exposure_fraction > 0 AND exposure_fraction <= 1),
+    CHECK (exposure_dropbacks >= 0),
+    CHECK (abs(exposure_dropbacks - observed_dropbacks * exposure_fraction) < 0.000001)
+);
+
+CREATE TABLE serving_coach_effects (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    coach_id text NOT NULL,
+    role coach_role NOT NULL,
+    data_version text NOT NULL,
+    model_version text NOT NULL,
+    estimated_effect double precision,
+    confidence_low double precision,
+    confidence_high double precision,
+    bootstrap_replicates integer NOT NULL,
+    bootstrap_attempted_replicates integer NOT NULL,
+    bootstrap_interval_available boolean NOT NULL,
+    interval_estimand text NOT NULL,
+    identified_effect boolean NOT NULL,
+    identification_status text NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, coach_id, role),
+    FOREIGN KEY (load_id, coach_id) REFERENCES serving_coaches(load_id, coach_id),
+    CHECK (confidence_high IS NULL OR confidence_low IS NULL OR confidence_high >= confidence_low)
+);
+
+CREATE TABLE serving_coach_rankings (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    coach_id text NOT NULL,
+    role coach_role NOT NULL,
+    rank_eligible boolean NOT NULL,
+    rank_exclusion_reason text,
+    ranking_status text NOT NULL,
+    preliminary_rank integer,
+    verified_dropbacks double precision NOT NULL,
+    qualifying_qb_seasons integer NOT NULL,
+    distinct_quarterbacks integer NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, coach_id, role),
+    FOREIGN KEY (load_id, coach_id, role)
+        REFERENCES serving_coach_effects(load_id, coach_id, role),
+    CHECK (rank_eligible OR preliminary_rank IS NULL)
+);
+
+CREATE TABLE serving_source_manifests (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    asset_key text NOT NULL,
+    dataset text NOT NULL,
+    season smallint,
+    source_url text NOT NULL,
+    sha256 text NOT NULL,
+    validation_status text NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (load_id, asset_key)
+);
+
+CREATE TABLE serving_pipeline_manifests (
+    load_id uuid NOT NULL REFERENCES serving_loads(load_id) ON DELETE CASCADE,
+    pipeline_name text NOT NULL,
+    data_version text NOT NULL,
+    model_version text,
+    manifest jsonb NOT NULL,
+    PRIMARY KEY (load_id, pipeline_name)
+);
+
+CREATE VIEW api_qb_statistics AS
+SELECT qs.*, p.display_name
+FROM serving_qb_seasons qs
+JOIN serving_publication pub ON pub.load_id = qs.load_id
+JOIN serving_players p ON p.load_id = qs.load_id AND p.player_id = qs.player_id
+WHERE qs.scope = 'analysis';
+
+CREATE VIEW api_qb_pae AS
+SELECT q.*, p.display_name
+FROM serving_qb_pae q
+JOIN serving_publication pub ON pub.load_id = q.load_id
+JOIN serving_players p ON p.load_id = q.load_id AND p.player_id = q.player_id
+WHERE q.is_out_of_sample;
+
+CREATE VIEW api_coach_impact AS
+SELECT e.*, c.canonical_name, r.rank_eligible, r.rank_exclusion_reason,
+       r.ranking_status, r.preliminary_rank, r.verified_dropbacks,
+       r.qualifying_qb_seasons, r.distinct_quarterbacks
+FROM serving_coach_effects e
+JOIN serving_publication pub ON pub.load_id = e.load_id
+JOIN serving_coaches c ON c.load_id = e.load_id AND c.coach_id = e.coach_id
+JOIN serving_coach_rankings r
+  ON r.load_id = e.load_id AND r.coach_id = e.coach_id AND r.role = e.role;
+
+CREATE VIEW api_coach_comparisons AS SELECT * FROM api_coach_impact;
+
+CREATE VIEW api_coaching_assignments AS
+SELECT a.*, c.canonical_name, t.team_abbr, t.team_name
+FROM serving_coach_assignments a
+JOIN serving_publication pub ON pub.load_id = a.load_id
+JOIN serving_coaches c ON c.load_id = a.load_id AND c.coach_id = a.coach_id
+JOIN serving_teams t ON t.load_id = a.load_id AND t.team_id = a.team_id;
+
+CREATE VIEW api_coaching_network_edges AS
+SELECT DISTINCT a.load_id, a.coach_id AS source_coach_id, b.coach_id AS target_coach_id,
+       a.team_id, a.season, a.role AS source_role, b.role AS target_role
+FROM serving_coach_assignments a
+JOIN serving_publication pub ON pub.load_id = a.load_id
+JOIN serving_coach_assignments b
+  ON b.load_id = a.load_id AND b.team_id = a.team_id AND b.season = a.season
+ AND b.coach_id > a.coach_id
+ AND int4range(b.start_week, b.end_week, '[]') && int4range(a.start_week, a.end_week, '[]');
+
+CREATE VIEW api_source_citations AS
+SELECT s.*, a.coach_id, a.team_id, a.season, a.role
+FROM serving_coach_citations s
+JOIN serving_publication pub ON pub.load_id = s.load_id
+JOIN serving_coach_assignments a
+  ON a.load_id = s.load_id AND a.assignment_key = s.assignment_key;
+
+CREATE VIEW api_review_queue_summary AS
+SELECT q.load_id, q.review_status, q.role, q.issue_type, count(*)::integer AS review_count
+FROM serving_review_queue q
+JOIN serving_publication pub ON pub.load_id = q.load_id
+GROUP BY q.load_id, q.review_status, q.role, q.issue_type;
 
 COMMIT;

@@ -18,6 +18,7 @@ from .historical import (
     run_historical_preflight,
 )
 from .pipeline import PipelineConfig, run_vertical_slice
+from .serving import load_serving_database
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,6 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
     coach_impact.add_argument("--expected-performance-dir", type=Path)
     coach_impact.add_argument("--output-dir", type=Path)
     coach_impact.add_argument("--bootstrap-replicates", type=int, default=200)
+    serving = subparsers.add_parser(
+        "load-serving", description="Atomically publish checkpoint-seven data to PostgreSQL"
+    )
+    serving.add_argument("--project-root", type=Path, default=Path.cwd())
+    serving.add_argument("--database-url", required=True)
     return parser
 
 
@@ -169,6 +175,21 @@ def main(argv: list[str] | None = None) -> int:
                     "output_path": str(result.output_path),
                     "reused_existing": result.reused_existing,
                     "table_counts": result.table_counts,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command == "load-serving":
+        result = load_serving_database(args.database_url, args.project_root.resolve())
+        print(
+            json.dumps(
+                {
+                    "load_id": result.load_id,
+                    "reused_existing": result.reused_existing,
+                    "versions": result.versions.__dict__,
+                    "row_counts": result.row_counts,
                 },
                 indent=2,
                 sort_keys=True,

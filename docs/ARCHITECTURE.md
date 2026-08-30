@@ -61,7 +61,7 @@ Normalized Parquet uses canonical player/team IDs and source-preserving columns.
 
 ### Serving
 
-PostgreSQL contains compact curated facts, predictions, effects, source metadata, and views required by the API. Alembic will manage migrations beginning when the first load is implemented.
+PostgreSQL contains immutable load-scoped canonical facts, QB metrics, PAE, coaching facts/citations/reviews, coach exposures/effects, and source/pipeline manifests. Alembic owns schema revision `0001_checkpoint7`. `serving_publication` is the single atomic pointer used by every API view; a failed load never changes it. Content-identical reruns reuse the deterministic UUID load identity after verifying the existing publication is complete.
 
 ## Pipeline orchestration
 
@@ -78,9 +78,9 @@ The Python CLI retains the checkpoint-two `vertical-slice` command and adds chec
 
 Coach assignments use week and date bounds. A deterministic environment key represents the team, season, interval, and staff combination. QB season summaries remain the default UI grain; environment stints preserve exposure beneath them.
 
-## API contracts planned for later
+## API contracts
 
-Serving views support QB, coach, and team lists plus detail queries. Filters will include season range, coach role, minimum starts/dropbacks, career stage, new team, new coach, continuity, and rank metric. Runtime endpoints are intentionally deferred until the database is populated and validated.
+FastAPI connects through `DATABASE_URL`, marks every request transaction read-only, and queries only current-publication views/tables. Whitelisted sorting, bound parameters, limit 1-200, nonnegative offsets, typed query validation, 404 details, and empty pages form API contract `api-v1`. OpenAPI documents the routes. Authentication and deployment remain deferred; the local server is not safe for public exposure.
 
 ## Security and compliance
 

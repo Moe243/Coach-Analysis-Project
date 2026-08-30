@@ -34,7 +34,6 @@ class PostgreSQLBehaviorTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.schema_name = f"nfl_coaching_test_{secrets.token_hex(6)}"
         cls.connection = psycopg.connect(TEST_DATABASE_URL, autocommit=True)
-        cls.connection.execute("CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public")
         cls.connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(cls.schema_name)))
         cls.connection.execute(
             sql.SQL("SET search_path TO {}, public").format(sql.Identifier(cls.schema_name))

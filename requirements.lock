@@ -1,9 +1,19 @@
-# Exact checkpoint-six development and pipeline environment, updated 2026-08-29.
+# Exact checkpoint-seven development, database, API, and pipeline environment, updated 2026-08-30.
+Mako==1.4.1
+MarkupSafe==3.0.3
 Pygments==2.21.0
+SQLAlchemy==2.0.52
+alembic==1.19.1
 annotated-types==0.8.0
+anyio==4.14.2
 certifi==2026.7.22
 charset-normalizer==3.5.1
+click==8.5.0
 duckdb==1.5.5
+fastapi==0.141.1
+fasteners==0.20
+h11==0.16.0
+httpx==0.28.1
 idna==3.19
 iniconfig==2.3.0
 joblib==1.5.3
@@ -11,10 +21,14 @@ narwhals==2.25.0
 nflreadpy==0.1.5
 numpy==2.5.2
 packaging==26.3
+pgserver==0.1.4
 platformdirs==4.11.4
 pluggy==1.6.0
 polars-runtime-32==1.44.0
 polars==1.44.0
+psutil==7.2.2
+psycopg-binary==3.3.4
+psycopg==3.3.4
 pyarrow==22.0.0
 pydantic-settings==2.15.0
 pydantic==2.13.4
@@ -25,8 +39,10 @@ requests==2.34.2
 ruff==0.16.4
 scikit-learn==1.9.0
 scipy==1.18.1
+starlette==1.6.0
 threadpoolctl==3.6.0
 tqdm==4.70.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 urllib3==2.7.0
+uvicorn==0.52.4

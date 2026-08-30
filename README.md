@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint six is implemented and pending approval. It joins checkpoint-five PAE to source-backed coaching intervals at the QB-game level, aggregates one QB-coach-interval exposure, and compares a no-coach baseline, regularized coach fixed effects, and role-specific empirical-Bayes partial pooling. The corrected primary specification uses preseason QB controls, season, and repeated-QB indicators without near one-to-one team-season fixed effects. Verified assignments drive the exploratory results; provisional assignments appear only in sensitivity outputs. All coach rankings are suppressed because available team context does not identify coach effects independently. No API, frontend, network graph, production dashboard, or checkpoint-seven work was created.
+Checkpoint seven is implemented and pending approval. Immutable checkpoint-three through checkpoint-six artifacts load atomically into versioned PostgreSQL serving tables. The read-only FastAPI application exposes QB, PAE, coaching, citation, review, and exploratory coach-impact results while preserving verification, uncertainty, identification, eligibility, and suppression labels. No frontend, dashboard, authentication, deployment, or checkpoint-eight work was added.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -16,7 +16,7 @@ Checkpoint six is implemented and pending approval. It joins checkpoint-five PAE
 - Primary outcome: EPA per quarterback dropback
 - Default coach-ranking threshold: three qualifying QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks
 
-The validated historical run is `c3-f6c1aa118ff43b90`; checkpoint five is `c5-8fd5d1aba2598c59`; and checkpoint six is `c6-400a5b474aa37a35` with model version `coach-impact-400a5b474aa37a35`. Read [the checkpoint-six report](docs/CHECKPOINT_6_REPORT.md) for exposure coverage, model comparisons, uncertainty, sensitivity, and the exact next checkpoint.
+The serving publication contains historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35`. Read [the checkpoint-seven report](docs/CHECKPOINT_7_REPORT.md).
 
 ## Football decision supported
 
@@ -48,6 +48,20 @@ The first version focuses on quarterbacks and four coaching roles:
 ```
 
 Raw and processed data directories are deliberately ignored. Large upstream files and API responses must not be committed.
+
+## Run the checkpoint-seven database and API
+
+Set `DATABASE_URL` in an uncommitted `.env`, then migrate, load, and serve:
+
+```bash
+DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make db-migrate
+DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make db-load
+DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make api
+```
+
+OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, network data, citations, and review summaries. List responses contain `items`, `total`, `limit`, and `offset`; invalid filters return 422, missing details return 404, and no-match lists return an empty page. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
+
+The local API has no authentication and must not be exposed publicly. Every query transaction is read-only, and credentials, filesystem paths, and mutable execution logs are never returned.
 
 ## Build checkpoint five
 
@@ -115,14 +129,14 @@ make PYTHON=.venv/bin/python test-network
 .venv/bin/ruff format --check .
 ```
 
-The database contract is tested against a disposable PostgreSQL database, not by inspecting SQL text. Install the PostgreSQL driver, create an empty test database with permission to install `btree_gist`, and run:
+The database and API contracts are tested against a disposable real PostgreSQL server, not by inspecting SQL text:
 
 ```bash
-python3 -m pip install -e '.[application]'
-TEST_DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching_test make test-postgres
+python3 -m pip install -e '.[application,dev]'
+make PYTHON=.venv/bin/python test-postgres
 ```
 
-The optional PostgreSQL runner creates and removes an isolated schema inside that database. It proves alias and assignment interval constraints, citation requirements, environment lineage, and eligible-only ranking behavior.
+The runner starts a bundled isolated PostgreSQL server when `TEST_DATABASE_URL` is unset. It proves migrations, constraints, lineage, atomic rollback, idempotency, deterministic clean loads, serving views, and API behavior. An external disposable PostgreSQL URL may be supplied instead.
 
 To repeat the network smoke checks:
 
@@ -150,6 +164,7 @@ Secrets will be loaded from environment variables. Copy `.env.example` to `.env`
 - [Checkpoint four report](docs/CHECKPOINT_4_REPORT.md)
 - [Checkpoint five report](docs/CHECKPOINT_5_REPORT.md)
 - [Checkpoint six report](docs/CHECKPOINT_6_REPORT.md)
+- [Checkpoint seven report](docs/CHECKPOINT_7_REPORT.md)
 
 ## Interpretation standard
 

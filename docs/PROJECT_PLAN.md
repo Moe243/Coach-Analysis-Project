@@ -35,17 +35,17 @@ Build timing-safe prior/career features, three shrinkage baselines, a tuned Ridg
 
 Exit criterion met: all 1,689 published PAE rows are out of sample and exclude warm-up seasons; career performance was selected from four candidates using documented accuracy/calibration scoring; opening-week team snapshots prevent midseason-destination leakage; roster experience is separate from prior QB history; complete parameter/source/code/dependency identity controls immutable versions; deterministic clean-rebuild, leakage, arithmetic, cardinality, missingness, and atomic-failure contracts pass.
 
-## Checkpoint six — coach impact (implemented; pending approval)
+## Checkpoint six — coach impact (complete)
 
 Build interval-compatible QB-coach exposures; compare no-coach, regularized coach fixed-effect, and empirical-Bayes partial-pooling models; produce QB-season block-bootstrap uncertainty, role-specific sensitivities, overlap diagnostics, and preliminary ranking eligibility/warnings.
 
-Exit criterion implemented: verified primary estimates include fractional interval exposure and 200-block-bootstrap intervals; provisional/shared/weighting/control/threshold sensitivities remain separate; unsupported QB-coach attribution is suppressed; every rank is preliminary and non-publishable; deterministic clean rebuild and content identity contracts pass. Approval remains required before checkpoint seven.
+Exit criterion met: verified primary estimates include fractional interval exposure and 200-block-bootstrap intervals; provisional/shared/weighting/control/threshold sensitivities remain separate; unsupported QB-coach attribution is suppressed; every rank is preliminary and non-publishable; deterministic clean rebuild and content identity contracts pass.
 
-## Checkpoint seven — application database and API
+## Checkpoint seven — application database and API (implemented; pending approval)
 
 Create Alembic migrations, curated PostgreSQL loads, FastAPI search/filter/detail endpoints, pagination, schema validation, and API tests.
 
-Exit criterion: three serving views populate without duplicates and API tests pass.
+Exit criterion implemented: migrations are repeatable; the loader publishes canonical, analytical, provenance, and review facts atomically and idempotently; serving views exclude warm-up output where required; disposable PostgreSQL/API behavior tests pass; and independent clean loads have identical analytical checksums.
 
 ## Checkpoint eight — frontend
 
