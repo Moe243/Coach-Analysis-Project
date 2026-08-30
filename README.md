@@ -16,7 +16,7 @@ Checkpoint six is implemented and pending approval. It joins checkpoint-five PAE
 - Primary outcome: EPA per quarterback dropback
 - Default coach-ranking threshold: three qualifying QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks
 
-The validated historical run is `c3-f6c1aa118ff43b90`; checkpoint five is `c5-8fd5d1aba2598c59`; and checkpoint six is `c6-633bf10b86381ce3` with model version `coach-impact-633bf10b86381ce3`. Read [the checkpoint-six report](docs/CHECKPOINT_6_REPORT.md) for exposure coverage, model comparisons, uncertainty, sensitivity, and the exact next checkpoint.
+The validated historical run is `c3-f6c1aa118ff43b90`; checkpoint five is `c5-8fd5d1aba2598c59`; and checkpoint six is `c6-400a5b474aa37a35` with model version `coach-impact-400a5b474aa37a35`. Read [the checkpoint-six report](docs/CHECKPOINT_6_REPORT.md) for exposure coverage, model comparisons, uncertainty, sensitivity, and the exact next checkpoint.
 
 ## Football decision supported
 

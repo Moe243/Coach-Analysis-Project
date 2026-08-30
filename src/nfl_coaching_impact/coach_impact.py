@@ -28,8 +28,8 @@ from .errors import PipelineError
 from .pipeline import _output_checksums, _update_latest, _validate_existing_version, _write_json
 from .sources import sha256_file
 
-COACH_IMPACT_PIPELINE_VERSION = "checkpoint-6.1"
-COACH_IMPACT_MODEL_VERSION = "coach-associated-pae-v2"
+COACH_IMPACT_PIPELINE_VERSION = "checkpoint-6.2"
+COACH_IMPACT_MODEL_VERSION = "coach-associated-pae-v3"
 ROLES = ("head_coach", "offensive_coordinator", "play_caller", "quarterbacks_coach")
 CONTROL_COLUMNS = (
     "age",
@@ -61,6 +61,7 @@ INTERVAL_MULTIPLIER = 1.96
 SENSITIVITY_MINIMUM_DROPBACKS = (25.0, 100.0, 200.0)
 DETERMINISTIC_DECIMAL_PLACES = 12
 NEAR_ONE_TO_ONE_CONFOUNDING_THRESHOLD = 0.90
+RESIDUAL_VARIANCE_METHOD = "weighted_ridge_hat_trace_effective_df"
 
 
 @dataclass(frozen=True)
@@ -339,7 +340,7 @@ def _fit_baseline(
     include_team_season: bool,
     weighted: bool,
     include_coach: bool = False,
-) -> tuple[np.ndarray, Pipeline]:
+) -> tuple[np.ndarray, Pipeline, float]:
     model_frame = _model_frame(frame)
     model = _design(
         frame,
@@ -351,11 +352,32 @@ def _fit_baseline(
     y = np.asarray(model_frame["coach_interval_pae"], dtype=float)
     weights = np.asarray(model_frame["exposure_dropbacks"], dtype=float) if weighted else None
     model.fit(model_frame, y, ridge__sample_weight=weights)
-    return np.asarray(model.predict(model_frame), dtype=float), model
+    effective_degrees_of_freedom = _ridge_effective_degrees_of_freedom(model, model_frame, weights)
+    return np.asarray(model.predict(model_frame), dtype=float), model, effective_degrees_of_freedom
+
+
+def _ridge_effective_degrees_of_freedom(
+    model: Pipeline, frame: pl.DataFrame, weights: np.ndarray | None
+) -> float:
+    """Return trace(H) for the fitted weighted Ridge design, including its intercept."""
+
+    transformed = model.named_steps["features"].transform(frame)
+    design = (
+        transformed.toarray() if scipy.sparse.issparse(transformed) else np.asarray(transformed)
+    ).astype(float, copy=False)
+    sample_weights = np.ones(design.shape[0], dtype=float) if weights is None else weights
+    centered = design - np.average(design, axis=0, weights=sample_weights)
+    gram = centered.T @ (sample_weights[:, None] * centered)
+    eigenvalues = np.clip(np.linalg.eigvalsh(gram), 0.0, None)
+    alpha = float(model.named_steps["ridge"].alpha)
+    penalized_trace = float(np.sum(eigenvalues / (eigenvalues + alpha)))
+    return 1.0 + penalized_trace
 
 
 def _partial_pool(
-    frame: pl.DataFrame, baseline_prediction: np.ndarray
+    frame: pl.DataFrame,
+    baseline_prediction: np.ndarray,
+    baseline_effective_degrees_of_freedom: float,
 ) -> tuple[pl.DataFrame, np.ndarray]:
     working = frame.with_columns(
         pl.Series("baseline_prediction", baseline_prediction),
@@ -364,7 +386,9 @@ def _partial_pool(
     residual = np.asarray(working["residual"], dtype=float)
     weights = np.asarray(working["exposure_dropbacks"], dtype=float)
     independent_intervals = len(residual)
-    residual_degrees_of_freedom = max(independent_intervals - 1, 1)
+    residual_degrees_of_freedom = max(
+        independent_intervals - baseline_effective_degrees_of_freedom, 1.0
+    )
     # Each residual is an interval mean with sampling variance sigma2 / dropbacks.
     # The weighted sum of squared means is therefore divided by the number of
     # independent intervals (less one degree of freedom), not by total dropbacks.
@@ -399,6 +423,9 @@ def _partial_pool(
         .alias("analytic_standard_error"),
         pl.lit(sigma2).alias("residual_variance"),
         pl.lit(tau2).alias("between_coach_variance"),
+        pl.lit(baseline_effective_degrees_of_freedom).alias(
+            "baseline_effective_degrees_of_freedom"
+        ),
         pl.lit(residual_degrees_of_freedom).alias("residual_degrees_of_freedom"),
     )
     effect_lookup = dict(summaries.select("coach_id", "estimated_effect").iter_rows())
@@ -424,20 +451,20 @@ def _fit_role(
     include_team_season: bool = False,
     weighted: bool = True,
 ) -> tuple[pl.DataFrame, list[dict[str, object]]]:
-    baseline, _ = _fit_baseline(
+    baseline, _, baseline_effective_degrees_of_freedom = _fit_baseline(
         frame,
         include_qb=include_qb,
         include_team_season=include_team_season,
         weighted=weighted,
     )
-    fixed, _ = _fit_baseline(
+    fixed, _, _ = _fit_baseline(
         frame,
         include_qb=include_qb,
         include_team_season=include_team_season,
         weighted=weighted,
         include_coach=True,
     )
-    effects, hierarchical = _partial_pool(frame, baseline)
+    effects, hierarchical = _partial_pool(frame, baseline, baseline_effective_degrees_of_freedom)
     actual = np.asarray(frame["coach_interval_pae"], dtype=float)
     comparison = [
         {"model_name": "no_coach_baseline", **_metrics(actual, baseline)},
@@ -476,10 +503,12 @@ def _bootstrap_intervals(
         ]
         sample = pl.concat(pieces, how="vertical")
         try:
-            baseline, _ = _fit_baseline(
+            baseline, _, baseline_effective_degrees_of_freedom = _fit_baseline(
                 sample, include_qb=True, include_team_season=False, weighted=True
             )
-            bootstrap_effects, _ = _partial_pool(sample, baseline)
+            bootstrap_effects, _ = _partial_pool(
+                sample, baseline, baseline_effective_degrees_of_freedom
+            )
         except (ValueError, np.linalg.LinAlgError):
             continue
         for coach_id, effect in bootstrap_effects.select(
@@ -843,6 +872,7 @@ def _model_specification(bootstrap_replicates: int) -> dict[str, object]:
         "sensitivity_minimum_dropbacks": list(SENSITIVITY_MINIMUM_DROPBACKS),
         "deterministic_decimal_places": DETERMINISTIC_DECIMAL_PLACES,
         "near_one_to_one_confounding_threshold": NEAR_ONE_TO_ONE_CONFOUNDING_THRESHOLD,
+        "residual_variance_method": RESIDUAL_VARIANCE_METHOD,
         "dependencies": {
             "numpy": np.__version__,
             "polars": pl.__version__,

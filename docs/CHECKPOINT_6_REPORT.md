@@ -1,9 +1,9 @@
 # Checkpoint Six Report
 
 - **Date:** 2026-08-29
-- **Data version:** `c6-633bf10b86381ce3`
-- **Model version:** `coach-impact-633bf10b86381ce3`
-**Pipeline version:** `checkpoint-6.1`
+- **Data version:** `c6-400a5b474aa37a35`
+- **Model version:** `coach-impact-400a5b474aa37a35`
+- **Pipeline version:** `checkpoint-6.2`
 
 ## Status
 
@@ -26,7 +26,7 @@ Verified usable samples are:
 
 ## Corrected empirical-Bayes estimator
 
-Interval residuals are means. Residual variance is now calculated as `sum(exposure_dropbacks × residual²) / (independent intervals - 1)`, rather than normalizing by total dropbacks. That variance is used consistently in coach sampling variance, between-coach variance, shrinkage, analytic standard errors, effect estimates, and fallback intervals. A deterministic four-interval regression fixture verifies the exact variance, degrees of freedom, and shrinkage by hand.
+Interval residuals are means from a fitted weighted Ridge baseline. The build calculates the baseline's effective degrees of freedom from the exact hat-matrix trace: one unpenalized intercept plus `sum(lambda / (lambda + alpha))` over the weighted, centered transformed-design Gram eigenvalues. Residual variance is `sum(exposure_dropbacks × residual²) / (independent intervals - effective_df)`, rather than using an intercept-only or total-dropback denominator. That variance is used consistently in coach sampling variance, between-coach variance, shrinkage, analytic standard errors, effect estimates, and every bootstrap refit. A deterministic fitted-Ridge regression fixture verifies that effective degrees of freedom differ from one and change variance and shrinkage in the expected direction.
 
 ## Identification decision
 
@@ -64,7 +64,7 @@ Sensitivity outputs include verified plus provisional assignments, exclusion of 
 
 Regression coverage now includes:
 
-- exact hand-calculated interval-mean variance and shrinkage;
+- fitted weighted-Ridge effective degrees of freedom, residual variance, and shrinkage versus the intercept-only assumption;
 - near one-to-one coach/team-season confounding detection and ranking suppression;
 - Houston shared-duty fractional exposure below the primary threshold;
 - sparse coach bootstrap appearances, minimum-support suppression, estimand labeling, and reproducibility;

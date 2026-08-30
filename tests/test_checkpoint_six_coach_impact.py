@@ -14,6 +14,7 @@ import polars as pl
 from nfl_coaching_impact.coach_impact import (
     CoachImpactConfig,
     _bootstrap_intervals,
+    _fit_baseline,
     _fit_role,
     _identification_diagnostic,
     _model_specification,
@@ -255,19 +256,40 @@ class CheckpointSixExposureTest(unittest.TestCase):
         )
 
     def test_partial_pooling_variance_uses_independent_interval_degrees_of_freedom(self) -> None:
-        fixture = pl.DataFrame(
-            {
-                "coach_id": ["a", "a", "b", "b"],
-                "coach_name": ["A", "A", "B", "B"],
-                "role": ["head_coach"] * 4,
-                "coach_interval_pae": [1.0, 1.0, -1.0, -1.0],
-                "exposure_dropbacks": [10.0] * 4,
-            }
+        rows = []
+        outcomes = [0.30, 0.10, -0.20, 0.05, 0.25, -0.10, -0.25, 0.15]
+        for index, outcome in enumerate(outcomes):
+            rows.append(
+                {
+                    "coach_id": "a" if index < 4 else "b",
+                    "coach_name": "A" if index < 4 else "B",
+                    "role": "head_coach",
+                    "player_id": f"qb-{index % 4}",
+                    "team_id": "team_hou" if index < 4 else "team_ten",
+                    "season": 2020 + index // 4,
+                    "coach_interval_pae": outcome,
+                    "exposure_dropbacks": 40.0 + index,
+                    **{
+                        **CONTROL_VALUES,
+                        "age": 24.0 + index,
+                        "prior_epa_per_dropback": -0.08 + index * 0.02,
+                    },
+                }
+            )
+        fixture = pl.DataFrame(rows, infer_schema_length=None)
+        baseline, _, effective_df = _fit_baseline(
+            fixture, include_qb=True, include_team_season=False, weighted=True
         )
-        effects, _ = _partial_pool(fixture, baseline_prediction=[0.0] * 4)
-        expected_sigma2 = 40.0 / 3.0
-        expected_tau2 = 1.0 - expected_sigma2 / 20.0
-        expected_shrinkage = expected_tau2 / (expected_tau2 + expected_sigma2 / 20.0)
+        effects, _ = _partial_pool(fixture, baseline, effective_df)
+        residuals = fixture["coach_interval_pae"].to_numpy() - baseline
+        weights = fixture["exposure_dropbacks"].to_numpy()
+        expected_residual_df = fixture.height - effective_df
+        expected_sigma2 = float((weights * residuals**2).sum() / expected_residual_df)
+        intercept_only_sigma2 = float((weights * residuals**2).sum() / (fixture.height - 1))
+        self.assertGreater(effective_df, 1.0)
+        self.assertLess(effective_df, fixture.height)
+        self.assertNotAlmostEqual(expected_residual_df, fixture.height - 1)
+        self.assertGreater(expected_sigma2, intercept_only_sigma2)
         self.assertTrue(
             effects.select(
                 (pl.col("residual_variance") - expected_sigma2).abs().max() < 1e-12
@@ -275,10 +297,30 @@ class CheckpointSixExposureTest(unittest.TestCase):
         )
         self.assertTrue(
             effects.select(
-                (pl.col("shrinkage_weight") - expected_shrinkage).abs().max() < 1e-12
+                (pl.col("baseline_effective_degrees_of_freedom") - effective_df).abs().max() < 1e-12
             ).item()
         )
-        self.assertEqual(set(effects["residual_degrees_of_freedom"]), {3})
+        self.assertTrue(
+            effects.select(
+                (pl.col("residual_degrees_of_freedom") - expected_residual_df).abs().max() < 1e-12
+            ).item()
+        )
+        intercept_only_sampling_variance = intercept_only_sigma2 / effects["total_dropbacks"]
+        raw = effects["raw_effect"].to_numpy()
+        coach_weights = effects["total_dropbacks"].to_numpy()
+        center = float((raw * coach_weights).sum() / coach_weights.sum())
+        intercept_tau2 = max(
+            float(((raw - center) ** 2 * coach_weights).sum() / coach_weights.sum())
+            - float(
+                (intercept_only_sampling_variance.to_numpy() * coach_weights).sum()
+                / coach_weights.sum()
+            ),
+            1e-8,
+        )
+        intercept_shrinkage = intercept_tau2 / (
+            intercept_tau2 + intercept_only_sampling_variance.to_numpy()
+        )
+        self.assertTrue((effects["shrinkage_weight"].to_numpy() < intercept_shrinkage).all())
 
     def test_team_season_confounding_is_diagnosed_and_rankings_are_suppressed(self) -> None:
         exposures = build_coach_exposures(_games(), _pae_rows(), _assignments())

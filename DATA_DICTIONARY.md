@@ -74,7 +74,7 @@ Checkpoint six publishes content-addressed files under `data/processed/coach_imp
 | File | Grain | Purpose |
 |---|---|---|
 | `coach_modeling_exposures.parquet` | QB-coach-assignment interval | Compatible observed weeks, interval PAE, actual/expected EPA, verified/provisional status, shared fraction, exposure dropbacks, preseason controls, eligibility, and exclusions |
-| `coach_effect_estimates.parquet` | Coach-role | Exploratory empirical-Bayes estimate, raw effect, corrected residual/between-coach variance, degrees of freedom, shrinkage weight, analytic standard error, conditional block-bootstrap interval, successful/attempted draws, interval availability, and identification status; unsupported roles retain null estimates |
+| `coach_effect_estimates.parquet` | Coach-role | Exploratory empirical-Bayes estimate, raw effect, weighted Ridge effective/residual degrees of freedom, residual/between-coach variance, shrinkage weight, analytic standard error, conditional block-bootstrap interval, successful/attempted draws, interval availability, and identification status; unsupported roles retain null estimates |
 | `preliminary_coach_rankings.parquet` | Coach-role | Estimate plus interval support, identification status, verified/provisional/shared exposure, QB seasons, quarterbacks, teams, reliability, suppressed eligibility, exclusion reason, and null rank |
 | `model_comparison.parquet` | Role-model | Observation count, MAE, RMSE, and R-squared for the no-coach, fixed-effect, and partial-pooling specifications |
 | `sensitivity_results.parquet` | Specification-coach-role | Estimates under provisional inclusion, shared exclusion, weighting, QB/team controls, and interval-dropback thresholds |

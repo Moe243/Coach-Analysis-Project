@@ -58,11 +58,11 @@ PAE is performance relative to a limited expectation, not player or coach qualit
 
 ## Coach-impact extension
 
-- Coach-impact data version: `c6-633bf10b86381ce3`
-- Coach-impact model version: `coach-impact-4037f7ff531cd69f`
+- Coach-impact data version: `c6-400a5b474aa37a35`
+- Coach-impact model version: `coach-impact-400a5b474aa37a35`
 - Outcome: interval actual EPA/dropback minus the checkpoint-five preseason expectation
 - Primary assignment scope: verified only
-- Selected exploratory estimator: role-specific empirical-Bayes partial pooling of adjusted interval residuals, with interval-mean variance normalized by independent-interval degrees of freedom
+- Selected exploratory estimator: role-specific empirical-Bayes partial pooling of adjusted interval residuals, with weighted Ridge hat-matrix effective degrees of freedom
 - Uncertainty: 200 QB-season block-bootstrap attempts; conditional coach-specific percentiles require at least 160 successful appearances
 - Ranking status: suppressed because coach and team environment are not independently identified
 
