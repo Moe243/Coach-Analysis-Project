@@ -9,3 +9,10 @@ data/raw/
 data/processed/
 *.parquet
 .DS_Store
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+node_modules/
+.pnpm-store/

@@ -41,17 +41,17 @@ Build interval-compatible QB-coach exposures; compare no-coach, regularized coac
 
 Exit criterion met: verified primary estimates include fractional interval exposure and 200-block-bootstrap intervals; provisional/shared/weighting/control/threshold sensitivities remain separate; unsupported QB-coach attribution is suppressed; every rank is preliminary and non-publishable; deterministic clean rebuild and content identity contracts pass.
 
-## Checkpoint seven — application database and API (implemented; pending approval)
+## Checkpoint seven — application database and API (complete)
 
 Create Alembic migrations, curated PostgreSQL loads, FastAPI search/filter/detail endpoints, pagination, schema validation, and API tests.
 
 Exit criterion implemented: migrations are repeatable; the loader publishes canonical, analytical, provenance, and review facts atomically and idempotently; serving views exclude warm-up output where required; disposable PostgreSQL/API behavior tests pass; and independent clean loads have identical analytical checksums.
 
-## Checkpoint eight — frontend
+## Checkpoint eight — frontend (implemented; pending approval)
 
-Build responsive Next.js QB, coach, and team views with autocomplete, filters, tables, charts, detail pages, uncertainty, and methodology links.
+Build a responsive React/TypeScript interface with URL-synchronized quarterback, coach, team, season, role, evidence, eligibility, ordering, and metric filters; QB and coach detail routes; source citations; a focused coaching-network graph with a semantic list alternative; and an interpretation guide.
 
-Exit criterion: desktop/mobile QA, accessibility checks, unit tests, lint, type check, and production build pass.
+Exit criterion implemented: real checkpoint-seven API flows were exercised at desktop, tablet, and mobile widths; component/API/accessibility tests, lint, formatting, type checking, and the production build pass; loading, empty, error, pagination, deep-link, evidence, uncertainty, and suppression states are covered. Deployment and portfolio packaging remain checkpoint nine work.
 
 ## Checkpoint nine — portfolio polish
 

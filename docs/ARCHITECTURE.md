@@ -29,7 +29,7 @@ Feature/model pipeline      Data-quality reports
 Curated PostgreSQL tables and serving views
       |
       v
-FastAPI -> Next.js application
+FastAPI -> React/TypeScript application
 ```
 
 DuckDB is an embedded transformation/query engine, not a deployed service. PostgreSQL is the sole application database.
@@ -44,10 +44,12 @@ DuckDB is an embedded transformation/query engine, not a deployed service. Postg
 - `src/nfl_coaching_impact/features`: timing-safe preseason and retrospective features
 - `src/nfl_coaching_impact/models`: expected and coach-impact models
 - `src/nfl_coaching_impact/validation`: schemas, join assertions, leakage checks
-- `apps/api`: FastAPI in a later checkpoint
-- `apps/web`: Next.js in a later checkpoint
+- `src/nfl_coaching_impact/api.py`: read-only FastAPI serving layer
+- `frontend/src/api`: typed HTTP contracts and cancellation-aware client
+- `frontend/src/pages`: statistics, QB, coach, network, and methodology routes
+- `frontend/src/components`: reusable state, table, chart, status, and graph UI
 
-The ingestion modules remain intentionally compact. Empty future application/model folders are not created to avoid implying working features.
+The frontend is a pnpm workspace package and does not contain database credentials, embedded production data, or duplicated analytical calculations.
 
 ## Storage layers
 
@@ -81,6 +83,14 @@ Coach assignments use week and date bounds. A deterministic environment key repr
 ## API contracts
 
 FastAPI connects through `DATABASE_URL`, marks every request transaction read-only, and queries only current-publication views/tables. Whitelisted sorting with complete business-key tie-breakers, bound parameters, limit 1-200, nonnegative offsets, typed role/status validation, 404 details, and empty pages form API contract `api-v1.1`. OpenAPI documents the routes. Authentication and deployment remain deferred; the local server is not safe for public exposure.
+
+## Frontend contracts
+
+The Vite application uses React Router for deep-linkable routes and search parameters, TanStack Query for request caching/cancellation, and typed API response contracts. Statistics filters, ordering, expanded metrics, eligibility, and pagination are encoded in the URL. The client uses API pagination directly except for the documented coaching-context join, where it retrieves complete bounded API pages and performs a stable client-side intersection because checkpoint seven does not expose a combined QB/coach search endpoint.
+
+No display substitutes zero for a missing value. Verification, confidence, interval basis, provisional/shared flags, identification, suppression, bootstrap support, and model/data versions remain first-class fields. Coach effects are called exploratory associations and are never presented as definitive rankings. Cytoscape renders one selected season/team network at a time; an equivalent semantic list preserves every edge's evidence and interval metadata for keyboard and screen-reader access. Route-level lazy loading keeps the graph package out of the initial statistics bundle.
+
+Local development proxies `/api` to the checkpoint-seven server. A production host would need a same-origin reverse proxy or an explicit `VITE_API_BASE_URL`; deployment remains checkpoint nine work.
 
 ## Security and compliance
 

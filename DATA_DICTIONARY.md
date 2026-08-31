@@ -200,3 +200,9 @@ Eligible dropbacks are regular-season `qb_dropback = 1` plays excluding kneels a
 | `v_team_seasons` | Team-season context serving contract |
 
 The ranking views retain ineligible rows for filtering and transparency, but assign `default_rank` only after restricting the ranking population to eligible, out-of-sample QB predictions or eligible coach estimates.
+
+## Frontend display contract
+
+Checkpoint eight creates no analytical tables. Its default statistics grain is one published QB-team-season row from `api_qb_statistics`, augmented with the matching `api_qb_pae` row and source-backed staff intervals. `null` remains unavailable; it is never displayed as zero. The interface preserves `data_version`, `metric_version`, `model_version`, `training_cutoff_season`, `eligibility_status`, `reliability_label`, verification/confidence fields, interval bounds and basis, shared/provisional flags, identification and suppression reasons, and coach-specific bootstrap support.
+
+The coaching network renders `api_coaching_network_edges` without changing its grain. Team nodes are visual context assembled from the edge's team and season, while the accessible edge list remains a direct representation of source/target assignments, overlap bounds, and evidence metadata. Coach-page quarterback links are team-season overlaps filtered to published player position `QB`; they are not a new coach-exposure fact.

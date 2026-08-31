@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint seven is implemented and pending final approval. Immutable checkpoint-three through checkpoint-six artifacts and every serving-affecting manual CSV load atomically into versioned PostgreSQL serving tables. The read-only FastAPI application exposes QB, PAE, coaching, citation, review, and exploratory coach-impact results while preserving verification, confidence, interval, uncertainty, identification, eligibility, and suppression labels. No frontend, dashboard, authentication, deployment, or checkpoint-eight work was added.
+Checkpoint eight is implemented and pending approval. The responsive React/TypeScript interface consumes only the approved checkpoint-seven API and provides a filterable quarterback statistics workspace, quarterback and coach detail pages, a focused coaching network, and an interpretation guide. It preserves missingness, verification, confidence, shared/provisional intervals, eligibility, uncertainty, identification, and suppression labels; it does not turn exploratory coach associations into rankings. Authentication, deployment, and checkpoint-nine portfolio work remain out of scope.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -16,7 +16,7 @@ Checkpoint seven is implemented and pending final approval. Immutable checkpoint
 - Primary outcome: EPA per quarterback dropback
 - Default coach-ranking threshold: three qualifying QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks
 
-The serving publication contains historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35`. Read [the checkpoint-seven report](docs/CHECKPOINT_7_REPORT.md).
+The serving publication contains historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35`. Read [the checkpoint-eight report](docs/CHECKPOINT_8_REPORT.md).
 
 ## Football decision supported
 
@@ -36,6 +36,7 @@ The first version focuses on quarterbacks and four coaching roles:
 ├── data/manual/                 # Human-verified, source-backed inputs
 ├── db/schema.sql                # PostgreSQL analytical and serving schema
 ├── docs/                        # Audit, architecture, project plan, checkpoint report
+├── frontend/                    # React, TypeScript, Vite, tests, and responsive UI
 ├── scripts/audit_sources.py     # Independent boundary/source smoke audit
 ├── src/nfl_coaching_impact/     # Source, transform, validation, pipeline, and CLI code
 ├── tests/                       # Offline pipeline/contract and PostgreSQL behavior tests
@@ -62,6 +63,26 @@ DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make api
 OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, network data, citations, and review summaries. List responses contain `items`, `total`, `limit`, and `offset`; every ordering ends in a stable business key. Invalid role/status filters return 422, missing details return 404, and no-match lists return an empty page. Network edges retain both assignments' verification, confidence, shared/provisional, interval, and overlap metadata. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
 
 The local API has no authentication and must not be exposed publicly. Every query transaction is read-only, and credentials, filesystem paths, and mutable execution logs are never returned.
+
+## Run the checkpoint-eight frontend
+
+Start the checkpoint-seven API first, then install and run the workspace frontend:
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+make frontend-dev
+```
+
+Vite serves the local interface and proxies `/api` to `http://127.0.0.1:8000` by default. Override `VITE_API_PROXY_TARGET` for another local API or set `VITE_API_BASE_URL` when building for a reverse-proxied environment. The browser never receives `DATABASE_URL` or any other credential. See [the frontend guide](frontend/README.md) for routes and production-build details.
+
+Run the frontend quality suite with:
+
+```bash
+make frontend-check
+```
+
+Filters and pagination are URL-addressable. The interface has explicit loading, empty, and error states; the graph always has a keyboard-readable list alternative; and compact screens switch the statistics table to labeled record cards.
 
 ## Build checkpoint five
 
@@ -147,7 +168,7 @@ python3 scripts/audit_sources.py --network --download-samples
 
 `--download-samples` downloads three small 2025 CSV files into a temporary directory and streams bounded 2010 and 2025 play-by-play samples. It validates required columns, `qb_dropback`, finite `qb_epa`, and resolved passer/scrambler GSIS IDs, then removes the temporary files. It does not retain or fully download either play-by-play season.
 
-Checkpoints five and six use scikit-learn with Polars/NumPy/SciPy preprocessing, regularization, evaluation, and deterministic empirical-Bayes partial pooling. The planned later stack adds PostgreSQL, SQLAlchemy, Alembic, FastAPI, and Next.js/TypeScript only in their approved checkpoints. DuckDB remains an embedded analysis option.
+Checkpoints five and six use scikit-learn with Polars/NumPy/SciPy preprocessing, regularization, evaluation, and deterministic empirical-Bayes partial pooling. Checkpoint seven adds PostgreSQL, SQLAlchemy, Alembic, and FastAPI; checkpoint eight adds a React/TypeScript/Vite client with TanStack Query and Cytoscape. DuckDB remains an embedded analysis option.
 
 Secrets will be loaded from environment variables. Copy `.env.example` to `.env` only when a later checkpoint needs credentials, and never commit `.env`.
 
@@ -165,6 +186,7 @@ Secrets will be loaded from environment variables. Copy `.env.example` to `.env`
 - [Checkpoint five report](docs/CHECKPOINT_5_REPORT.md)
 - [Checkpoint six report](docs/CHECKPOINT_6_REPORT.md)
 - [Checkpoint seven report](docs/CHECKPOINT_7_REPORT.md)
+- [Checkpoint eight report](docs/CHECKPOINT_8_REPORT.md)
 
 ## Interpretation standard
 

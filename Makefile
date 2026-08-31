@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact db-migrate db-load api
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact db-migrate db-load api frontend-install frontend-dev frontend-test frontend-e2e frontend-check frontend-build
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -67,3 +67,25 @@ db-load:
 api:
 	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 2)
 	PYTHONPATH=src $(PYTHON) -m uvicorn nfl_coaching_impact.api:app --reload
+
+frontend-install:
+	pnpm install --frozen-lockfile
+
+frontend-dev:
+	pnpm --filter nfl-coaching-impact-web dev
+
+frontend-test:
+	pnpm --filter nfl-coaching-impact-web test
+
+frontend-e2e:
+	pnpm --filter nfl-coaching-impact-web test:e2e
+
+frontend-check:
+	pnpm --filter nfl-coaching-impact-web lint
+	pnpm --filter nfl-coaching-impact-web format
+	pnpm --filter nfl-coaching-impact-web typecheck
+	pnpm --filter nfl-coaching-impact-web test
+	pnpm --filter nfl-coaching-impact-web build
+
+frontend-build:
+	pnpm --filter nfl-coaching-impact-web build
