@@ -111,7 +111,7 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 
 ### Checkpoint-seven serving layer
 
-Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, and coach model/data versions plus the combined manifest digest. `serving_publication` selects exactly one visible load.
+Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, and coach model/data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. Schema `checkpoint-7.1`, loader `serving-loader-v2`, and API `api-v1.1` are the current contracts.
 
 | Table/view | Grain or contract |
 |---|---|
@@ -121,12 +121,12 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | `serving_qb_pae` | One out-of-sample expected/actual/PAE record per QB-team-season |
 | `serving_coach_assignments`, `serving_coach_citations` | Source-backed role interval and evidence |
 | `serving_review_queue` | Manual-review item with full source payload |
-| `serving_coach_exposures` | QB-assignment interval with observed and fractional dropbacks |
+| `serving_coach_exposures` | QB-assignment interval with observed/fractional dropbacks and assignment-matching coach, team, season, role, weeks, verification, confidence, basis, and shared status |
 | `serving_coach_effects`, `serving_coach_rankings` | Exploratory estimate and suppression contract per coach-role |
 | `serving_source_manifests`, `serving_pipeline_manifests` | Source and pipeline/model provenance |
 | `api_qb_statistics`, `api_qb_pae` | Published analysis-only QB metrics and PAE |
 | `api_coach_impact`, `api_coach_comparisons` | Effects plus identification and suppression fields |
-| `api_coaching_assignments`, `api_coaching_network_edges` | Role intervals and contemporaneous staff edges |
+| `api_coaching_assignments`, `api_coaching_network_edges` | Role intervals and staff edges with source/target verification, confidence, shared/provisional flags, full intervals, and overlap bounds |
 | `api_source_citations`, `api_review_queue_summary` | Evidence and unresolved-review counts |
 
 ### Committed checkpoint-four files

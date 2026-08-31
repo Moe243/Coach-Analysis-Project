@@ -15,7 +15,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    schema_path = Path(__file__).resolve().parents[2] / "schema.sql"
+    schema_path = Path(__file__).with_name("0001_checkpoint7_schema.sql")
     sql = schema_path.read_text(encoding="utf-8")
     statements = sql.replace("BEGIN;", "").replace("COMMIT;", "").replace("%", "%%")
     op.get_bind().exec_driver_sql(statements)

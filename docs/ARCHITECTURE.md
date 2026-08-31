@@ -61,7 +61,7 @@ Normalized Parquet uses canonical player/team IDs and source-preserving columns.
 
 ### Serving
 
-PostgreSQL contains immutable load-scoped canonical facts, QB metrics, PAE, coaching facts/citations/reviews, coach exposures/effects, and source/pipeline manifests. Alembic owns schema revision `0001_checkpoint7`. `serving_publication` is the single atomic pointer used by every API view; a failed load never changes it. Content-identical reruns reuse the deterministic UUID load identity after verifying the existing publication is complete.
+PostgreSQL contains immutable load-scoped canonical facts, QB metrics, PAE, coaching facts/citations/reviews, coach exposures/effects, and source/pipeline manifests. Alembic revision `0001_checkpoint7` reads a revision-specific immutable SQL snapshot rather than mutable `db/schema.sql`. `serving_publication` is the single atomic pointer used by every API view; a failed new load leaves the prior pointer and rows untouched. Content-identical reruns reuse the deterministic UUID load identity after verifying the existing publication is complete. Any serving-affecting manual CSV hash changes both the load identity and the stored manual manifest.
 
 ## Pipeline orchestration
 
@@ -80,7 +80,7 @@ Coach assignments use week and date bounds. A deterministic environment key repr
 
 ## API contracts
 
-FastAPI connects through `DATABASE_URL`, marks every request transaction read-only, and queries only current-publication views/tables. Whitelisted sorting, bound parameters, limit 1-200, nonnegative offsets, typed query validation, 404 details, and empty pages form API contract `api-v1`. OpenAPI documents the routes. Authentication and deployment remain deferred; the local server is not safe for public exposure.
+FastAPI connects through `DATABASE_URL`, marks every request transaction read-only, and queries only current-publication views/tables. Whitelisted sorting with complete business-key tie-breakers, bound parameters, limit 1-200, nonnegative offsets, typed role/status validation, 404 details, and empty pages form API contract `api-v1.1`. OpenAPI documents the routes. Authentication and deployment remain deferred; the local server is not safe for public exposure.
 
 ## Security and compliance
 

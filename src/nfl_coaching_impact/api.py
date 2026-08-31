@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
+from enum import StrEnum
 from typing import Annotated, Any, Literal
 
 import psycopg
@@ -41,6 +42,27 @@ class Versions(ApiModel):
     expected_model_version: str
     coach_data_version: str
     coach_model_version: str
+
+
+class CoachRole(StrEnum):
+    HEAD_COACH = "head_coach"
+    OFFENSIVE_COORDINATOR = "offensive_coordinator"
+    PLAY_CALLER = "play_caller"
+    QUARTERBACKS_COACH = "quarterbacks_coach"
+
+
+class VerificationStatus(StrEnum):
+    UNVERIFIED = "unverified"
+    PROVISIONAL = "provisional"
+    VERIFIED = "verified"
+    CONFLICTING = "conflicting"
+
+
+class ReviewStatus(StrEnum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
 
 
 app = FastAPI(
@@ -138,10 +160,10 @@ def qbs(
         clauses.append("qualifies_default = %s")
         params.append(eligible)
     orders = {
-        "name": "display_name, season DESC, team_id",
-        "season": "season DESC, display_name, team_id",
-        "dropbacks": "dropbacks DESC, display_name",
-        "epa": "epa_per_dropback DESC NULLS LAST, display_name",
+        "name": "display_name, season DESC, team_id, player_id",
+        "season": "season DESC, display_name, team_id, player_id",
+        "dropbacks": "dropbacks DESC, display_name, season DESC, team_id, player_id",
+        "epa": "epa_per_dropback DESC NULLS LAST, display_name, season DESC, team_id, player_id",
     }
     return _page(
         "api_qb_statistics",
@@ -176,7 +198,7 @@ def qb_pae(player_id: str, limit: Limit = 50, offset: Offset = 0) -> Page:
         "api_qb_pae",
         clauses=["player_id = %s"],
         params=[player_id],
-        order="season, team_id",
+        order="season, team_id, player_id",
         limit=limit,
         offset=offset,
     )
@@ -188,7 +210,7 @@ def qb_pae(player_id: str, limit: Limit = 50, offset: Offset = 0) -> Page:
 @app.get("/coaches", response_model=Page)
 def coaches(
     search: str | None = None,
-    role: str | None = None,
+    role: CoachRole | None = None,
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> Page:
@@ -198,13 +220,13 @@ def coaches(
         params.append(f"%{search}%")
     if role:
         clauses.append("role::text = %s")
-        params.append(role)
+        params.append(role.value)
     return _page(
         "(SELECT DISTINCT load_id, coach_id, canonical_name, role "
         "FROM api_coaching_assignments) AS coaches",
         clauses=clauses,
         params=params,
-        order="canonical_name, role",
+        order="canonical_name, role, coach_id",
         limit=limit,
         offset=offset,
     )
@@ -230,7 +252,7 @@ def coach_profile(coach_id: str) -> dict[str, Any]:
 
 @app.get("/coach-impact", response_model=Page)
 def coach_impact(
-    role: str | None = None,
+    role: CoachRole | None = None,
     eligible: bool | None = None,
     min_exposure: float | None = Query(None, ge=0),
     sort: Literal["name", "effect", "exposure"] = "name",
@@ -240,7 +262,7 @@ def coach_impact(
     clauses, params = [], []
     if role:
         clauses.append("role::text = %s")
-        params.append(role)
+        params.append(role.value)
     if eligible is not None:
         clauses.append("rank_eligible = %s")
         params.append(eligible)
@@ -248,9 +270,9 @@ def coach_impact(
         clauses.append("verified_dropbacks >= %s")
         params.append(min_exposure)
     orders = {
-        "name": "canonical_name, role",
-        "effect": "estimated_effect DESC NULLS LAST, canonical_name",
-        "exposure": "verified_dropbacks DESC, canonical_name",
+        "name": "canonical_name, role, coach_id",
+        "effect": "estimated_effect DESC NULLS LAST, canonical_name, role, coach_id",
+        "exposure": "verified_dropbacks DESC, canonical_name, role, coach_id",
     }
     return _page(
         "api_coach_impact",
@@ -273,7 +295,7 @@ def teams(search: str | None = None, limit: Limit = 50, offset: Offset = 0) -> P
         "ON p.load_id = t.load_id) AS teams",
         clauses=clauses,
         params=params,
-        order="team_name",
+        order="team_name, team_id",
         limit=limit,
         offset=offset,
     )
@@ -284,8 +306,8 @@ def assignments(
     coach_id: str | None = None,
     team_id: str | None = None,
     season: int | None = Query(None, ge=2010, le=2025),
-    role: str | None = None,
-    verification_status: Literal["verified", "provisional", "conflicting"] | None = None,
+    role: CoachRole | None = None,
+    verification_status: VerificationStatus | None = None,
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> Page:
@@ -293,8 +315,8 @@ def assignments(
         "coach_id": coach_id,
         "team_id": team_id,
         "season": season,
-        "role::text": role,
-        "verification_status::text": verification_status,
+        "role::text": role.value if role else None,
+        "verification_status::text": verification_status.value if verification_status else None,
     }
     clauses = [f"{column} = %s" for column, value in values.items() if value is not None]
     params = [value for value in values.values() if value is not None]
@@ -302,7 +324,7 @@ def assignments(
         "api_coaching_assignments",
         clauses=clauses,
         params=params,
-        order="season DESC, team_id, role, start_week",
+        order="season DESC, team_id, role, start_week, end_week, assignment_key",
         limit=limit,
         offset=offset,
     )
@@ -315,7 +337,7 @@ def network_nodes(limit: Limit = 50, offset: Offset = 0) -> Page:
         "FROM api_coaching_assignments) AS nodes",
         clauses=[],
         params=[],
-        order="canonical_name",
+        order="canonical_name, coach_id",
         limit=limit,
         offset=offset,
     )
@@ -325,6 +347,7 @@ def network_nodes(limit: Limit = 50, offset: Offset = 0) -> Page:
 def network_edges(
     season: int | None = Query(None, ge=2010, le=2025),
     team_id: str | None = None,
+    verification_status: VerificationStatus | None = None,
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> Page:
@@ -335,11 +358,19 @@ def network_edges(
     if team_id:
         clauses.append("team_id = %s")
         params.append(team_id)
+    if verification_status is not None:
+        clauses.append(
+            "source_verification_status::text = %s AND target_verification_status::text = %s"
+        )
+        params.extend([verification_status.value, verification_status.value])
     return _page(
         "api_coaching_network_edges",
         clauses=clauses,
         params=params,
-        order="season, team_id, source_coach_id, target_coach_id",
+        order=(
+            "season, team_id, source_coach_id, target_coach_id, source_role, target_role, "
+            "source_assignment_key, target_assignment_key"
+        ),
         limit=limit,
         offset=offset,
     )
@@ -360,7 +391,7 @@ def citations(
         "api_source_citations",
         clauses=clauses,
         params=params,
-        order="season DESC, team_id, role",
+        order="season DESC, team_id, role, assignment_key, source_url",
         limit=limit,
         offset=offset,
     )
@@ -368,19 +399,22 @@ def citations(
 
 @app.get("/review-queue/summary", response_model=Page)
 def review_summary(
-    status: str | None = None,
-    role: str | None = None,
+    status: ReviewStatus | None = None,
+    role: CoachRole | None = None,
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> Page:
-    values = {"review_status": status, "role::text": role}
+    values = {
+        "review_status": status.value if status else None,
+        "role::text": role.value if role else None,
+    }
     clauses = [f"{column} = %s" for column, value in values.items() if value is not None]
     params = [value for value in values.values() if value is not None]
     return _page(
         "api_review_queue_summary",
         clauses=clauses,
         params=params,
-        order="review_status, role, issue_type",
+        order="review_status, role, issue_type, load_id",
         limit=limit,
         offset=offset,
     )

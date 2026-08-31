@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint seven is implemented and pending approval. Immutable checkpoint-three through checkpoint-six artifacts load atomically into versioned PostgreSQL serving tables. The read-only FastAPI application exposes QB, PAE, coaching, citation, review, and exploratory coach-impact results while preserving verification, uncertainty, identification, eligibility, and suppression labels. No frontend, dashboard, authentication, deployment, or checkpoint-eight work was added.
+Checkpoint seven is implemented and pending final approval. Immutable checkpoint-three through checkpoint-six artifacts and every serving-affecting manual CSV load atomically into versioned PostgreSQL serving tables. The read-only FastAPI application exposes QB, PAE, coaching, citation, review, and exploratory coach-impact results while preserving verification, confidence, interval, uncertainty, identification, eligibility, and suppression labels. No frontend, dashboard, authentication, deployment, or checkpoint-eight work was added.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -59,7 +59,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make db-load
 DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make api
 ```
 
-OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, network data, citations, and review summaries. List responses contain `items`, `total`, `limit`, and `offset`; invalid filters return 422, missing details return 404, and no-match lists return an empty page. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
+OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, network data, citations, and review summaries. List responses contain `items`, `total`, `limit`, and `offset`; every ordering ends in a stable business key. Invalid role/status filters return 422, missing details return 404, and no-match lists return an empty page. Network edges retain both assignments' verification, confidence, shared/provisional, interval, and overlap metadata. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
 
 The local API has no authentication and must not be exposed publicly. Every query transaction is read-only, and credentials, filesystem paths, and mutable execution logs are never returned.
 
@@ -136,7 +136,7 @@ python3 -m pip install -e '.[application,dev]'
 make PYTHON=.venv/bin/python test-postgres
 ```
 
-The runner starts a bundled isolated PostgreSQL server when `TEST_DATABASE_URL` is unset. It proves migrations, constraints, lineage, atomic rollback, idempotency, deterministic clean loads, serving views, and API behavior. An external disposable PostgreSQL URL may be supplied instead.
+The runner starts a bundled isolated PostgreSQL server when `TEST_DATABASE_URL` is unset. It proves immutable/repeatable migrations, complete exposure lineage, citation guards, old-publication preservation on rollback, manual-input identity changes, idempotency, deterministic clean loads across all eight views, stable pagination, serving filters, and API behavior. An external disposable PostgreSQL URL may be supplied instead.
 
 To repeat the network smoke checks:
 

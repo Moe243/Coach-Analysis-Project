@@ -19,9 +19,9 @@ from psycopg.types.json import Jsonb
 from .errors import PipelineError
 from .pipeline import _validate_existing_version
 
-SCHEMA_VERSION = "checkpoint-7.0"
-LOADER_VERSION = "serving-loader-v1"
-API_CONTRACT_VERSION = "api-v1"
+SCHEMA_VERSION = "checkpoint-7.1"
+LOADER_VERSION = "serving-loader-v2"
+API_CONTRACT_VERSION = "api-v1.1"
 PUBLICATION_NAMESPACE = uuid.UUID("c79812ad-1480-48ec-9972-e94b6f158a31")
 
 
@@ -94,6 +94,21 @@ def _manifest_digest(paths: list[Path]) -> str:
     return digest.hexdigest()
 
 
+def _manual_manifest(project_root: Path) -> tuple[str, dict[str, dict[str, Any]], list[Path]]:
+    manual = project_root / "data" / "manual"
+    paths = sorted(manual.glob("*.csv"))
+    if not paths:
+        raise PipelineError(f"no manual CSV inputs found: {manual}")
+    records = {
+        path.name: {
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "byte_size": path.stat().st_size,
+        }
+        for path in paths
+    }
+    return _manifest_digest(paths), records, paths
+
+
 def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any], list[Path]]:
     processed = project_root / "data" / "processed"
     historical_version, historical = _latest(processed / "historical")
@@ -164,7 +179,9 @@ def _validate_version_contracts(frames: dict[str, Any], versions: ServingVersion
         raise PipelineError("coach exposures expected-performance model version mismatch")
 
 
-def _validate_sources(frames: dict[str, Any], project_root: Path) -> None:
+def _validate_sources(
+    frames: dict[str, Any], project_root: Path, team_by_abbr: dict[str, str]
+) -> None:
     contracts = {
         "teams": ({"team_id", "team_abbr", "team_name"}, ["team_id"]),
         "team_aliases": (
@@ -223,15 +240,59 @@ def _validate_sources(frames: dict[str, Any], project_root: Path) -> None:
     ]
     if unsupported:
         raise PipelineError(f"verified assignments without citations: {unsupported[:5]}")
+    assignment_by_key = {row["assignment_key"]: row for row in assignments}
+    lineage_fields = (
+        "coach_id",
+        "season",
+        "role",
+        "start_week",
+        "end_week",
+        "verification_status",
+        "confidence_level",
+        "interval_basis",
+        "is_shared",
+    )
+    mismatches: list[dict[str, Any]] = []
+    for exposure in frames["coach_exposures"].to_dicts():
+        assignment = assignment_by_key.get(exposure["assignment_key"])
+        if assignment is None:
+            mismatches.append({"assignment_key": exposure["assignment_key"], "issue": "missing"})
+            continue
+        expected = {
+            **{field: assignment[field] for field in lineage_fields},
+            "team_id": team_by_abbr.get(assignment["team_id"]),
+        }
+        actual = {field: exposure[field] for field in (*lineage_fields, "team_id")}
+        for field in ("season", "start_week", "end_week"):
+            expected[field] = int(expected[field])
+        expected["is_shared"] = expected["is_shared"] == "true"
+        if actual != expected:
+            mismatches.append(
+                {
+                    "assignment_key": exposure["assignment_key"],
+                    "actual": actual,
+                    "expected": expected,
+                }
+            )
+    if mismatches:
+        raise PipelineError(f"coach exposure assignment lineage mismatch: {mismatches[:3]}")
 
 
 def load_serving_database(database_url: str, project_root: Path) -> ServingLoadResult:
     """Validate and atomically publish all checkpoint-seven serving facts."""
 
     versions, frames, manifest_paths = _source_tables(project_root)
-    _validate_sources(frames, project_root)
+    team_by_abbr = dict(frames["teams"].select("team_abbr", "team_id").iter_rows())
+    _validate_sources(frames, project_root, team_by_abbr)
+    manual_digest, manual_manifest, manual_paths = _manual_manifest(project_root)
     identity = "|".join(
-        (SCHEMA_VERSION, LOADER_VERSION, API_CONTRACT_VERSION, *versions.__dict__.values())
+        (
+            SCHEMA_VERSION,
+            LOADER_VERSION,
+            API_CONTRACT_VERSION,
+            *versions.__dict__.values(),
+            manual_digest,
+        )
     )
     load_id = uuid.uuid5(PUBLICATION_NAMESPACE, identity)
     manual = project_root / "data" / "manual"
@@ -239,7 +300,6 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
     assignments = _csv(manual / "coaching_assignments.csv")
     citations = _csv(manual / "coach_assignment_sources.csv")
     reviews = _csv(manual / "coaching_review_queue.csv")
-    team_by_abbr = dict(frames["teams"].select("team_abbr", "team_id").iter_rows())
     counts = {
         name: frame.height for name, frame in frames.items() if isinstance(frame, pl.DataFrame)
     }
@@ -284,8 +344,9 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                 """INSERT INTO serving_loads
                    (load_id, schema_version, loader_version, api_contract_version,
                     historical_data_version, expected_data_version, expected_model_version,
-                    coach_data_version, coach_model_version, manifest_sha256)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    coach_data_version, coach_model_version, manifest_sha256,
+                    manual_manifest_sha256)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     load_id,
                     SCHEMA_VERSION,
@@ -296,7 +357,8 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                     versions.expected_model,
                     versions.coach,
                     versions.coach_model,
-                    _manifest_digest(manifest_paths),
+                    _manifest_digest([*manifest_paths, *manual_paths]),
+                    manual_digest,
                 ),
             )
             _insert_frames(
@@ -310,6 +372,8 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                 team_by_abbr,
                 project_root,
                 versions,
+                manual_digest,
+                manual_manifest,
             )
             connection.execute(
                 "INSERT INTO serving_publication (publication_id, load_id) VALUES (1, %s) "
@@ -331,6 +395,8 @@ def _insert_frames(
     team_by_abbr,
     project_root: Path,
     versions: ServingVersions,
+    manual_digest: str,
+    manual_manifest: dict[str, dict[str, Any]],
 ) -> None:
     lid = str(load_id)
 
@@ -527,7 +593,7 @@ def _insert_frames(
     )
     many(
         "INSERT INTO serving_coach_exposures VALUES "
-        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         [
             (
                 lid,
@@ -538,6 +604,9 @@ def _insert_frames(
                 r["coach_id"],
                 r["role"],
                 r["verification_status"],
+                r["confidence_level"],
+                r["interval_basis"],
+                r["is_shared"],
                 r["start_week"],
                 r["end_week"],
                 r["exposure_fraction"],
@@ -624,4 +693,13 @@ def _insert_frames(
         manifests.append(
             (lid, pipeline_name, manifest["data_version"], model_version, Jsonb(manifest))
         )
+    manifests.append(
+        (
+            lid,
+            "manual_inputs",
+            manual_digest,
+            None,
+            Jsonb({"sha256": manual_digest, "files": manual_manifest}),
+        )
+    )
     many("INSERT INTO serving_pipeline_manifests VALUES (%s,%s,%s,%s,%s)", manifests)
