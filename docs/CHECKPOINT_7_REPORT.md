@@ -6,9 +6,9 @@ Status: implemented; awaiting approval
 
 ## Outcome
 
-Checkpoint seven adds a reproducible PostgreSQL serving layer and read-only FastAPI API without changing any historical metric, coaching assignment, PAE, or coach-impact model. It loads historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35` under schema `checkpoint-7.1`, loader `serving-loader-v2`, and API contract `api-v1.1`.
+Checkpoint seven adds a reproducible PostgreSQL serving layer and read-only FastAPI API without changing any historical metric, coaching assignment, PAE, or coach-impact model. It loads historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35` under schema `checkpoint-7.2`, loader `serving-loader-v3`, and API contract `api-v1.1`.
 
-The deterministic serving load ID is `e6efef76-b0cc-5bb8-ab82-d634bf2cf1d8`. Its manual-input digest is `67c3b4bf0f5179042e3a859535d931cfb3a7290099a7e79f5bba5d967ba56784`.
+The deterministic serving load ID is `9dff6650-5e7e-561e-ba29-57099b3ed0cc`. Its manual-input digest is `67c3b4bf0f5179042e3a859535d931cfb3a7290099a7e79f5bba5d967ba56784`.
 
 ## Loaded rows
 
@@ -27,9 +27,9 @@ Published view counts are 1,689 QB-season rows, 1,689 PAE rows, 144 coach-impact
 
 ## Database design and safety
 
-Alembic revision `0001_checkpoint7` creates immutable load-scoped serving tables from a revision-specific SQL snapshot, so later changes to `db/schema.sql` cannot rewrite migration history. Composite foreign keys enforce player/team/game/season/coach lineage. Deferred behavioral triggers reject exposure rows whose assignment key, coach, team, season, role, weeks, verification, confidence, interval basis, or shared status disagrees with the referenced assignment. Other guards reject overlapping role intervals, require citations for verified assignments, and prevent citation reassignment from orphaning a verified row. Checks preserve interval ordering, exact fractional exposure, PAE arithmetic, uncertainty ordering, and suppression rules.
+Alembic revision `0001_checkpoint7` creates immutable load-scoped serving tables from a revision-specific SQL snapshot, so later changes to `db/schema.sql` cannot rewrite migration history; its committed checksum remains fixed. Revision `0002_checkpoint7_integrity` adds parent-side exposure lineage without rewriting `0001`. Composite foreign keys enforce player/team/game/season/coach lineage. Deferred behavioral triggers reject mismatches whether an exposure or its referenced assignment changes in coach, team, season, role, weeks, verification, confidence, interval basis, or shared status; coordinated changes pass when the final state agrees. Other guards reject overlapping role intervals, require citations for verified assignments, and prevent citation reassignment from orphaning a verified row. Checks preserve interval ordering, exact fractional exposure, PAE arithmetic, uncertainty ordering, and suppression rules.
 
-The loader validates upstream checksums, required columns, null/duplicate business keys, citations, complete exposure-assignment lineage, exposure arithmetic, and every model/data version before writing. Every mutable manual CSV is hashed into the load ID and a stored `manual_inputs` manifest; changing one forces a new publication rather than reusing an old load. All inserts and the `serving_publication` pointer change occur in one transaction. A failed candidate load preserves the previous active publication and removes every partial candidate row. Identical reruns reuse the deterministic load after checking completeness. Independent empty databases produce the same load ID and ordered checksums across all eight analytical views; execution timestamps may legitimately differ.
+The loader validates upstream checksums, required columns, null/duplicate business keys, citations, complete exposure-assignment lineage, exposure arithmetic, and every model/data version before writing. Every mutable manual CSV is captured once and parsed from the same bytes hashed into the load ID and stored `manual_inputs` manifest. A final hash check immediately before publication rejects a mid-load edit and rolls back the entire candidate; rerunning captures the new bytes and produces their corresponding identity. All inserts and the `serving_publication` pointer change occur in one transaction. A failed candidate load preserves the previous active publication and removes every partial candidate row. Identical reruns reuse the deterministic load after checking completeness. Independent empty databases produce the same load ID and ordered checksums across all eight analytical views; execution timestamps may legitimately differ.
 
 ## API contract
 
@@ -43,8 +43,8 @@ Authentication is not implemented. The application is local-development only and
 
 - Disposable PostgreSQL 17 migration and real-data load: passed.
 - Legacy PostgreSQL constraint tests: 9 passed.
-- Checkpoint-seven PostgreSQL/API tests: 20 passed; with nine legacy PostgreSQL tests, the disposable database suite has 29 passing tests. New adversarial coverage includes manual-input identity changes, complete exposure lineage, immutable migration sourcing, warm-up PAE exclusion, citation reassignment, prior-publication rollback preservation, total pagination ordering, typed role/status filters, network metadata, and all-eight-view clean-load checksums.
-- Full offline discovery: 105 tests, 74 passed and 31 integration tests skipped by design. The separately invoked 29 PostgreSQL/API tests and two network tests all passed, so all 105 discovered behaviors passed in their applicable environments.
+- Checkpoint-seven PostgreSQL/API tests: 22 passed; with nine legacy PostgreSQL tests, the disposable database suite has 31 passing tests. New adversarial coverage includes parent- and child-side exposure lineage, coordinated deferred changes, real manual-input identity changes, mid-load mutation rollback/restart, immutable migration sourcing, warm-up PAE exclusion, citation reassignment, prior-publication rollback preservation, total pagination ordering, typed role/status filters, network metadata, and all-eight-view clean-load checksums.
+- Full offline discovery: 107 tests, 74 passed and 33 integration tests skipped by design. The separately invoked 31 PostgreSQL/API tests and two network tests all passed, so all 107 discovered behaviors passed in their applicable environments.
 - Ruff, formatting, and `git diff --check`: passed.
 
 Generated PostgreSQL data files, caches, source/model artifacts, secrets, and dumps remain ignored and uncommitted.

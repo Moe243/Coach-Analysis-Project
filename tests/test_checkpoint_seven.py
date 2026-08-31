@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
 import shutil
 import tempfile
 import unittest
-import uuid
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,13 +19,7 @@ except ImportError:  # pragma: no cover
     psycopg = None
 
 from nfl_coaching_impact.errors import PipelineError
-from nfl_coaching_impact.serving import (
-    API_CONTRACT_VERSION,
-    LOADER_VERSION,
-    PUBLICATION_NAMESPACE,
-    SCHEMA_VERSION,
-    load_serving_database,
-)
+from nfl_coaching_impact.serving import load_serving_database
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -33,6 +27,15 @@ TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
 @unittest.skipUnless(psycopg is not None and TEST_DATABASE_URL, "PostgreSQL test URL required")
 class CheckpointSevenPostgreSQLTest(unittest.TestCase):
+    @staticmethod
+    def _copy_project_inputs(directory: str) -> Path:
+        project_root = Path(directory)
+        data_root = project_root / "data"
+        data_root.mkdir(parents=True)
+        shutil.copytree(ROOT / "data/manual", data_root / "manual")
+        (data_root / "processed").symlink_to(ROOT / "data/processed", target_is_directory=True)
+        return project_root
+
     @classmethod
     def _create_database(cls, database: str) -> str:
         with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as admin:
@@ -137,7 +140,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertEqual(manifest_count, 4)
 
     def test_invalid_lineage_duplicate_and_fraction_are_rejected(self) -> None:
-        with psycopg.connect(self.url) as connection:
+        with psycopg.connect(self.url, autocommit=True) as connection:
             load_id = connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
             with self.assertRaises(psycopg.Error):
                 with connection.transaction():
@@ -186,6 +189,142 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                         "WHERE load_id = %s AND assignment_key = "
                         "(SELECT assignment_key FROM serving_coach_exposures LIMIT 1)",
                         (load_id,),
+                    )
+
+    def test_assignment_updates_revalidate_related_exposures(self) -> None:
+        suffix = secrets.token_hex(5)
+        team_id = f"lineage-team-{suffix}"
+        alternate_team_id = f"lineage-team-alt-{suffix}"
+        player_id = f"lineage-player-{suffix}"
+        coach_id = f"lineage-coach-{suffix}"
+        alternate_coach_id = f"lineage-coach-alt-{suffix}"
+        assignment_key = f"lineage-assignment-{suffix}"
+        with psycopg.connect(self.url, autocommit=True) as connection:
+            load_id = connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
+            with connection.transaction():
+                connection.execute(
+                    "INSERT INTO serving_teams VALUES "
+                    "(%s,%s,'LIN','Lineage Team',NULL,'{}'),"
+                    "(%s,%s,'LIA','Lineage Alternate',NULL,'{}')",
+                    (load_id, team_id, load_id, alternate_team_id),
+                )
+                connection.execute(
+                    "INSERT INTO serving_players VALUES (%s,%s,'Lineage QB','QB','{}')",
+                    (load_id, player_id),
+                )
+                connection.execute(
+                    "INSERT INTO serving_qb_seasons VALUES "
+                    "(%s,%s,%s,2025,'analysis',1,1,40,.1,NULL,.5,.1,false,'test','{}')",
+                    (load_id, player_id, team_id),
+                )
+                connection.execute(
+                    "INSERT INTO serving_coaches VALUES "
+                    "(%s,%s,'Lineage Coach',%s),(%s,%s,'Lineage Alternate Coach',%s)",
+                    (
+                        load_id,
+                        coach_id,
+                        coach_id,
+                        load_id,
+                        alternate_coach_id,
+                        alternate_coach_id,
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO serving_coach_assignments VALUES "
+                    "(%s,%s,%s,%s,2025,'head_coach',1,17,'season_designation',"
+                    "'verified','high',false,false,false,'fixture','{}')",
+                    (load_id, assignment_key, coach_id, team_id),
+                )
+                connection.execute(
+                    "INSERT INTO serving_coach_citations VALUES "
+                    "(%s,%s,'https://example.com/lineage','Fixture','test','2026-08-30',"
+                    "'fixture','fixture')",
+                    (load_id, assignment_key),
+                )
+                connection.execute(
+                    "INSERT INTO serving_coach_exposures VALUES "
+                    "(%s,%s,%s,%s,2025,%s,'head_coach','verified','high',"
+                    "'season_designation',false,1,17,1,40,40,.1,NULL,'{}')",
+                    (load_id, assignment_key, player_id, team_id, coach_id),
+                )
+                connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            mutations = (
+                ("coach_id = %s", alternate_coach_id),
+                ("team_id = %s", alternate_team_id),
+                ("season = %s", 2024),
+                ("role = %s", "play_caller"),
+                ("start_week = %s", 2),
+                ("end_week = %s", 16),
+                ("verification_status = %s", "provisional"),
+                ("confidence_level = %s", "medium"),
+                ("interval_basis = %s", "dated_source_weeks"),
+                ("is_shared = %s", True),
+            )
+            try:
+                for mutation, value in mutations:
+                    with self.subTest(mutation=mutation), self.assertRaises(psycopg.Error):
+                        with connection.transaction():
+                            connection.execute(
+                                f"UPDATE serving_coach_assignments SET {mutation} "
+                                "WHERE load_id = %s AND assignment_key = %s",
+                                (value, load_id, assignment_key),
+                            )
+                            connection.execute(
+                                "SET CONSTRAINTS "
+                                "serving_assignment_exposure_lineage_guard IMMEDIATE"
+                            )
+                with connection.transaction():
+                    connection.execute(
+                        "UPDATE serving_coach_assignments SET confidence_level = 'medium' "
+                        "WHERE load_id = %s AND assignment_key = %s",
+                        (load_id, assignment_key),
+                    )
+                    connection.execute(
+                        "UPDATE serving_coach_exposures SET confidence_level = 'medium' "
+                        "WHERE load_id = %s AND assignment_key = %s",
+                        (load_id, assignment_key),
+                    )
+                    connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+                assignment_confidence, exposure_confidence = connection.execute(
+                    "SELECT a.confidence_level::text, e.confidence_level::text "
+                    "FROM serving_coach_assignments a JOIN serving_coach_exposures e "
+                    "ON e.load_id=a.load_id AND e.assignment_key=a.assignment_key "
+                    "WHERE a.load_id=%s AND a.assignment_key=%s",
+                    (load_id, assignment_key),
+                ).fetchone()
+                self.assertEqual((assignment_confidence, exposure_confidence), ("medium", "medium"))
+            finally:
+                with connection.transaction():
+                    connection.execute(
+                        "DELETE FROM serving_coach_exposures "
+                        "WHERE load_id=%s AND assignment_key=%s",
+                        (load_id, assignment_key),
+                    )
+                    connection.execute(
+                        "DELETE FROM serving_coach_citations "
+                        "WHERE load_id=%s AND assignment_key=%s",
+                        (load_id, assignment_key),
+                    )
+                    connection.execute(
+                        "DELETE FROM serving_coach_assignments "
+                        "WHERE load_id=%s AND assignment_key=%s",
+                        (load_id, assignment_key),
+                    )
+                    connection.execute(
+                        "DELETE FROM serving_qb_seasons WHERE load_id=%s AND player_id=%s",
+                        (load_id, player_id),
+                    )
+                    connection.execute(
+                        "DELETE FROM serving_players WHERE load_id=%s AND player_id=%s",
+                        (load_id, player_id),
+                    )
+                    connection.execute(
+                        "DELETE FROM serving_coaches WHERE load_id=%s AND coach_id IN (%s,%s)",
+                        (load_id, coach_id, alternate_coach_id),
+                    )
+                    connection.execute(
+                        "DELETE FROM serving_teams WHERE load_id=%s AND team_id IN (%s,%s)",
+                        (load_id, team_id, alternate_team_id),
                     )
 
     def test_interval_basis_shared_duty_and_warmup_filter(self) -> None:
@@ -238,34 +377,110 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
             from nfl_coaching_impact import serving
 
             with tempfile.TemporaryDirectory(prefix="c7-manual-") as directory:
-                changed_root = Path(directory)
-                shutil.copytree(ROOT / "data/manual", changed_root / "data/manual")
+                changed_root = self._copy_project_inputs(directory)
                 coaches_path = changed_root / "data/manual/coaches.csv"
                 coaches_path.write_text(
-                    coaches_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+                    coaches_path.read_text(encoding="utf-8").replace(
+                        "Aaron Glenn,aaron-glenn", "Aaron Glenn Snapshot,aaron-glenn", 1
+                    ),
+                    encoding="utf-8",
                 )
-                changed_digest, changed_records, changed_paths = serving._manual_manifest(
-                    changed_root
+                snapshot = serving._manual_snapshot(changed_root)
+                rebuilt = load_serving_database(url, changed_root)
+                self.assertNotEqual(initial.load_id, rebuilt.load_id)
+                self.assertFalse(rebuilt.reused_existing)
+                with psycopg.connect(url) as connection:
+                    self.assertEqual(
+                        connection.execute("SELECT count(*) FROM serving_loads").fetchone()[0], 2
+                    )
+                    digest, manifest_digest, canonical_name = connection.execute(
+                        "SELECT l.manual_manifest_sha256, m.manifest->>'sha256', c.canonical_name "
+                        "FROM serving_loads l JOIN serving_pipeline_manifests m "
+                        "ON m.load_id=l.load_id AND m.pipeline_name='manual_inputs' "
+                        "JOIN serving_coaches c ON c.load_id=l.load_id "
+                        "WHERE l.load_id=%s AND c.coach_id='coach-aaron-glenn'",
+                        (rebuilt.load_id,),
+                    ).fetchone()
+                    self.assertEqual((digest, manifest_digest), (snapshot.digest, snapshot.digest))
+                    self.assertEqual(canonical_name, "Aaron Glenn Snapshot")
+        finally:
+            self._drop_database(database)
+
+    def test_midload_manual_change_fails_closed_and_restarts_with_exact_bytes(self) -> None:
+        database = f"nfl_c7_manual_race_{secrets.token_hex(5)}"
+        url = self._create_database(database)
+        try:
+            initial = load_serving_database(url, ROOT)
+            from nfl_coaching_impact import serving
+
+            with tempfile.TemporaryDirectory(prefix="c7-manual-race-") as directory:
+                changed_root = self._copy_project_inputs(directory)
+                coaches_path = changed_root / "data/manual/coaches.csv"
+                coaches_path.write_text(
+                    coaches_path.read_text(encoding="utf-8").replace(
+                        "Aaron Glenn,aaron-glenn", "Aaron Glenn Candidate,aaron-glenn", 1
+                    ),
+                    encoding="utf-8",
                 )
-                with patch.object(
-                    serving,
-                    "_manual_manifest",
-                    return_value=(changed_digest, changed_records, changed_paths),
+                candidate_snapshot = serving._manual_snapshot(changed_root)
+                versions, _, _ = serving._source_tables(changed_root)
+                candidate_load_id = serving._serving_load_id(versions, candidate_snapshot.digest)
+                original_insert = serving._insert_frames
+
+                def mutate_then_insert(*args, **kwargs):
+                    coaches_path.write_text(
+                        coaches_path.read_text(encoding="utf-8").replace(
+                            "Aaron Glenn Candidate,aaron-glenn",
+                            "Aaron Glenn Restarted,aaron-glenn",
+                            1,
+                        ),
+                        encoding="utf-8",
+                    )
+                    return original_insert(*args, **kwargs)
+
+                with (
+                    patch.object(serving, "_insert_frames", side_effect=mutate_then_insert),
+                    self.assertRaises(PipelineError),
                 ):
-                    rebuilt = load_serving_database(url, ROOT)
-            self.assertNotEqual(initial.load_id, rebuilt.load_id)
-            self.assertFalse(rebuilt.reused_existing)
-            with psycopg.connect(url) as connection:
+                    load_serving_database(url, changed_root)
+                with psycopg.connect(url) as connection:
+                    self.assertEqual(
+                        str(
+                            connection.execute(
+                                "SELECT load_id FROM serving_publication"
+                            ).fetchone()[0]
+                        ),
+                        initial.load_id,
+                    )
+                    self.assertEqual(
+                        connection.execute(
+                            "SELECT count(*) FROM serving_loads WHERE load_id=%s",
+                            (candidate_load_id,),
+                        ).fetchone()[0],
+                        0,
+                    )
+                    self.assertEqual(
+                        connection.execute(
+                            "SELECT count(*) FROM serving_coaches WHERE load_id=%s",
+                            (candidate_load_id,),
+                        ).fetchone()[0],
+                        0,
+                    )
+                restarted_snapshot = serving._manual_snapshot(changed_root)
+                restarted = load_serving_database(url, changed_root)
                 self.assertEqual(
-                    connection.execute("SELECT count(*) FROM serving_loads").fetchone()[0], 2
+                    restarted.load_id,
+                    str(serving._serving_load_id(versions, restarted_snapshot.digest)),
                 )
-                self.assertEqual(
-                    connection.execute(
-                        "SELECT count(*) FROM serving_pipeline_manifests "
-                        "WHERE pipeline_name = 'manual_inputs'"
-                    ).fetchone()[0],
-                    2,
-                )
+                with psycopg.connect(url) as connection:
+                    digest, canonical_name = connection.execute(
+                        "SELECT l.manual_manifest_sha256, c.canonical_name "
+                        "FROM serving_loads l JOIN serving_coaches c ON c.load_id=l.load_id "
+                        "WHERE l.load_id=%s AND c.coach_id='coach-aaron-glenn'",
+                        (restarted.load_id,),
+                    ).fetchone()
+                    self.assertEqual(digest, restarted_snapshot.digest)
+                    self.assertEqual(canonical_name, "Aaron Glenn Restarted")
         finally:
             self._drop_database(database)
 
@@ -273,7 +488,17 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         revision = (ROOT / "db/migrations/versions/0001_checkpoint7_schema.py").read_text()
         self.assertIn("0001_checkpoint7_schema.sql", revision)
         self.assertNotIn('parents[2] / "schema.sql"', revision)
-        self.assertTrue((ROOT / "db/migrations/versions/0001_checkpoint7_schema.sql").is_file())
+        snapshot = ROOT / "db/migrations/versions/0001_checkpoint7_schema.sql"
+        self.assertTrue(snapshot.is_file())
+        self.assertEqual(
+            hashlib.sha256(snapshot.read_bytes()).hexdigest(),
+            "73ed452bc55d7592756dd91e2b11bfd2c543bb7cd84de3a927c70967b1149c29",
+        )
+        integrity_revision = ROOT / "db/migrations/versions/0002_checkpoint7_integrity.py"
+        integrity_sql = ROOT / "db/migrations/versions/0002_checkpoint7_integrity.sql"
+        self.assertTrue(integrity_revision.is_file())
+        self.assertTrue(integrity_sql.is_file())
+        self.assertIn("0002_checkpoint7_integrity.sql", integrity_revision.read_text())
 
     def test_model_version_mismatch_fails_before_loading(self) -> None:
         from nfl_coaching_impact import serving
@@ -303,19 +528,6 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
             old_load_count = connection.execute("SELECT count(*) FROM serving_loads").fetchone()[0]
         from nfl_coaching_impact import serving
 
-        digest, records, paths = serving._manual_manifest(ROOT)
-        failed_digest = "failed-" + digest
-        identity = "|".join(
-            (
-                SCHEMA_VERSION,
-                LOADER_VERSION,
-                API_CONTRACT_VERSION,
-                *self.first.versions.__dict__.values(),
-                failed_digest,
-            )
-        )
-        failed_load = uuid.uuid5(PUBLICATION_NAMESPACE, identity)
-
         def insert_then_fail(connection, load_id, *_args):
             connection.execute(
                 "INSERT INTO serving_teams VALUES (%s,'partial','PAR','Partial',NULL,'{}')",
@@ -323,12 +535,23 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
             )
             raise RuntimeError("boom")
 
-        with (
-            patch.object(serving, "_manual_manifest", return_value=(failed_digest, records, paths)),
-            patch.object(serving, "_insert_frames", side_effect=insert_then_fail),
-            self.assertRaises(RuntimeError),
-        ):
-            load_serving_database(self.url, ROOT)
+        with tempfile.TemporaryDirectory(prefix="c7-rollback-") as directory:
+            changed_root = self._copy_project_inputs(directory)
+            coaches_path = changed_root / "data/manual/coaches.csv"
+            coaches_path.write_text(
+                coaches_path.read_text(encoding="utf-8").replace(
+                    "Aaron Glenn,aaron-glenn", "Aaron Glenn Rollback,aaron-glenn", 1
+                ),
+                encoding="utf-8",
+            )
+            snapshot = serving._manual_snapshot(changed_root)
+            versions, _, _ = serving._source_tables(changed_root)
+            failed_load = serving._serving_load_id(versions, snapshot.digest)
+            with (
+                patch.object(serving, "_insert_frames", side_effect=insert_then_fail),
+                self.assertRaises(RuntimeError),
+            ):
+                load_serving_database(self.url, changed_root)
         with psycopg.connect(self.url) as connection:
             self.assertEqual(
                 connection.execute("SELECT load_id FROM serving_publication").fetchone()[0],

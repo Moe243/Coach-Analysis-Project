@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import math
 import uuid
@@ -19,8 +20,8 @@ from psycopg.types.json import Jsonb
 from .errors import PipelineError
 from .pipeline import _validate_existing_version
 
-SCHEMA_VERSION = "checkpoint-7.1"
-LOADER_VERSION = "serving-loader-v2"
+SCHEMA_VERSION = "checkpoint-7.2"
+LOADER_VERSION = "serving-loader-v3"
 API_CONTRACT_VERSION = "api-v1.1"
 PUBLICATION_NAMESPACE = uuid.UUID("c79812ad-1480-48ec-9972-e94b6f158a31")
 
@@ -40,6 +41,14 @@ class ServingLoadResult:
     versions: ServingVersions
     reused_existing: bool
     row_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class ManualInputSnapshot:
+    digest: str
+    manifest: dict[str, dict[str, Any]]
+    paths: tuple[Path, ...]
+    rows: dict[str, list[dict[str, str]]]
 
 
 def _latest(root: Path) -> tuple[str, Path]:
@@ -81,9 +90,12 @@ def _payload(row: dict[str, Any]) -> Jsonb:
     return Jsonb({key: _json_value(value) for key, value in row.items()})
 
 
-def _csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+def _csv_bytes(content: bytes, path: Path) -> list[dict[str, str]]:
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise PipelineError(f"manual CSV is not valid UTF-8: {path}") from error
+    return list(csv.DictReader(io.StringIO(text, newline="")))
 
 
 def _manifest_digest(paths: list[Path]) -> str:
@@ -94,19 +106,54 @@ def _manifest_digest(paths: list[Path]) -> str:
     return digest.hexdigest()
 
 
-def _manual_manifest(project_root: Path) -> tuple[str, dict[str, dict[str, Any]], list[Path]]:
+def _manual_snapshot(project_root: Path) -> ManualInputSnapshot:
     manual = project_root / "data" / "manual"
-    paths = sorted(manual.glob("*.csv"))
+    paths = tuple(sorted(manual.glob("*.csv")))
     if not paths:
         raise PipelineError(f"no manual CSV inputs found: {manual}")
+    captured = {path.name: path.read_bytes() for path in paths}
     records = {
         path.name: {
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            "byte_size": path.stat().st_size,
+            "sha256": hashlib.sha256(captured[path.name]).hexdigest(),
+            "byte_size": len(captured[path.name]),
         }
         for path in paths
     }
-    return _manifest_digest(paths), records, paths
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(path.name.encode())
+        digest.update(captured[path.name])
+    rows = {path.name: _csv_bytes(captured[path.name], path) for path in paths}
+    return ManualInputSnapshot(digest.hexdigest(), records, paths, rows)
+
+
+def _assert_manual_snapshot_unchanged(snapshot: ManualInputSnapshot) -> None:
+    manual = snapshot.paths[0].parent
+    current_paths = tuple(sorted(manual.glob("*.csv")))
+    if current_paths != snapshot.paths:
+        raise PipelineError("manual CSV input set changed during serving load")
+    changes = []
+    for path in snapshot.paths:
+        content = path.read_bytes()
+        expected = snapshot.manifest[path.name]
+        actual_digest = hashlib.sha256(content).hexdigest()
+        if actual_digest != expected["sha256"] or len(content) != expected["byte_size"]:
+            changes.append(path.name)
+    if changes:
+        raise PipelineError(f"manual CSV inputs changed during serving load: {changes}")
+
+
+def _serving_load_id(versions: ServingVersions, manual_digest: str) -> uuid.UUID:
+    identity = "|".join(
+        (
+            SCHEMA_VERSION,
+            LOADER_VERSION,
+            API_CONTRACT_VERSION,
+            *versions.__dict__.values(),
+            manual_digest,
+        )
+    )
+    return uuid.uuid5(PUBLICATION_NAMESPACE, identity)
 
 
 def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any], list[Path]]:
@@ -180,7 +227,7 @@ def _validate_version_contracts(frames: dict[str, Any], versions: ServingVersion
 
 
 def _validate_sources(
-    frames: dict[str, Any], project_root: Path, team_by_abbr: dict[str, str]
+    frames: dict[str, Any], manual: ManualInputSnapshot, team_by_abbr: dict[str, str]
 ) -> None:
     contracts = {
         "teams": ({"team_id", "team_abbr", "team_name"}, ["team_id"]),
@@ -229,9 +276,8 @@ def _validate_sources(
     )
     if invalid_fraction.height:
         raise PipelineError("coach exposures contain invalid fractional exposure")
-    manual = project_root / "data" / "manual"
-    assignments = _csv(manual / "coaching_assignments.csv")
-    citations = _csv(manual / "coach_assignment_sources.csv")
+    assignments = manual.rows["coaching_assignments.csv"]
+    citations = manual.rows["coach_assignment_sources.csv"]
     cited = {row["assignment_key"] for row in citations}
     unsupported = [
         row["assignment_key"]
@@ -282,24 +328,14 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
     """Validate and atomically publish all checkpoint-seven serving facts."""
 
     versions, frames, manifest_paths = _source_tables(project_root)
+    manual = _manual_snapshot(project_root)
     team_by_abbr = dict(frames["teams"].select("team_abbr", "team_id").iter_rows())
-    _validate_sources(frames, project_root, team_by_abbr)
-    manual_digest, manual_manifest, manual_paths = _manual_manifest(project_root)
-    identity = "|".join(
-        (
-            SCHEMA_VERSION,
-            LOADER_VERSION,
-            API_CONTRACT_VERSION,
-            *versions.__dict__.values(),
-            manual_digest,
-        )
-    )
-    load_id = uuid.uuid5(PUBLICATION_NAMESPACE, identity)
-    manual = project_root / "data" / "manual"
-    coaches = _csv(manual / "coaches.csv")
-    assignments = _csv(manual / "coaching_assignments.csv")
-    citations = _csv(manual / "coach_assignment_sources.csv")
-    reviews = _csv(manual / "coaching_review_queue.csv")
+    _validate_sources(frames, manual, team_by_abbr)
+    load_id = _serving_load_id(versions, manual.digest)
+    coaches = manual.rows["coaches.csv"]
+    assignments = manual.rows["coaching_assignments.csv"]
+    citations = manual.rows["coach_assignment_sources.csv"]
+    reviews = manual.rows["coaching_review_queue.csv"]
     counts = {
         name: frame.height for name, frame in frames.items() if isinstance(frame, pl.DataFrame)
     }
@@ -333,6 +369,7 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                 }
                 if any(value == 0 for value in loaded_counts.values()):
                     raise PipelineError(f"existing serving load is incomplete: {loaded_counts}")
+                _assert_manual_snapshot_unchanged(manual)
                 connection.execute(
                     "INSERT INTO serving_publication (publication_id, load_id) VALUES (1, %s) "
                     "ON CONFLICT (publication_id) DO UPDATE SET "
@@ -357,8 +394,10 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                     versions.expected_model,
                     versions.coach,
                     versions.coach_model,
-                    _manifest_digest([*manifest_paths, *manual_paths]),
-                    manual_digest,
+                    hashlib.sha256(
+                        (_manifest_digest(manifest_paths) + manual.digest).encode()
+                    ).hexdigest(),
+                    manual.digest,
                 ),
             )
             _insert_frames(
@@ -372,9 +411,10 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                 team_by_abbr,
                 project_root,
                 versions,
-                manual_digest,
-                manual_manifest,
+                manual.digest,
+                manual.manifest,
             )
+            _assert_manual_snapshot_unchanged(manual)
             connection.execute(
                 "INSERT INTO serving_publication (publication_id, load_id) VALUES (1, %s) "
                 "ON CONFLICT (publication_id) DO UPDATE SET "

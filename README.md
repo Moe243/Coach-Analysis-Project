@@ -136,7 +136,7 @@ python3 -m pip install -e '.[application,dev]'
 make PYTHON=.venv/bin/python test-postgres
 ```
 
-The runner starts a bundled isolated PostgreSQL server when `TEST_DATABASE_URL` is unset. It proves immutable/repeatable migrations, complete exposure lineage, citation guards, old-publication preservation on rollback, manual-input identity changes, idempotency, deterministic clean loads across all eight views, stable pagination, serving filters, and API behavior. An external disposable PostgreSQL URL may be supplied instead.
+The runner starts a bundled isolated PostgreSQL server when `TEST_DATABASE_URL` is unset. It proves immutable/repeatable migrations, bidirectional exposure-assignment lineage, citation guards, old-publication preservation on rollback, exact-byte manual-input identity and mid-load mutation rejection, idempotency, deterministic clean loads across all eight views, stable pagination, serving filters, and API behavior. An external disposable PostgreSQL URL may be supplied instead.
 
 To repeat the network smoke checks:
 
