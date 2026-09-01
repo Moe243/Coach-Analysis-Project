@@ -1276,6 +1276,22 @@ td > span {
   color: var(--muted);
   font-size: 0.72rem;
 }
+.connection-assignments {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+.connection-assignments > div {
+  display: grid;
+  gap: 0.3rem;
+}
+.connection-assignments small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
 
 .methodology-page .page-heading {
   max-width: 960px;
@@ -1441,5 +1457,327 @@ code {
   .method-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+/* Relationship Explorer */
+.explorer-primary-controls {
+  grid-template-columns:
+    minmax(150px, 0.8fr) minmax(220px, 1.6fr)
+    repeat(3, minmax(135px, 0.8fr)) minmax(150px, 0.9fr);
+  margin-bottom: 1rem;
+}
+.explorer-primary-controls .explorer-focus-control {
+  min-width: 220px;
+}
+.explorer-advanced {
+  position: relative;
+  align-self: end;
+}
+.explorer-advanced > summary {
+  height: 42px;
+  padding: 0 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ink);
+  background: #f9faf8;
+  border: 1px solid #ccd4cf;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  list-style: none;
+}
+.explorer-advanced > summary svg {
+  width: 16px;
+}
+.explorer-advanced-grid {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.45rem);
+  z-index: 30;
+  width: min(760px, 88vw);
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 1rem;
+  background: white;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.explorer-advanced-grid fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.explorer-advanced-grid legend {
+  margin-bottom: 0.55rem;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.explorer-advanced-grid fieldset > label {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.explorer-advanced-grid input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+.explorer-advanced-grid .stacked-input {
+  display: grid;
+  grid-template-columns: 1fr 88px;
+}
+.explorer-advanced-grid .stacked-input input {
+  width: 88px;
+  height: 32px;
+  padding: 0 0.4rem;
+}
+.explorer-mode-strip {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: white;
+  background: var(--ink-soft);
+}
+.explorer-mode-strip span,
+.explorer-mode-strip strong,
+.explorer-mode-strip p {
+  display: block;
+}
+.explorer-mode-strip span {
+  color: #63d9aa;
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.explorer-mode-strip strong {
+  margin-top: 0.18rem;
+  font-size: 0.92rem;
+}
+.explorer-mode-strip p {
+  margin: 0.2rem 0 0;
+  color: #aab6c7;
+  font-size: 0.72rem;
+}
+.explorer-actions,
+.accessible-explorer-navigation,
+.relationship-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+.explorer-actions .button {
+  color: white;
+  border-color: #455a75;
+}
+.explorer-actions .button-secondary {
+  color: var(--ink);
+}
+.explorer-actions button:disabled,
+.accessible-explorer-navigation button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.network-legend .legend-qb {
+  transform: rotate(45deg);
+  border-radius: 1px;
+  background: var(--blue);
+}
+.selection-relationship {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+.selection-relationship > strong,
+.selection-relationship > small {
+  display: block;
+}
+.selection-relationship > small {
+  margin: 0.22rem 0 0.55rem;
+  color: var(--muted);
+}
+.relationship-metrics {
+  margin: 0.7rem 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.45rem;
+}
+.relationship-metrics div {
+  padding: 0.45rem;
+  background: #f6f8f5;
+}
+.relationship-metrics dt {
+  color: var(--muted);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+}
+.relationship-metrics dd {
+  margin: 0.2rem 0 0;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+.accessible-entity-list {
+  margin-bottom: 0.85rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.accessible-entity-list article {
+  min-width: 0;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.28rem;
+  background: white;
+  border: 1px solid var(--line);
+}
+.accessible-entity-list article.is-selected {
+  border-color: var(--field);
+  box-shadow: inset 0 0 0 2px var(--field-pale);
+}
+.accessible-entity-list article > span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+}
+.accessible-entity-list article > strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+.accessible-entity-list article > div {
+  margin-top: 0.3rem;
+  display: flex;
+  gap: 0.7rem;
+}
+.accessible-entity-list button,
+.relationship-actions button {
+  padding: 0;
+  color: var(--field);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.relationship-card-grid article {
+  min-width: 0;
+}
+.relationship-card-grid h3 {
+  margin: 0.4rem 0 0.7rem;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+.relationship-card-grid .relationship-grain {
+  color: var(--field);
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.relationship-card-grid .relationship-metrics {
+  grid-template-columns: 1fr;
+}
+.relationship-card-grid > article > small {
+  display: block;
+  margin-top: 0.6rem;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.relationship-actions {
+  margin-top: 0.8rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+.relationship-citations {
+  margin: 0.55rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.relationship-citations li {
+  display: grid;
+  gap: 0.15rem;
+}
+.relationship-citations a {
+  color: var(--field);
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+.relationship-citations small {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+.accessible-explorer-navigation {
+  margin-top: 1rem;
+}
+
+@media (max-width: 1120px) {
+  .explorer-primary-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .accessible-entity-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .network-canvas {
+    min-height: 390px;
+    height: 52vh;
+  }
+  .explorer-mode-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .explorer-advanced-grid {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    top: 7rem;
+    width: auto;
+    max-height: calc(100vh - 9rem);
+    overflow: auto;
+  }
+  .accessible-entity-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .explorer-primary-controls,
+  .explorer-advanced-grid,
+  .accessible-entity-list {
+    grid-template-columns: 1fr;
+  }
+  .explorer-primary-controls .explorer-focus-control {
+    min-width: 0;
+  }
+  .explorer-actions,
+  .accessible-explorer-navigation {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .selection-panel {
+    order: -1;
+  }
+  .network-canvas {
+    min-height: 320px;
+    height: 48vh;
   }
 }

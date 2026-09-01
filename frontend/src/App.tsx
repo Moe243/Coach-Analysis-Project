@@ -37,7 +37,7 @@ export function App() {
             <Suspense
               fallback={
                 <section className="page">
-                  <LoadingState label="Loading coaching network" />
+                  <LoadingState label="Loading Relationship Explorer" />
                 </section>
               }
             >

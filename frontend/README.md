@@ -17,10 +17,10 @@ The default Vite proxy sends `/api` to `http://127.0.0.1:8000`. Set `VITE_API_PR
 
 ## Routes
 
-- `/statistics`: URL-synchronized QB-team-season search, filters, ordering, expanded metrics, and pagination
+- `/statistics`: URL-synchronized QB-team-season search, filters, ordering, expanded metrics, and pagination; coaching filters identify team-season context rather than exact weekly exposure
 - `/qbs/:playerId`: actual/expected/PAE history and source-backed coaching environments
 - `/coaches/:coachId`: role intervals, exploratory impact/suppression, connected QB contexts, and citations
-- `/network`: focused season/team staff graph with an equivalent semantic connection list
+- `/network`: URL-backed Relationship Explorer with Coach Journey, QB Journey, Team History, and bounded Full Network; deterministic chronological layouts, canonical selection/focus history, source-backed assignment intervals, complete-key QB PAE context, and a keyboard-equivalent relationship surface
 - `/methodology`: metric, evidence, eligibility, uncertainty, and version interpretation
 
 ## Quality commands
@@ -30,8 +30,8 @@ make frontend-check
 make frontend-e2e
 ```
 
-The first command runs ESLint, Prettier verification, TypeScript checking, Vitest, and the production Vite build. The end-to-end command expects the local checkpoint-seven API at `http://127.0.0.1:8000`; override it with `E2E_API_PROXY_TARGET`. It starts a private Vite server and runs the six required real-publication journeys plus keyboard/responsive behavior at desktop, tablet, and mobile widths. Install Chromium once with `pnpm --filter nfl-coaching-impact-web exec playwright install chromium` if it is not already available.
+The first command runs ESLint, Prettier verification, TypeScript checking, Vitest, and the production Vite build. The end-to-end command expects the local checkpoint-seven API at `http://127.0.0.1:8000`; override it with `E2E_API_PROXY_TARGET`. It starts a private Vite server and exercises the statistics/profile journeys plus all four Relationship Explorer modes, URL restoration, selection, Focus/Reset/Back, evidence/role filtering, the 413 complete-failure state, and keyboard/responsive behavior at desktop, tablet, and mobile widths. Install Chromium once with `pnpm --filter nfl-coaching-impact-web exec playwright install chromium` if it is not already available.
 
-Tests cover request serialization and cancellation, URL filters, empty/error/loading states, pagination, detail routes, missing values, suppression labels, citation links, network evidence metadata, and automated accessibility checks. End-to-end coverage searches and opens QB and coach profiles, filters team/season and verified network edges, reads PAE methodology, and verifies suppressed coach-impact language.
+Tests cover request serialization and cancellation, URL filters including expanded metrics, multi-query retry, empty/error/loading states, pagination, detail routes, missing values, suppression labels, citation links, relationship evidence metadata, deterministic graph transforms, selection reconstruction/highlighting, and automated accessibility checks. Relationship fixtures preserve canonical multi-year/multi-team identities, multi-team same-season QB rows, in-season changes, interim/shared/provisional evidence, missing PAE, and complete-key PAE attachment. Coach-specific filters never erase independent QB facts.
 
 The frontend is not deployed and has no authentication. Public hosting, production reverse-proxy configuration, visual-regression automation, and cross-browser device-lab coverage are deferred to checkpoint nine.

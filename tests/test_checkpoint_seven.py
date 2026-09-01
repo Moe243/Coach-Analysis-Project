@@ -595,7 +595,479 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code, 200)
         response = self.client.get("/versions")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["api_contract_version"], "api-v1.1")
+        self.assertEqual(response.json()["api_contract_version"], "api-v1.2")
+
+    def test_relationship_explorer_requires_a_bounded_valid_scope(self) -> None:
+        invalid = (
+            {"mode": "coach_journey"},
+            {"mode": "qb_journey"},
+            {"mode": "team_history"},
+            {"mode": "full_network", "start_season": 2020, "end_season": 2024},
+            {
+                "mode": "full_network",
+                "team_id": "missing",
+                "start_season": 2019,
+                "end_season": 2024,
+            },
+            {
+                "mode": "team_history",
+                "team_id": "missing",
+                "start_season": 2025,
+                "end_season": 2024,
+            },
+            {
+                "mode": "team_history",
+                "team_id": "missing",
+                "verification_status": "provisional",
+            },
+        )
+        for params in invalid:
+            with self.subTest(params=params):
+                self.assertEqual(
+                    self.client.get("/relationships/explorer", params=params).status_code,
+                    422,
+                )
+        self.assertEqual(
+            self.client.get(
+                "/relationships/explorer",
+                params={"mode": "team_history", "team_id": "missing", "role": "bad"},
+            ).status_code,
+            422,
+        )
+        empty = self.client.get(
+            "/relationships/explorer",
+            params={"mode": "team_history", "team_id": "missing"},
+        )
+        self.assertEqual(empty.status_code, 200)
+        self.assertEqual(empty.json()["nodes"], [])
+        self.assertEqual(empty.json()["relationships"], [])
+
+    def test_relationship_team_anchors_preserve_qbs_independent_of_coach_filters(
+        self,
+    ) -> None:
+        with psycopg.connect(self.url) as connection:
+            role_case = connection.execute(
+                "SELECT qs.load_id::text, qs.team_id, qs.season, qs.player_id, "
+                "pae.expected_epa_per_dropback, pae.actual_epa_per_dropback, "
+                "pae.performance_above_expectation "
+                "FROM api_qb_statistics qs JOIN api_qb_pae pae "
+                "ON pae.load_id=qs.load_id AND pae.player_id=qs.player_id "
+                "AND pae.team_id=qs.team_id AND pae.season=qs.season "
+                "WHERE NOT EXISTS (SELECT 1 FROM api_coaching_assignments a "
+                "WHERE a.team_id=qs.team_id AND a.season=qs.season "
+                "AND a.role='play_caller') "
+                "ORDER BY qs.season, qs.team_id, qs.player_id LIMIT 1"
+            ).fetchone()
+            provisional_case = connection.execute(
+                "SELECT qs.team_id, qs.season, min(qs.player_id) "
+                "FROM api_qb_statistics qs "
+                "WHERE NOT EXISTS (SELECT 1 FROM api_coaching_assignments a "
+                "WHERE a.team_id=qs.team_id AND a.season=qs.season "
+                "AND a.verification_status='provisional') "
+                "GROUP BY qs.team_id, qs.season "
+                "ORDER BY qs.season, qs.team_id LIMIT 1"
+            ).fetchone()
+            filtered_case = connection.execute(
+                "SELECT qs.team_id, qs.season FROM api_qb_statistics qs "
+                "WHERE EXISTS (SELECT 1 FROM api_coaching_assignments a "
+                "WHERE a.team_id=qs.team_id AND a.season=qs.season "
+                "AND a.role='head_coach' AND a.verification_status='verified') "
+                "ORDER BY qs.season, qs.team_id LIMIT 1"
+            ).fetchone()
+
+        load_id, team_id, season, player_id, expected, actual, pae = role_case
+        for mode in ("team_history", "full_network"):
+            with self.subTest(mode=mode):
+                response = self.client.get(
+                    "/relationships/explorer",
+                    params={
+                        "mode": mode,
+                        "team_id": team_id,
+                        "start_season": season,
+                        "end_season": season,
+                        "role": "play_caller",
+                        "include_provisional": True,
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                body = response.json()
+                coach_edges = [
+                    row
+                    for row in body["relationships"]
+                    if row["relationship_type"] == "coach_assignment"
+                ]
+                qb_edges = [
+                    row
+                    for row in body["relationships"]
+                    if row["relationship_type"] == "qb_team_season"
+                ]
+                self.assertEqual(coach_edges, [])
+                target = next(row for row in qb_edges if row["player_id"] == player_id)
+                self.assertEqual(target["publication_version"], load_id)
+                self.assertEqual((target["team_id"], target["season"]), (team_id, season))
+                self.assertAlmostEqual(target["expected_epa_per_dropback"], expected)
+                self.assertAlmostEqual(target["actual_epa_per_dropback"], actual)
+                self.assertAlmostEqual(target["performance_above_expectation"], pae)
+
+        provisional_team, provisional_season, provisional_player = provisional_case
+        provisional = self.client.get(
+            "/relationships/explorer",
+            params={
+                "mode": "team_history",
+                "team_id": provisional_team,
+                "start_season": provisional_season,
+                "end_season": provisional_season,
+                "verification_status": "provisional",
+                "include_provisional": True,
+            },
+        )
+        self.assertEqual(provisional.status_code, 200)
+        provisional_relationships = provisional.json()["relationships"]
+        self.assertFalse(
+            any(row["relationship_type"] == "coach_assignment" for row in provisional_relationships)
+        )
+        self.assertTrue(
+            any(
+                row["relationship_type"] == "qb_team_season"
+                and row["player_id"] == provisional_player
+                for row in provisional_relationships
+            )
+        )
+
+        filtered_team, filtered_season = filtered_case
+        filtered = self.client.get(
+            "/relationships/explorer",
+            params={
+                "mode": "team_history",
+                "team_id": filtered_team,
+                "start_season": filtered_season,
+                "end_season": filtered_season,
+                "role": "head_coach",
+                "verification_status": "verified",
+            },
+        )
+        self.assertEqual(filtered.status_code, 200)
+        filtered_relationships = filtered.json()["relationships"]
+        filtered_coaches = [
+            row for row in filtered_relationships if row["relationship_type"] == "coach_assignment"
+        ]
+        self.assertGreater(len(filtered_coaches), 0)
+        self.assertTrue(
+            all(
+                row["role"] == "head_coach" and row["verification_status"] == "verified"
+                for row in filtered_coaches
+            )
+        )
+        self.assertTrue(
+            any(row["relationship_type"] == "qb_team_season" for row in filtered_relationships)
+        )
+
+    def test_relationship_explorer_rejects_node_and_relationship_cap_overflow(self) -> None:
+        with psycopg.connect(self.url, autocommit=True) as connection:
+            load_id = connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
+            team_id, season = connection.execute(
+                "SELECT team_id, season FROM api_qb_statistics ORDER BY season, team_id LIMIT 1"
+            ).fetchone()
+            for label, count in (("nodes", 1_001), ("relationships", 2_001)):
+                prefix = f"relationship-cap-{label}-{secrets.token_hex(4)}"
+                player_ids = [f"{prefix}-{index:04d}" for index in range(count)]
+                try:
+                    with connection.transaction():
+                        with connection.cursor() as cursor:
+                            cursor.executemany(
+                                "INSERT INTO serving_players "
+                                "(load_id,player_id,display_name,position,payload) "
+                                "VALUES (%s,%s,%s,'QB','{}')",
+                                [
+                                    (load_id, player, f"Cap Fixture {index:04d}")
+                                    for index, player in enumerate(player_ids)
+                                ],
+                            )
+                            cursor.executemany(
+                                "INSERT INTO serving_qb_seasons "
+                                "(load_id,player_id,team_id,season,scope,games,starts,dropbacks,"
+                                "epa_per_dropback,cpoe,success_rate,sack_rate,qualifies_default,"
+                                "metric_version,payload) "
+                                "VALUES (%s,%s,%s,%s,'analysis',1,0,1,.01,NULL,.5,.1,false,"
+                                "'cap-fixture','{}')",
+                                [(load_id, player, team_id, season) for player in player_ids],
+                            )
+                    response = self.client.get(
+                        "/relationships/explorer",
+                        params={
+                            "mode": "team_history",
+                            "team_id": team_id,
+                            "start_season": season,
+                            "end_season": season,
+                        },
+                    )
+                    self.assertEqual(response.status_code, 413)
+                    self.assertEqual(
+                        response.json(),
+                        {"detail": "Relationship scope is too large; narrow it"},
+                    )
+                    self.assertNotIn("nodes", response.json())
+                    self.assertNotIn("relationships", response.json())
+                finally:
+                    with connection.transaction():
+                        connection.execute(
+                            "DELETE FROM serving_qb_seasons "
+                            "WHERE load_id=%s AND player_id = ANY(%s)",
+                            (load_id, player_ids),
+                        )
+                        connection.execute(
+                            "DELETE FROM serving_players WHERE load_id=%s AND player_id = ANY(%s)",
+                            (load_id, player_ids),
+                        )
+
+    def test_relationship_explorer_preserves_canonical_coach_and_qb_identity(self) -> None:
+        with psycopg.connect(self.url) as connection:
+            coach_id = connection.execute(
+                "SELECT coach_id FROM api_coaching_assignments "
+                "GROUP BY coach_id HAVING count(DISTINCT season) > 1 "
+                "AND count(DISTINCT team_id) > 1 ORDER BY coach_id LIMIT 1"
+            ).fetchone()[0]
+            player_id = connection.execute(
+                "SELECT player_id FROM api_qb_statistics GROUP BY player_id "
+                "HAVING count(DISTINCT season) > 1 ORDER BY player_id LIMIT 1"
+            ).fetchone()[0]
+
+        coach = self.client.get(
+            "/relationships/explorer",
+            params={
+                "mode": "coach_journey",
+                "coach_id": coach_id,
+                "include_provisional": True,
+            },
+        )
+        self.assertEqual(coach.status_code, 200)
+        coach_body = coach.json()
+        coach_nodes = [row for row in coach_body["nodes"] if row["node_type"] == "coach"]
+        assignments = [
+            row
+            for row in coach_body["relationships"]
+            if row["relationship_type"] == "coach_assignment"
+        ]
+        self.assertEqual([row["coach_id"] for row in coach_nodes], [coach_id])
+        self.assertGreater(len({row["season"] for row in assignments}), 1)
+        self.assertGreater(len({row["team_id"] for row in assignments}), 1)
+        self.assertEqual(len({row["assignment_key"] for row in assignments}), len(assignments))
+
+        qb = self.client.get(
+            "/relationships/explorer",
+            params={"mode": "qb_journey", "player_id": player_id},
+        )
+        self.assertEqual(qb.status_code, 200)
+        qb_body = qb.json()
+        qb_nodes = [row for row in qb_body["nodes"] if row["node_type"] == "quarterback"]
+        qb_edges = [
+            row for row in qb_body["relationships"] if row["relationship_type"] == "qb_team_season"
+        ]
+        self.assertEqual([row["player_id"] for row in qb_nodes], [player_id])
+        self.assertGreater(len({row["season"] for row in qb_edges}), 1)
+        self.assertEqual(
+            len({(row["player_id"], row["team_id"], row["season"]) for row in qb_edges}),
+            len(qb_edges),
+        )
+
+    def test_relationship_explorer_attaches_multi_team_pae_by_complete_key(self) -> None:
+        with psycopg.connect(self.url) as connection:
+            player_id, season = connection.execute(
+                "SELECT player_id, season FROM api_qb_pae GROUP BY player_id, season "
+                "HAVING count(DISTINCT team_id) > 1 ORDER BY season, player_id LIMIT 1"
+            ).fetchone()
+            expected = {
+                row[0]: row[1:]
+                for row in connection.execute(
+                    "SELECT team_id, expected_epa_per_dropback, actual_epa_per_dropback, "
+                    "performance_above_expectation FROM api_qb_pae "
+                    "WHERE player_id=%s AND season=%s ORDER BY team_id",
+                    (player_id, season),
+                ).fetchall()
+            }
+        response = self.client.get(
+            "/relationships/explorer",
+            params={
+                "mode": "qb_journey",
+                "player_id": player_id,
+                "start_season": season,
+                "end_season": season,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        edges = [
+            row
+            for row in response.json()["relationships"]
+            if row["relationship_type"] == "qb_team_season"
+        ]
+        self.assertEqual({row["team_id"] for row in edges}, set(expected))
+        for row in edges:
+            values = expected[row["team_id"]]
+            self.assertAlmostEqual(row["expected_epa_per_dropback"], values[0])
+            self.assertAlmostEqual(row["actual_epa_per_dropback"], values[1])
+            self.assertAlmostEqual(row["performance_above_expectation"], values[2])
+            self.assertEqual(
+                row["relationship_id"],
+                f"qb-team-season:{player_id}:{row['team_id']}:{season}",
+            )
+
+    def test_relationship_explorer_preserves_interval_and_evidence_states(self) -> None:
+        with psycopg.connect(self.url) as connection:
+            oc_team, oc_season = connection.execute(
+                "SELECT team_id, season FROM api_coaching_assignments "
+                "WHERE role='offensive_coordinator' GROUP BY team_id, season "
+                "HAVING count(*) > 1 "
+                "ORDER BY season, team_id LIMIT 1"
+            ).fetchone()
+            interim_team, interim_season, interim_key = connection.execute(
+                "SELECT team_id, season, assignment_key FROM api_coaching_assignments "
+                "WHERE is_interim ORDER BY season, team_id, assignment_key LIMIT 1"
+            ).fetchone()
+            shared_team, shared_season, shared_key = connection.execute(
+                "SELECT team_id, season, assignment_key FROM api_coaching_assignments "
+                "WHERE is_shared ORDER BY season, team_id, assignment_key LIMIT 1"
+            ).fetchone()
+            mixed_team, mixed_season = connection.execute(
+                "SELECT team_id, season FROM api_coaching_assignments "
+                "GROUP BY team_id, season HAVING bool_or(verification_status='verified') "
+                "AND bool_or(verification_status='provisional') "
+                "ORDER BY season, team_id LIMIT 1"
+            ).fetchone()
+
+        def assignment_edges(team_id: str, season: int) -> dict[str, dict[str, object]]:
+            response = self.client.get(
+                "/relationships/explorer",
+                params={
+                    "mode": "team_history",
+                    "team_id": team_id,
+                    "start_season": season,
+                    "end_season": season,
+                    "include_provisional": True,
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            return {
+                row["assignment_key"]: row
+                for row in response.json()["relationships"]
+                if row["relationship_type"] == "coach_assignment"
+            }
+
+        oc_edges = assignment_edges(oc_team, oc_season)
+        self.assertGreater(
+            len([row for row in oc_edges.values() if row["role"] == "offensive_coordinator"]),
+            1,
+        )
+        self.assertGreater(
+            len(
+                {
+                    (row["start_week"], row["end_week"])
+                    for row in oc_edges.values()
+                    if row["role"] == "offensive_coordinator"
+                }
+            ),
+            1,
+        )
+        interim_edges = assignment_edges(interim_team, interim_season)
+        self.assertTrue(interim_edges[interim_key]["is_interim"])
+        shared_edges = assignment_edges(shared_team, shared_season)
+        self.assertTrue(shared_edges[shared_key]["is_shared"])
+        mixed_edges = assignment_edges(mixed_team, mixed_season)
+        self.assertTrue(
+            {"verified", "provisional"}
+            <= {str(row["verification_status"]) for row in mixed_edges.values()}
+        )
+        self.assertTrue(
+            all(row["relationship_id"] == row["assignment_key"] for row in mixed_edges.values())
+        )
+        self.assertTrue(
+            all(
+                row["citations"]
+                for row in mixed_edges.values()
+                if row["verification_status"] == "verified"
+            )
+        )
+
+    def test_relationship_explorer_preserves_missing_pae_and_distinct_sample_labels(self) -> None:
+        suffix = secrets.token_hex(5)
+        player_id = f"relationship-missing-pae-{suffix}"
+        with psycopg.connect(self.url, autocommit=True) as connection:
+            load_id = connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
+            team_id, season = connection.execute(
+                "SELECT team_id, season FROM api_coaching_assignments "
+                "ORDER BY season DESC, team_id LIMIT 1"
+            ).fetchone()
+            try:
+                with connection.transaction():
+                    connection.execute(
+                        "INSERT INTO serving_players VALUES (%s,%s,'Missing PAE QB','QB','{}')",
+                        (load_id, player_id),
+                    )
+                    connection.execute(
+                        "INSERT INTO serving_qb_seasons VALUES "
+                        "(%s,%s,%s,%s,'analysis',1,0,12,.025,NULL,.5,.1,false,'fixture','{}')",
+                        (load_id, player_id, team_id, season),
+                    )
+                response = self.client.get(
+                    "/relationships/explorer",
+                    params={
+                        "mode": "qb_journey",
+                        "player_id": player_id,
+                        "start_season": season,
+                        "end_season": season,
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                edge = next(
+                    row
+                    for row in response.json()["relationships"]
+                    if row["relationship_type"] == "qb_team_season"
+                )
+                self.assertEqual(edge["actual_epa_per_dropback"], 0.025)
+                self.assertIsNone(edge["expected_epa_per_dropback"])
+                self.assertIsNone(edge["performance_above_expectation"])
+                self.assertIsNone(edge["eligibility_status"])
+                self.assertIsNone(edge["reliability"])
+                self.assertFalse(edge["qualifies_default"])
+            finally:
+                with connection.transaction():
+                    connection.execute(
+                        "DELETE FROM serving_qb_seasons WHERE load_id=%s AND player_id=%s",
+                        (load_id, player_id),
+                    )
+                    connection.execute(
+                        "DELETE FROM serving_players WHERE load_id=%s AND player_id=%s",
+                        (load_id, player_id),
+                    )
+
+    def test_relationship_explorer_is_deterministic_versioned_and_noncausal(self) -> None:
+        with psycopg.connect(self.url) as connection:
+            team_id = connection.execute(
+                "SELECT team_id FROM api_coaching_assignments ORDER BY team_id LIMIT 1"
+            ).fetchone()[0]
+            load_id = str(
+                connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
+            )
+        params = {
+            "mode": "team_history",
+            "team_id": team_id,
+            "start_season": 2020,
+            "end_season": 2025,
+            "include_provisional": True,
+        }
+        first = self.client.get("/relationships/explorer", params=params)
+        second = self.client.get("/relationships/explorer", params=params)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json(), second.json())
+        body = first.json()
+        self.assertFalse(body["semantics"]["exact_weekly_overlap"])
+        self.assertIn("within the same season", body["semantics"]["coach_qb_context"])
+        self.assertEqual(body["versions"]["load_id"], load_id)
+        self.assertEqual(body["versions"]["api_contract_version"], "api-v1.2")
+        node_ids = [row["node_id"] for row in body["nodes"]]
+        relationship_ids = [row["relationship_id"] for row in body["relationships"]]
+        self.assertEqual(len(node_ids), len(set(node_ids)))
+        self.assertEqual(len(relationship_ids), len(set(relationship_ids)))
+        self.assertTrue(all(row["publication_version"] == load_id for row in body["relationships"]))
 
     def test_qb_search_profile_pae_filters_and_sorting(self) -> None:
         page = self.client.get("/qbs", params={"search": "Brady", "limit": 2, "sort": "season"})

@@ -111,7 +111,7 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 
 ### Checkpoint-seven serving layer
 
-Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, and coach model/data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. Schema `checkpoint-7.2`, loader `serving-loader-v3`, and API `api-v1.1` are the current contracts. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
+Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, and coach model/data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. Schema `checkpoint-7.2`, loader `serving-loader-v3`, and API `api-v1.2` are the current contracts. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
 
 | Table/view | Grain or contract |
 |---|---|
@@ -128,6 +128,13 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | `api_coach_impact`, `api_coach_comparisons` | Effects plus identification and suppression fields |
 | `api_coaching_assignments`, `api_coaching_network_edges` | Role intervals and staff edges with source/target verification, confidence, shared/provisional flags, full intervals, and overlap bounds |
 | `api_source_citations`, `api_review_queue_summary` | Evidence and unresolved-review counts |
+| `GET /relationships/explorer` coach node | One canonical `coach_id`; serialized node ID is `coach:<coach_id>` |
+| `GET /relationships/explorer` QB node | One canonical GSIS `player_id`; serialized node ID is `qb:<player_id>` |
+| `GET /relationships/explorer` team-season node | One `(team_id, season)`; serialized node ID is `team-season:<team_id>:<season>` |
+| Relationship coach-assignment edge | One `assignment_key`; retains role, weeks, interval basis, verification, confidence, shared/interim/retained/provisional flags, citations, and publication version |
+| Relationship QB-team-season edge | One `(player_id, team_id, season)`; retains dropbacks, actual/expected EPA per dropback, PAE, qualification, eligibility, reliability, out-of-sample status, metric/model/data versions, and publication version. Missing PAE fields remain null. |
+
+Team-history and team-anchored full-network scopes source QB-team-season records independently from `api_qb_statistics`. Coaching role, verification, and provisional filters apply only to coach-assignment relationships; PAE joins retain the complete `(load_id, player_id, team_id, season)` key.
 
 ### Committed checkpoint-four files
 
@@ -203,6 +210,6 @@ The ranking views retain ineligible rows for filtering and transparency, but ass
 
 ## Frontend display contract
 
-Checkpoint eight creates no analytical tables. Its default statistics grain is one published QB-team-season row from `api_qb_statistics`, augmented with the matching `api_qb_pae` row and source-backed staff intervals. `null` remains unavailable; it is never displayed as zero. The interface preserves `data_version`, `metric_version`, `model_version`, `training_cutoff_season`, `eligibility_status`, `reliability_label`, verification/confidence fields, interval bounds and basis, shared/provisional flags, identification and suppression reasons, and coach-specific bootstrap support.
+Checkpoint eight creates no analytical tables. Its default statistics grain is one published QB-team-season row from `api_qb_statistics`, augmented with the matching `api_qb_pae` row and source-backed staff intervals. The Relationship Explorer uses only the node and relationship grains documented above: one canonical coach, one canonical QB, one team-season, one assignment key, and one QB-team-season analytical result. Visual positions, selection, focus, and URL filters are presentation state rather than new data facts. `null` remains unavailable; it is never displayed as zero. The interface preserves `data_version`, `metric_version`, `model_version`, `training_cutoff_season`, `eligibility_status`, `reliability_label`, verification/confidence fields, interval bounds and basis, shared/provisional flags, identification and suppression reasons, and coach-specific bootstrap support.
 
-The coaching network renders `api_coaching_network_edges` without changing its grain. Team nodes are visual context assembled from the edge's team and season, while the accessible edge list remains a direct representation of source/target assignments, overlap bounds, and evidence metadata. Coach-page quarterback links are team-season overlaps filtered to published player position `QB`; they are not a new coach-exposure fact.
+The legacy staff-overlap endpoint remains available, but `/network` now renders `GET /relationships/explorer`. Both Cytoscape and the accessible cards receive the same canonical node and relationship objects; the client does not reconstruct PAE or coaching semantics from separate requests. Coach-page quarterback links remain team-season overlaps filtered to published player position `QB`; they are not a new coach-exposure fact.

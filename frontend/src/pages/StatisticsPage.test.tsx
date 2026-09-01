@@ -1,5 +1,6 @@
 import axe from "axe-core";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { useLocation } from "react-router-dom";
 import { StatisticsPage } from "./StatisticsPage";
 import { installApiFixture, page } from "../test/fixtures";
 import { renderRoute } from "../test/render";
@@ -46,6 +47,41 @@ describe("StatisticsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("retries every required statistics query after a dependency failure", async () => {
+    const fixture = installApiFixture();
+    let failedAssignments = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), "http://app.test").pathname;
+      if (path.endsWith("/assignments") && !failedAssignments) {
+        failedAssignments = true;
+        return new Response(
+          JSON.stringify({ detail: "Assignments unavailable" }),
+          {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+      return fixture(input);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderRoute(<StatisticsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("link", { name: "Test Quarterback" }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      const paths = fetchMock.mock.calls.map(
+        ([input]) => new URL(String(input), "http://app.test").pathname,
+      );
+      expect(
+        paths.filter((path) => path.endsWith("/assignments")),
+      ).toHaveLength(2);
+      expect(paths.filter((path) => path.endsWith("/teams"))).toHaveLength(2);
+      expect(paths.filter((path) => path.endsWith("/qbs"))).toHaveLength(2);
+    });
+  });
+
   it("filters the complete client result by minimum dropbacks", async () => {
     installApiFixture();
     renderRoute(<StatisticsPage />, "/statistics?minDropbacks=700");
@@ -81,15 +117,44 @@ describe("StatisticsPage", () => {
 
   it("reveals expanded metric controls accessibly", async () => {
     installApiFixture();
-    renderRoute(<StatisticsPage />);
+    function LocationProbe() {
+      return <output data-testid="location">{useLocation().search}</output>;
+    }
+    renderRoute(
+      <>
+        <StatisticsPage />
+        <LocationProbe />
+      </>,
+    );
     fireEvent.click(await screen.findByText("More filters"));
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Show expanded metrics" }),
     );
     expect(
-      screen.getByRole("columnheader", { name: "INT rate" }),
+      await screen.findByRole("columnheader", { name: "INT rate" }),
     ).toBeInTheDocument();
     expect(screen.getByText("2.0%")).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("expanded=true");
+  });
+
+  it("restores expanded metrics from the URL", async () => {
+    installApiFixture();
+    renderRoute(<StatisticsPage />, "/statistics?expanded=true");
+    fireEvent.click(await screen.findByText("More filters"));
+    expect(
+      screen.getByRole("checkbox", { name: "Show expanded metrics" }),
+    ).toBeChecked();
+    expect(
+      await screen.findByRole("columnheader", { name: "Success" }),
+    ).toBeInTheDocument();
+  });
+
+  it("describes coach filtering as team-season context rather than exact overlap", async () => {
+    installApiFixture();
+    renderRoute(<StatisticsPage />);
+    expect(
+      await screen.findByText(/do not claim exact weekly QB-coach overlap/i),
+    ).toBeInTheDocument();
   });
 
   it("has no automated accessibility violations in the populated state", async () => {

@@ -181,3 +181,119 @@ export interface CoachProfile {
   coach: { coach_id: string; canonical_name: string };
   role_history: CoachAssignment[];
 }
+
+export type RelationshipMode =
+  "coach_journey" | "qb_journey" | "team_history" | "full_network";
+
+export interface RelationshipCitation {
+  source_url: string;
+  source_title: string | null;
+  source_type: string | null;
+  source_accessed_at: string;
+  evidence_locator: string | null;
+  evidence_note: string | null;
+}
+
+export interface CoachRelationshipNode {
+  node_id: string;
+  node_type: "coach";
+  coach_id: string;
+  canonical_name: string;
+}
+
+export interface QuarterbackRelationshipNode {
+  node_id: string;
+  node_type: "quarterback";
+  player_id: string;
+  display_name: string;
+}
+
+export interface TeamSeasonRelationshipNode {
+  node_id: string;
+  node_type: "team_season";
+  team_id: string;
+  team_abbr: string;
+  team_name: string;
+  season: number;
+}
+
+export type RelationshipNode =
+  | CoachRelationshipNode
+  | QuarterbackRelationshipNode
+  | TeamSeasonRelationshipNode;
+
+export interface CoachAssignmentRelationship {
+  relationship_id: string;
+  relationship_type: "coach_assignment";
+  source_node_id: string;
+  target_node_id: string;
+  assignment_key: string;
+  coach_id: string;
+  team_id: string;
+  season: number;
+  role: CoachRole;
+  start_week: number;
+  end_week: number;
+  interval_basis: string;
+  verification_status: VerificationStatus;
+  confidence_level: "high" | "medium" | "low";
+  is_shared: boolean;
+  is_interim: boolean;
+  is_retained: boolean;
+  is_provisional: boolean;
+  citations: RelationshipCitation[];
+  publication_version: string;
+}
+
+export interface QbTeamSeasonRelationship {
+  relationship_id: string;
+  relationship_type: "qb_team_season";
+  source_node_id: string;
+  target_node_id: string;
+  player_id: string;
+  team_id: string;
+  season: number;
+  dropbacks: number;
+  actual_epa_per_dropback: number | null;
+  expected_epa_per_dropback: number | null;
+  performance_above_expectation: number | null;
+  qualifies_default: boolean;
+  eligibility_status: string | null;
+  reliability: string | null;
+  is_out_of_sample: boolean | null;
+  metric_version: string;
+  model_version: string | null;
+  historical_data_version: string;
+  expected_data_version: string | null;
+  publication_version: string;
+}
+
+export type Relationship =
+  CoachAssignmentRelationship | QbTeamSeasonRelationship;
+
+export interface RelationshipExplorerResponse {
+  query: {
+    mode: RelationshipMode;
+    coach_id: string | null;
+    player_id: string | null;
+    team_id: string | null;
+    start_season: number;
+    end_season: number;
+    role: CoachRole | null;
+    verification_status: VerificationStatus | null;
+    include_provisional: boolean;
+  };
+  versions: Versions;
+  semantics: {
+    coach_assignment: string;
+    qb_team_season: string;
+    coach_qb_context: string;
+    exact_weekly_overlap: false;
+  };
+  nodes: RelationshipNode[];
+  relationships: Relationship[];
+  node_count: number;
+  relationship_count: number;
+  max_nodes: number;
+  max_relationships: number;
+}

@@ -22,7 +22,7 @@ from .pipeline import _validate_existing_version
 
 SCHEMA_VERSION = "checkpoint-7.2"
 LOADER_VERSION = "serving-loader-v3"
-API_CONTRACT_VERSION = "api-v1.1"
+API_CONTRACT_VERSION = "api-v1.2"
 PUBLICATION_NAMESPACE = uuid.UUID("c79812ad-1480-48ec-9972-e94b6f158a31")
 
 

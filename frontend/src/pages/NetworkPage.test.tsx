@@ -1,74 +1,320 @@
 import axe from "axe-core";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ElementDefinition } from "cytoscape";
 import { NetworkPage } from "./NetworkPage";
-import { installApiFixture, page } from "../test/fixtures";
+import { installApiFixture } from "../test/fixtures";
 import { renderRoute } from "../test/render";
 
 vi.mock("../components/NetworkGraph", () => ({
-  NetworkGraph: ({ onSelect }: { onSelect: (id: string) => void }) => (
-    <button type="button" onClick={() => onSelect("coach-1")}>
-      Test graph node
-    </button>
+  NetworkGraph: ({
+    elements,
+    onSelect,
+    selected,
+  }: {
+    elements: ElementDefinition[];
+    onSelect: (id: string) => void;
+    selected: string | null;
+  }) => (
+    <div data-testid="relationship-graph">
+      {elements
+        .filter((element) => !element.data.source)
+        .map((element) => (
+          <button
+            key={String(element.data.id)}
+            type="button"
+            data-selected={selected === element.data.id ? "true" : "false"}
+            onClick={() => onSelect(String(element.data.id))}
+          >
+            Graph {String(element.data.label)}
+          </button>
+        ))}
+    </div>
   ),
 }));
 
-describe("NetworkPage", () => {
+describe("NetworkPage Relationship Explorer", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("defaults to a focused season and preserves edge verification metadata", async () => {
+  it("shows one coach across multiple teams in Coach Journey", async () => {
     installApiFixture();
-    renderRoute(<NetworkPage />, "/network?season=2020&team=team_hou");
-    expect(
-      await screen.findByRole("heading", { name: "Coaching network" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Season" })).toHaveValue(
-      "2020",
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=coach_journey&coach_id=coach-1&start_season=2024&end_season=2025",
     );
-    expect(await screen.findByText("HOU · Weeks 4–4")).toBeInTheDocument();
-    expect(screen.getByText("shared duty")).toBeInTheDocument();
-    expect(screen.getAllByText("provisional").length).toBeGreaterThan(0);
+    expect(
+      await screen.findByRole("heading", { name: "Relationship Explorer" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "View" })).toHaveValue(
+      "coach_journey",
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Coach" })).toHaveValue(
+        "coach-1",
+      ),
+    );
+    expect(screen.getAllByText(/Test Coach →/)).toHaveLength(2);
+    expect(screen.getByText(/Test Coach → DEN 2024/)).toBeInTheDocument();
+    expect(screen.getByText(/Test Coach → HOU 2025/)).toBeInTheDocument();
   });
 
-  it("offers a keyboard-accessible text alternative and coach selection", async () => {
+  it("shows one QB across years and distinct same-season teams with correct PAE", async () => {
     installApiFixture();
-    renderRoute(<NetworkPage />, "/network?season=2020");
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Test graph node" }),
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=qb_journey&player_id=qb-1&start_season=2024&end_season=2025",
     );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(screen.getByText(/Test Quarterback → DEN 2024/)).toBeInTheDocument();
+    expect(screen.getByText(/Test Quarterback → DEN 2025/)).toBeInTheDocument();
+    expect(screen.getByText(/Test Quarterback → HOU 2025/)).toBeInTheDocument();
+    expect(screen.getAllByText("+0.070").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("-0.050").length).toBeGreaterThan(0);
+  });
+
+  it("preserves Team History intervals, roles, interim, shared, and evidence states", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(screen.getByText(/Head coach · Weeks 1–9/)).toBeInTheDocument();
+    expect(screen.getByText(/Head coach · Weeks 10–18/)).toBeInTheDocument();
+    expect(screen.getByText("interim")).toBeInTheDocument();
+    expect(screen.getAllByText("verified").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Denver staff" })).toHaveAttribute(
+      "href",
+      "https://example.com/den",
+    );
+  });
+
+  it("restores Full Network mode, anchor, years, evidence, and provisional URL state", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=full_network&anchor=team&team_id=team_den&start_season=2024&end_season=2025&verification=verified&provisional=exclude",
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(screen.getByRole("combobox", { name: "View" })).toHaveValue(
+      "full_network",
+    );
+    expect(screen.getByRole("combobox", { name: "Start from" })).toHaveValue(
+      "team",
+    );
+    expect(screen.getByRole("combobox", { name: "Team" })).toHaveValue(
+      "team_den",
+    );
+    expect(screen.getByRole("combobox", { name: "Start season" })).toHaveValue(
+      "2024",
+    );
+    expect(screen.getByRole("combobox", { name: "Evidence" })).toHaveValue(
+      "verified",
+    );
+  });
+
+  it("keeps independent QB facts when a role filter removes every coach edge", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&roles=quarterbacks_coach",
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(screen.queryByText(/Assignment den-/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/QB-team-season qb-1 · team_den · 2024/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/QB-team-season qb-2 · team_den · 2025/),
+    ).toBeInTheDocument();
+  });
+
+  it("renders unavailable PAE as an em dash instead of zero", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2025&end_season=2025",
+    );
+    const card = await screen.findByText(
+      /QB-team-season qb-2 · team_den · 2025/,
+    );
+    const article = card.closest("article");
+    expect(article).not.toBeNull();
+    expect(article).toHaveTextContent("PAE—");
+    expect(article).not.toHaveTextContent("PAE0.000");
+  });
+
+  it("selects and focuses through equivalent controls, then supports Back and Reset", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    const coachEntity = (
+      await screen.findByText("Test Coach", {
+        selector: ".accessible-entity-list strong",
+      })
+    ).closest("article");
+    expect(coachEntity).not.toBeNull();
+    fireEvent.click(coachEntity!.querySelectorAll("button")[0]);
     expect(screen.getByText("Selected coach")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Open coach profile" }),
     ).toHaveAttribute("href", "/coaches/coach-1");
-  });
-
-  it("renders a useful empty state", async () => {
-    installApiFixture({ "/network/edges": page([]) });
-    renderRoute(<NetworkPage />, "/network?season=2025");
-    expect(
-      await screen.findByText(
-        "No overlapping staff connections match these filters.",
+    fireEvent.click(screen.getByRole("button", { name: "Focus selected" }));
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "View" })).toHaveValue(
+        "coach_journey",
       ),
-    ).toBeInTheDocument();
+    );
+    expect(await screen.findByText("focused")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to prior focus" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "View" })).toHaveValue(
+        "team_history",
+      ),
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    fireEvent.click(screen.getByRole("button", { name: "Reset explorer" }));
+    expect(screen.getByText("Select an entity")).toBeInTheDocument();
   });
 
-  it("applies URL-backed role filtering", async () => {
+  it("clears a selected coach when filtering removes it but leaves QB facts", async () => {
     installApiFixture();
     renderRoute(
       <NetworkPage />,
-      "/network?season=2020&role=quarterbacks_coach",
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&selected=coach%3Acoach-1",
+    );
+    await screen.findByText("Selected coach");
+    fireEvent.click(screen.getByText("Show & filter"));
+    for (const checkbox of screen.getAllByRole("checkbox", {
+      name: /Head coach|Offensive coordinator|Play-caller|QB coach/,
+    })) {
+      fireEvent.click(checkbox);
+    }
+    await waitFor(() =>
+      expect(screen.getByText("Select an entity")).toBeInTheDocument(),
     );
     expect(
-      await screen.findByText(
-        "No overlapping staff connections match these filters.",
-      ),
+      screen.getByText(/QB-team-season qb-1 · team_den · 2024/),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Role")).toHaveValue("quarterbacks_coach");
   });
 
-  it("has no automated accessibility violations in the populated state", async () => {
+  it("restores and preserves a visible QB selection when coach filters rebuild the graph", async () => {
     installApiFixture();
-    renderRoute(<NetworkPage />, "/network?season=2020");
-    await screen.findByRole("heading", { name: "Visible connections" });
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&selected=qb%3Aqb-1",
+    );
+    expect(await screen.findByText("Selected quarterback")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open QB profile" }),
+    ).toHaveAttribute("href", "/qbs/qb-1");
+    fireEvent.click(screen.getByText("Show & filter"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Head coach" }));
+    expect(await screen.findByText("Selected quarterback")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("relationship-graph")
+        .querySelector('[data-selected="true"]'),
+    ).toHaveTextContent("Graph Test Quarterback");
+    expect(
+      screen.getByRole("link", { name: "Open QB profile" }),
+    ).toHaveAttribute("href", "/qbs/qb-1");
+  });
+
+  it("shows an invalid URL state before making an unbounded Full Network request", async () => {
+    const fetchMock = installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=full_network&anchor=team&team_id=team_den&start_season=2010&end_season=2025",
+    );
+    expect(await screen.findByText("Invalid explorer URL")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/relationships/explorer"),
+      ),
+    ).toBe(false);
+  });
+
+  it("explains a 413 response and never presents a partial graph", async () => {
+    const base = installApiFixture();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/relationships/explorer")) {
+          return new Response(
+            JSON.stringify({
+              detail: "Relationship scope is too large; narrow it",
+            }),
+            {
+              status: 413,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        return base(input);
+      }),
+    );
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    expect(
+      await screen.findByText("Relationship scope is too large"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No partial graph was returned/),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("relationship-graph")).not.toBeInTheDocument();
+  });
+
+  it("retries all lookup dependencies and the explorer request", async () => {
+    const fixture = installApiFixture();
+    let failed = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/relationships/explorer") && !failed) {
+        failed = true;
+        return new Response(
+          JSON.stringify({ detail: "Explorer unavailable" }),
+          {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+      return fixture(input);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Relationship explorer list",
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          String(input).includes("/relationships/explorer"),
+        ),
+      ).toHaveLength(2);
+    });
+  });
+
+  it("has no automated accessibility violations and avoids causal coach claims", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(screen.getByText(/not influence or causation/)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/coach produced/i);
     const result = await axe.run(document.body, {
       rules: {
         region: { enabled: false },

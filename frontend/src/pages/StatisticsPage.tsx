@@ -2,7 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { ChevronDown, FilterX, Search, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { apiGet, apiGetAll } from "../api/client";
+import { ApiError, apiGet, apiGetAll } from "../api/client";
 import type {
   ApiPage,
   CoachAssignment,
@@ -42,6 +42,7 @@ interface Filters {
   eligibility: string;
   sort: "name" | "season" | "dropbacks" | "epa";
   minDropbacks: string;
+  expanded: boolean;
   offset: number;
 }
 
@@ -59,6 +60,7 @@ function getFilters(params: URLSearchParams): Filters {
       ? (sort as Filters["sort"])
       : "dropbacks",
     minDropbacks: params.get("minDropbacks") ?? "",
+    expanded: params.get("expanded") === "true",
     offset: Math.max(0, Number(params.get("offset") ?? 0) || 0),
   };
 }
@@ -81,15 +83,19 @@ export function StatisticsPage() {
   const filters = getFilters(params);
   const [playerInput, setPlayerInput] = useState(filters.player);
   const [coachInput, setCoachInput] = useState(filters.coach);
-  const [expanded, setExpanded] = useState(false);
   const debouncedPlayer = useDebouncedValue(playerInput);
   const debouncedCoach = useDebouncedValue(coachInput);
 
   const setFilter = useCallback(
-    (key: keyof Filters, value: string | number) => {
+    (key: keyof Filters, value: string | number | boolean) => {
       setParams((current) => {
         const next = new URLSearchParams(current);
-        if (value === "" || (key === "offset" && value === 0)) next.delete(key);
+        if (
+          value === "" ||
+          value === false ||
+          (key === "offset" && value === 0)
+        )
+          next.delete(key);
         else next.set(key, String(value));
         if (key !== "offset") next.delete("offset");
         return next;
@@ -213,7 +219,12 @@ export function StatisticsPage() {
           `/qbs/${row.player_id}/pae`,
           { limit: 50 },
           signal,
-        ),
+        ).catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) {
+            return { items: [], total: 0, limit: 50, offset: 0 };
+          }
+          throw error;
+        }),
       staleTime: Infinity,
     })),
   });
@@ -227,9 +238,19 @@ export function StatisticsPage() {
     teams.data?.map((team) => [team.team_id, team]) ?? [],
   );
 
+  const paeLoading = paeQueries.some((query) => query.isLoading);
+  const paeError = paeQueries.find((query) => query.error)?.error;
   const isLoading =
-    qbQuery.isLoading || assignments.isLoading || teams.isLoading;
-  const error = qbQuery.error || assignments.error || teams.error;
+    qbQuery.isLoading || assignments.isLoading || teams.isLoading || paeLoading;
+  const error = qbQuery.error || assignments.error || teams.error || paeError;
+  const retry = () => {
+    void Promise.all([
+      qbQuery.refetch(),
+      assignments.refetch(),
+      teams.refetch(),
+      ...paeQueries.map((query) => query.refetch()),
+    ]);
+  };
   const clearFilters = () => {
     setPlayerInput("");
     setCoachInput("");
@@ -379,8 +400,10 @@ export function StatisticsPage() {
             <label className="check-field">
               <input
                 type="checkbox"
-                checked={expanded}
-                onChange={(event) => setExpanded(event.target.checked)}
+                checked={filters.expanded}
+                onChange={(event) =>
+                  setFilter("expanded", event.target.checked)
+                }
               />
               <span>Show expanded metrics</span>
             </label>
@@ -399,14 +422,16 @@ export function StatisticsPage() {
             <strong>{total.toLocaleString()}</strong> QB-team seasons
           </p>
           <p>
-            Coach filters use assignment intervals and preserve evidence status.
+            Coach filters identify team-season coaching context and preserve the
+            assignment intervals and evidence status shown in each result. They
+            do not claim exact weekly QB-coach overlap.
           </p>
         </div>
 
         {isLoading ? (
           <LoadingState />
         ) : error ? (
-          <ErrorState error={error} retry={() => void qbQuery.refetch()} />
+          <ErrorState error={error} retry={retry} />
         ) : rows.length === 0 ? (
           <EmptyState>
             Try removing a coach, team, season, or volume filter.
@@ -430,10 +455,10 @@ export function StatisticsPage() {
                     <th>CPOE</th>
                     <th>Dropbacks</th>
                     <th>Sample</th>
-                    {expanded && <th>Success</th>}
-                    {expanded && <th>Sack rate</th>}
-                    {expanded && <th>INT rate</th>}
-                    {expanded && <th>TD rate</th>}
+                    {filters.expanded && <th>Success</th>}
+                    {filters.expanded && <th>Sack rate</th>}
+                    {filters.expanded && <th>INT rate</th>}
+                    {filters.expanded && <th>TD rate</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -512,24 +537,24 @@ export function StatisticsPage() {
                           />
                           {pae && <small>{pae.reliability} reliability</small>}
                         </td>
-                        {expanded && (
+                        {filters.expanded && (
                           <td data-label="Success">
                             {percent(row.success_rate)}
                           </td>
                         )}
-                        {expanded && (
+                        {filters.expanded && (
                           <td data-label="Sack rate">
                             {percent(row.sack_rate)}
                           </td>
                         )}
-                        {expanded && (
+                        {filters.expanded && (
                           <td data-label="INT rate">
                             {percent(
                               payloadNumber(row.payload, "interception_rate"),
                             )}
                           </td>
                         )}
-                        {expanded && (
+                        {filters.expanded && (
                           <td data-label="TD rate">
                             {percent(
                               payloadNumber(row.payload, "touchdown_rate"),

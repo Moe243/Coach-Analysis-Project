@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint eight is implemented and pending approval. The responsive React/TypeScript interface consumes only the approved checkpoint-seven API and provides a filterable quarterback statistics workspace, quarterback and coach detail pages, a focused coaching network, and an interpretation guide. It preserves missingness, verification, confidence, shared/provisional intervals, eligibility, uncertainty, identification, and suppression labels; it does not turn exploratory coach associations into rankings. Authentication, deployment, and checkpoint-nine portfolio work remain out of scope.
+Checkpoint eight's six confirmed interface defects are corrected, and the responsive Relationship Explorer now consumes the bounded authoritative API contract. Coach Journey, QB Journey, Team History, and bounded Full Network preserve canonical identities, assignment intervals, QB-team-season PAE grain, missingness, evidence states, and suppression language. The graph and keyboard-accessible relationship explorer share the same response objects; neither turns same-team-season context into exact weekly overlap or causal coach attribution. Authentication, deployment, and checkpoint-nine portfolio work remain out of scope.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -60,7 +60,11 @@ DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make db-load
 DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make api
 ```
 
-OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, network data, citations, and review summaries. List responses contain `items`, `total`, `limit`, and `offset`; every ordering ends in a stable business key. Invalid role/status filters return 422, missing details return 404, and no-match lists return an empty page. Network edges retain both assignments' verification, confidence, shared/provisional, interval, and overlap metadata. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
+OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, network data, citations, review summaries, and `GET /relationships/explorer`. List responses contain `items`, `total`, `limit`, and `offset`; every ordering ends in a stable business key. Invalid role/status filters return 422, missing details return 404, and no-match lists return an empty page. Network edges retain both assignments' verification, confidence, shared/provisional, interval, and overlap metadata. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
+
+The relationship endpoint implements API contract `api-v1.2` and returns a deterministic, bounded `Coach -> Team-Season <- QB` subgraph. Coach-assignment relationships remain one `assignment_key`; QB relationships remain one `(player_id, team_id, season)` and receive PAE only through that complete key. Team-history and team-anchored full-network requests seed QB facts independently from `api_qb_statistics`, so role, verification, and provisional filters affect coach edges without deleting valid QB-team-season facts. Coach/QB/team-history modes require the corresponding anchor. Full-network mode requires an anchor and at most five seasons, and every response is capped at 1,000 nodes and 2,000 relationships. The response explicitly labels coach-QB context as same-team-season context, not exact weekly exposure or causation.
+
+The `/network` Relationship Explorer stores supported mode, canonical anchor, year range, role/evidence/QB filters, selected entity, and focused entity in the URL. Journey and Team History views use deterministic chronological positions; compact screens transpose those lanes into a top-to-bottom presentation, and bounded Full Network uses stable type columns rather than randomized layout. Select highlights the direct neighborhood, Focus opens a bounded canonical journey/history, Reset clears view filters while retaining the current scope, and Back restores the prior meaningful focus. HTTP 413 is shown as a complete failure with narrowing guidance; partial graphs are never presented.
 
 The local API has no authentication and must not be exposed publicly. Every query transaction is read-only, and credentials, filesystem paths, and mutable execution logs are never returned.
 
@@ -82,7 +86,7 @@ Run the frontend quality suite with:
 make frontend-check
 ```
 
-Filters and pagination are URL-addressable. The interface has explicit loading, empty, and error states; the graph always has a keyboard-readable list alternative; and compact screens switch the statistics table to labeled record cards.
+Filters, expanded metrics, and pagination are URL-addressable. The interface retries every required query after a dependency failure. Graph selection highlights connected nodes and edges, fades unrelated elements, and clears when filtering removes the selected node. The keyboard-readable graph alternative exposes coach names, roles, team-season, full assignment intervals, verification, confidence, provisional/shared, interim, and retained status when available. Statistics coach filters are described accurately as team-season coaching context rather than exact weekly overlap. Compact screens switch the statistics table to labeled record cards.
 
 ## Build checkpoint five
 

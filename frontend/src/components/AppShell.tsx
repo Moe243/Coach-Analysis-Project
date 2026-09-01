@@ -34,7 +34,7 @@ export function AppShell() {
             <TableProperties aria-hidden="true" /> Statistics
           </NavLink>
           <NavLink to="/network">
-            <Network aria-hidden="true" /> Coaching Network
+            <Network aria-hidden="true" /> Relationship Explorer
           </NavLink>
         </nav>
         <NavLink className="method-link" to="/methodology">
