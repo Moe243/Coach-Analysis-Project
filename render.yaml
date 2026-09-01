@@ -19,9 +19,11 @@ services:
     name: nfl-coaching-impact-engine
     runtime: static
     branch: main
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter nfl-coaching-impact-web build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter nfl-coaching-impact-web build
     staticPublishPath: frontend/dist
     envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
       - key: VITE_API_BASE_URL
         sync: false
     routes:
