@@ -95,6 +95,25 @@ export function NetworkGraph({
             style: { "line-style": "dashed", "line-color": "#e89068" },
           },
           {
+            selector: 'node[kind="team"]',
+            style: {
+              shape: "round-rectangle",
+              width: 120,
+              height: 34,
+              "background-color": "#17233a",
+              "text-valign": "center",
+              "text-margin-y": 0,
+            },
+          },
+          {
+            selector: 'edge[layout="dagre"]',
+            style: {
+              "curve-style": "taxi",
+              "taxi-direction": "downward",
+              "taxi-turn": 28,
+            },
+          },
+          {
             selector: ":selected",
             style: {
               "border-width": 4,
@@ -116,7 +135,13 @@ export function NetworkGraph({
           { selector: ".is-faded", style: { opacity: 0.09 } },
         ],
       });
-      core.on("tap", "node", (event) => onSelectRef.current(event.target.id()));
+      core.on("tap", "node", (event) => {
+        if (event.target.data("selectable") === false) return;
+        onSelectRef.current(
+          (event.target.data("canonicalId") as string | undefined) ??
+            event.target.id(),
+        );
+      });
       graph.current = core;
       register(core);
       applyGraphSelection(core, selectedRef.current);

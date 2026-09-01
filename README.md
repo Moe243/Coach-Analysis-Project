@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint eight's six confirmed interface defects are corrected, and the responsive Relationship Explorer now consumes the bounded authoritative API contract. Coach Journey, QB Journey, Team History, and bounded Full Network preserve canonical identities, assignment intervals, QB-team-season PAE grain, missingness, evidence states, and suppression language. The graph and keyboard-accessible relationship explorer share the same response objects; neither turns same-team-season context into exact weekly overlap or causal coach attribution. Authentication, deployment, and checkpoint-nine portfolio work remain out of scope.
+Checkpoint eight's six confirmed interface defects are corrected, and the responsive Relationship Explorer now consumes the bounded authoritative API contract. Coach Journey, QB Journey, Team History, and bounded Full Network preserve canonical identities, assignment intervals, QB-team-season PAE grain, missingness, evidence states, and suppression language. The graph and keyboard-accessible relationship explorer share the same response objects; neither turns same-team-season context into exact weekly overlap or causal coach attribution. Checkpoint nine deployment configuration targets a Render static site, a Render free FastAPI service, and Neon PostgreSQL; live URLs are recorded only after verification.
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -66,7 +66,7 @@ The relationship endpoint implements API contract `api-v1.2` and returns a deter
 
 The `/network` Relationship Explorer stores supported mode, canonical anchor, year range, role/evidence/QB filters, selected entity, and focused entity in the URL. Journey and Team History views use deterministic chronological positions; compact screens transpose those lanes into a top-to-bottom presentation, and bounded Full Network uses stable type columns rather than randomized layout. Select highlights the direct neighborhood, Focus opens a bounded canonical journey/history, Reset clears view filters while retaining the current scope, and Back restores the prior meaningful focus. HTTP 413 is shown as a complete failure with narrowing guidance; partial graphs are never presented.
 
-The local API has no authentication and must not be exposed publicly. Every query transaction is read-only, and credentials, filesystem paths, and mutable execution logs are never returned.
+The public API is intentionally read-only and unauthenticated. Production CORS is restricted to the exact deployed frontend origin. Every query transaction is read-only, and credentials, filesystem paths, and mutable execution logs are never returned.
 
 ## Run the checkpoint-eight frontend
 
@@ -175,6 +175,12 @@ python3 scripts/audit_sources.py --network --download-samples
 Checkpoints five and six use scikit-learn with Polars/NumPy/SciPy preprocessing, regularization, evaluation, and deterministic empirical-Bayes partial pooling. Checkpoint seven adds PostgreSQL, SQLAlchemy, Alembic, and FastAPI; checkpoint eight adds a React/TypeScript/Vite client with TanStack Query and Cytoscape. DuckDB remains an embedded analysis option.
 
 Secrets will be loaded from environment variables. Copy `.env.example` to `.env` only when a later checkpoint needs credentials, and never commit `.env`.
+
+## Deployment and licensing
+
+The reproducible Render/Neon release procedure is documented in [the deployment guide](docs/DEPLOYMENT.md). Render receives `DATABASE_URL`, `CORS_ORIGINS`, and `VITE_API_BASE_URL` through provider environment variables only. The client shows an “API is waking up” state and retries transient cold-start failures automatically.
+
+Original code and documentation are available under the [MIT License](LICENSE). Third-party datasets and derived material remain subject to their original terms; read the [third-party data notice](THIRD_PARTY_DATA_NOTICE.md) and [data-source register](DATA_SOURCES.md). The PFR decision remains `PERMISSION REQUIRED BEFORE INGESTION`.
 
 ## Documentation
 

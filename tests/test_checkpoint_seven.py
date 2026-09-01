@@ -597,6 +597,45 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["api_contract_version"], "api-v1.2")
 
+    def test_relationship_explorer_all_modes_use_the_active_publication(self) -> None:
+        with psycopg.connect(self.url) as connection:
+            load_id = str(
+                connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
+            )
+            coach_id = connection.execute(
+                "SELECT coach_id FROM api_coaching_assignments ORDER BY coach_id LIMIT 1"
+            ).fetchone()[0]
+            player_id = connection.execute(
+                "SELECT player_id FROM api_qb_statistics ORDER BY player_id LIMIT 1"
+            ).fetchone()[0]
+            team_id = connection.execute(
+                "SELECT team_id FROM api_qb_statistics ORDER BY team_id LIMIT 1"
+            ).fetchone()[0]
+
+        requests = (
+            ("coach_journey", {"coach_id": coach_id}),
+            ("qb_journey", {"player_id": player_id}),
+            ("team_history", {"team_id": team_id}),
+            ("full_network", {"team_id": team_id}),
+        )
+        for mode, anchor in requests:
+            with self.subTest(mode=mode):
+                response = self.client.get(
+                    "/relationships/explorer",
+                    params={
+                        "mode": mode,
+                        **anchor,
+                        "start_season": 2024,
+                        "end_season": 2025,
+                        "include_provisional": True,
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                body = response.json()
+                self.assertEqual(body["query"]["mode"], mode)
+                self.assertEqual(body["versions"]["load_id"], load_id)
+                self.assertEqual(body["versions"]["api_contract_version"], "api-v1.2")
+
     def test_relationship_explorer_requires_a_bounded_valid_scope(self) -> None:
         invalid = (
             {"mode": "coach_journey"},

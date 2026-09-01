@@ -13,6 +13,15 @@ export class ApiError extends Error {
   }
 }
 
+export const API_WAKE_RETRY_LIMIT = 5;
+
+export function isRetryableApiError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 429 || [502, 503, 504].includes(error.status);
+  }
+  return error instanceof TypeError;
+}
+
 type QueryValue = string | number | boolean | null | undefined;
 
 export function queryString(values: Record<string, QueryValue>): string {

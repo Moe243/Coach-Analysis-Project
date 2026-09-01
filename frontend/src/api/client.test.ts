@@ -1,4 +1,10 @@
-import { apiGet, apiGetAll, ApiError, queryString } from "./client";
+import {
+  apiGet,
+  apiGetAll,
+  ApiError,
+  isRetryableApiError,
+  queryString,
+} from "./client";
 
 describe("API client", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -66,5 +72,13 @@ describe("API client", () => {
       1, 2, 3,
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries only network and transient cold-start failures", () => {
+    expect(isRetryableApiError(new TypeError("fetch failed"))).toBe(true);
+    expect(isRetryableApiError(new ApiError("waking", 503))).toBe(true);
+    expect(isRetryableApiError(new ApiError("bad gateway", 502))).toBe(true);
+    expect(isRetryableApiError(new ApiError("not found", 404))).toBe(false);
+    expect(isRetryableApiError(new Error("application failure"))).toBe(false);
   });
 });

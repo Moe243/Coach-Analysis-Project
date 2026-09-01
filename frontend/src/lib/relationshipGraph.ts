@@ -1,4 +1,5 @@
 import type { ElementDefinition, Position } from "cytoscape";
+import { graphlib, layout as runDagreLayout } from "@dagrejs/dagre";
 import type {
   CoachAssignmentRelationship,
   CoachRole,
@@ -157,6 +158,159 @@ function fullNetworkPositions(
   return positions;
 }
 
+function nodeLabel(node: RelationshipNode): string {
+  return node.node_type === "coach"
+    ? node.canonical_name
+    : node.node_type === "quarterback"
+      ? node.display_name
+      : `${node.team_abbr} ${node.season}`;
+}
+
+function teamHistoryDagre(
+  nodes: RelationshipNode[],
+  relationships: Relationship[],
+): { elements: ElementDefinition[]; positions: Record<string, Position> } {
+  const teamSeasons = nodes
+    .filter((node) => node.node_type === "team_season")
+    .sort(
+      (left, right) =>
+        left.season - right.season ||
+        left.team_id.localeCompare(right.team_id) ||
+        left.node_id.localeCompare(right.node_id),
+    );
+  const firstTeam = teamSeasons[0];
+  const teamRootId = firstTeam ? `team:${firstTeam.team_id}` : "team:history";
+  const dagre = new graphlib.Graph({ multigraph: true })
+    .setGraph({
+      rankdir: "TB",
+      ranker: "network-simplex",
+      nodesep: 76,
+      edgesep: 28,
+      ranksep: 105,
+      marginx: 40,
+      marginy: 40,
+    })
+    .setDefaultEdgeLabel(() => ({}));
+  dagre.setNode(teamRootId, { width: 150, height: 42 });
+  nodes.forEach((node) =>
+    dagre.setNode(node.node_id, {
+      width: node.node_type === "team_season" ? 82 : 118,
+      height: node.node_type === "team_season" ? 44 : 38,
+    }),
+  );
+
+  const headCoachIds = new Set<string>();
+  relationships.forEach((relationship) => {
+    if (relationship.relationship_type === "coach_assignment") {
+      const isHeadCoach = relationship.role === "head_coach";
+      if (isHeadCoach) headCoachIds.add(relationship.source_node_id);
+      dagre.setEdge(
+        isHeadCoach ? relationship.source_node_id : relationship.target_node_id,
+        isHeadCoach ? relationship.target_node_id : relationship.source_node_id,
+        { minlen: 1, weight: isHeadCoach ? 8 : 4 },
+        relationship.relationship_id,
+      );
+    } else {
+      dagre.setEdge(
+        relationship.target_node_id,
+        relationship.source_node_id,
+        { minlen: 2, weight: 2 },
+        relationship.relationship_id,
+      );
+    }
+  });
+  [...headCoachIds]
+    .sort()
+    .forEach((coachId) =>
+      dagre.setEdge(
+        teamRootId,
+        coachId,
+        { minlen: 1, weight: 10 },
+        `root:${coachId}`,
+      ),
+    );
+  teamSeasons.forEach((teamSeason) => {
+    const hasHeadCoach = relationships.some(
+      (relationship) =>
+        relationship.relationship_type === "coach_assignment" &&
+        relationship.role === "head_coach" &&
+        relationship.target_node_id === teamSeason.node_id,
+    );
+    if (!hasHeadCoach) {
+      dagre.setEdge(
+        teamRootId,
+        teamSeason.node_id,
+        { minlen: 2, weight: 1 },
+        `root:${teamSeason.node_id}`,
+      );
+    }
+  });
+  runDagreLayout(dagre);
+
+  const positions: Record<string, Position> = Object.fromEntries(
+    dagre.nodes().map((id) => {
+      const node = dagre.node(id) as { x: number; y: number };
+      return [id, { x: node.x, y: node.y }];
+    }),
+  );
+  const elements: ElementDefinition[] = [
+    {
+      data: {
+        id: teamRootId,
+        label: firstTeam?.team_name ?? "Team",
+        kind: "team",
+        selectable: false,
+      },
+      position: positions[teamRootId],
+    },
+    ...nodes.map((node) => ({
+      data: {
+        id: node.node_id,
+        canonicalId: node.node_id,
+        label: nodeLabel(node),
+        kind: node.node_type,
+        season: node.node_type === "team_season" ? node.season : undefined,
+      },
+      position: positions[node.node_id],
+    })),
+    ...relationships.map((relationship) => {
+      const headCoach =
+        relationship.relationship_type === "coach_assignment" &&
+        relationship.role === "head_coach";
+      return {
+        data: {
+          id: `relationship:${relationship.relationship_id}`,
+          source: headCoach
+            ? relationship.source_node_id
+            : relationship.target_node_id,
+          target: headCoach
+            ? relationship.target_node_id
+            : relationship.source_node_id,
+          kind: relationship.relationship_type,
+          layout: "dagre",
+          verification:
+            relationship.relationship_type === "coach_assignment"
+              ? relationship.verification_status
+              : "analytical",
+          provisional:
+            relationship.relationship_type === "coach_assignment" &&
+            relationship.is_provisional,
+        },
+      };
+    }),
+    ...[...headCoachIds].sort().map((coachId) => ({
+      data: {
+        id: `hierarchy:${teamRootId}:${coachId}`,
+        source: teamRootId,
+        target: coachId,
+        kind: "team_head_coach",
+        layout: "dagre",
+      },
+    })),
+  ];
+  return { elements, positions };
+}
+
 export function buildRelationshipGraph(
   response: RelationshipExplorerResponse,
   filters: ExplorerFilters,
@@ -196,11 +350,16 @@ export function buildRelationshipGraph(
       },
     );
   });
-  let positions =
-    response.query.mode === "full_network"
+  const dagre =
+    response.query.mode === "team_history"
+      ? teamHistoryDagre(nodes, relationships)
+      : null;
+  let positions = dagre
+    ? dagre.positions
+    : response.query.mode === "full_network"
       ? fullNetworkPositions(nodes)
       : chronologicalPositions(nodes, relationships, response.query.mode);
-  if (compact) {
+  if (compact && response.query.mode !== "team_history") {
     positions = Object.fromEntries(
       Object.entries(positions).map(([id, position]) => [
         id,
@@ -208,37 +367,35 @@ export function buildRelationshipGraph(
       ]),
     );
   }
-  const elements: ElementDefinition[] = [
-    ...nodes.map((node) => ({
-      data: {
-        id: node.node_id,
-        label:
-          node.node_type === "coach"
-            ? node.canonical_name
-            : node.node_type === "quarterback"
-              ? node.display_name
-              : `${node.team_abbr} ${node.season}`,
-        kind: node.node_type,
-        season: node.node_type === "team_season" ? node.season : undefined,
-      },
-      position: positions[node.node_id],
-    })),
-    ...relationships.map((relationship) => ({
-      data: {
-        id: `relationship:${relationship.relationship_id}`,
-        source: relationship.source_node_id,
-        target: relationship.target_node_id,
-        kind: relationship.relationship_type,
-        verification:
-          relationship.relationship_type === "coach_assignment"
-            ? relationship.verification_status
-            : "analytical",
-        provisional:
-          relationship.relationship_type === "coach_assignment" &&
-          relationship.is_provisional,
-      },
-    })),
-  ];
+  const elements: ElementDefinition[] = dagre
+    ? dagre.elements
+    : [
+        ...nodes.map((node) => ({
+          data: {
+            id: node.node_id,
+            canonicalId: node.node_id,
+            label: nodeLabel(node),
+            kind: node.node_type,
+            season: node.node_type === "team_season" ? node.season : undefined,
+          },
+          position: positions[node.node_id],
+        })),
+        ...relationships.map((relationship) => ({
+          data: {
+            id: `relationship:${relationship.relationship_id}`,
+            source: relationship.source_node_id,
+            target: relationship.target_node_id,
+            kind: relationship.relationship_type,
+            verification:
+              relationship.relationship_type === "coach_assignment"
+                ? relationship.verification_status
+                : "analytical",
+            provisional:
+              relationship.relationship_type === "coach_assignment" &&
+              relationship.is_provisional,
+          },
+        })),
+      ];
   return {
     elements,
     positions,

@@ -23,6 +23,52 @@ vi.mock("cytoscape", async (importOriginal) => {
 });
 
 describe("applyGraphSelection", () => {
+  function branchCore() {
+    return cytoscape({
+      headless: true,
+      elements: [
+        { data: { id: "qb:a", kind: "quarterback" } },
+        { data: { id: "qb:b", kind: "quarterback" } },
+        { data: { id: "coach:a", kind: "coach" } },
+        { data: { id: "coach:b", kind: "coach" } },
+        { data: { id: "team:one", kind: "team_season" } },
+        { data: { id: "team:two", kind: "team_season" } },
+        { data: { id: "qb-one", source: "qb:a", target: "team:one" } },
+        { data: { id: "qb-two", source: "qb:b", target: "team:two" } },
+        {
+          data: { id: "coach-one", source: "coach:a", target: "team:one" },
+        },
+        {
+          data: { id: "coach-two", source: "coach:b", target: "team:two" },
+        },
+      ],
+    });
+  }
+
+  it("expands a selected QB through its team-season to every coach in that branch", () => {
+    const core = branchCore();
+    applyGraphSelection(core, "qb:a");
+    for (const id of ["qb:a", "team:one", "coach:a", "qb-one", "coach-one"]) {
+      expect(core.getElementById(id).hasClass("is-highlighted")).toBe(true);
+    }
+    for (const id of ["qb:b", "team:two", "coach:b", "qb-two", "coach-two"]) {
+      expect(core.getElementById(id).hasClass("is-faded")).toBe(true);
+    }
+    core.destroy();
+  });
+
+  it("expands a selected coach through its team-season to every QB in that branch", () => {
+    const core = branchCore();
+    applyGraphSelection(core, "coach:a");
+    for (const id of ["coach:a", "team:one", "qb:a", "coach-one", "qb-one"]) {
+      expect(core.getElementById(id).hasClass("is-highlighted")).toBe(true);
+    }
+    for (const id of ["coach:b", "team:two", "qb:b", "coach-two", "qb-two"]) {
+      expect(core.getElementById(id).hasClass("is-faded")).toBe(true);
+    }
+    core.destroy();
+  });
+
   it("highlights the selected node, connected context, and edges while fading unrelated elements", () => {
     const core = cytoscape({
       headless: true,

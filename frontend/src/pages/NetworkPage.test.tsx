@@ -22,8 +22,14 @@ vi.mock("../components/NetworkGraph", () => ({
           <button
             key={String(element.data.id)}
             type="button"
-            data-selected={selected === element.data.id ? "true" : "false"}
-            onClick={() => onSelect(String(element.data.id))}
+            data-selected={
+              selected === (element.data.canonicalId ?? element.data.id)
+                ? "true"
+                : "false"
+            }
+            onClick={() =>
+              onSelect(String(element.data.canonicalId ?? element.data.id))
+            }
           >
             Graph {String(element.data.label)}
           </button>
@@ -34,6 +40,43 @@ vi.mock("../components/NetworkGraph", () => ({
 
 describe("NetworkPage Relationship Explorer", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    [
+      "Coach Journey",
+      "/network?mode=coach_journey&coach_id=coach-1&start_season=2024&end_season=2025",
+      "/api/relationships/explorer?mode=coach_journey&coach_id=coach-1&start_season=2024&end_season=2025&include_provisional=true",
+    ],
+    [
+      "QB Journey",
+      "/network?mode=qb_journey&player_id=qb-1&start_season=2024&end_season=2025",
+      "/api/relationships/explorer?mode=qb_journey&player_id=qb-1&start_season=2024&end_season=2025&include_provisional=true",
+    ],
+    [
+      "Team History",
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+      "/api/relationships/explorer?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&include_provisional=true",
+    ],
+    [
+      "Full Network",
+      "/network?mode=full_network&anchor=team&team_id=team_den&start_season=2024&end_season=2025",
+      "/api/relationships/explorer?mode=full_network&team_id=team_den&start_season=2024&end_season=2025&include_provisional=true",
+    ],
+  ])(
+    "requests the published %s endpoint with the complete API contract",
+    async (_mode, route, expectedRequest) => {
+      const fetchMock = installApiFixture();
+      renderRoute(<NetworkPage />, route);
+      await screen.findByRole("heading", {
+        name: "Relationship explorer list",
+      });
+
+      const explorerRequests = fetchMock.mock.calls
+        .map(([input]) => String(input))
+        .filter((request) => request.includes("/relationships/explorer"));
+      expect(explorerRequests).toEqual([expectedRequest]);
+    },
+  );
 
   it("shows one coach across multiple teams in Coach Journey", async () => {
     installApiFixture();

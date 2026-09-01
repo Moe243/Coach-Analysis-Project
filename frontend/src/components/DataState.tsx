@@ -11,7 +11,10 @@ export function LoadingState({
       <span className="spinner" aria-hidden="true" />
       <div>
         <strong>{label}</strong>
-        <p>Querying the current checkpoint-seven publication.</p>
+        <p>
+          API is waking up. Free hosting can take up to a minute; this request
+          retries automatically.
+        </p>
       </div>
     </div>
   );

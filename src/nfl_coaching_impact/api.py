@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 
 import psycopg
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from psycopg import sql
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict
@@ -195,6 +196,27 @@ app = FastAPI(
         "Read-only access to versioned QB, PAE, coaching-assignment, and exploratory "
         "coach-impact outputs. Suppression and identification labels are preserved."
     ),
+)
+
+
+def _cors_origins() -> list[str]:
+    """Return the explicitly configured browser origins; wildcards are never accepted."""
+    origins = [
+        origin.strip().rstrip("/")
+        for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    if "*" in origins:
+        raise RuntimeError("CORS_ORIGINS must list explicit origins; '*' is not allowed")
+    return origins
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["Accept", "Content-Type"],
 )
 
 

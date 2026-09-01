@@ -22,6 +22,71 @@ function response(
   } as RelationshipExplorerResponse;
 }
 
+function steelersHistory() {
+  const fixture = response();
+  fixture.nodes = fixture.nodes.filter(
+    (node) => node.node_id !== "team-season:team_hou:2025",
+  );
+  fixture.nodes = fixture.nodes.map((node) =>
+    node.node_id === "coach:coach-1" && node.node_type === "coach"
+      ? {
+          ...node,
+          coach_id: "mike-tomlin",
+          node_id: "coach:mike-tomlin",
+          canonical_name: "Mike Tomlin",
+        }
+      : node.node_type === "team_season"
+        ? {
+            ...node,
+            node_id: node.node_id.replace("team_den", "team_pit"),
+            team_id: "team_pit",
+            team_abbr: "PIT",
+            team_name: "Pittsburgh Steelers",
+          }
+        : node,
+  );
+  fixture.relationships = fixture.relationships
+    .filter(
+      (relationship) =>
+        relationship.relationship_id !== "qb-team-season:qb-1:team_hou:2025",
+    )
+    .map((relationship) => {
+      if (relationship.relationship_type !== "coach_assignment") {
+        return {
+          ...relationship,
+          target_node_id: relationship.target_node_id.replace(
+            "team_den",
+            "team_pit",
+          ),
+          team_id: "team_pit",
+        };
+      }
+      if (relationship.relationship_id === "den-2024-hc-interim") {
+        return {
+          ...relationship,
+          target_node_id: "team-season:team_pit:2024",
+          team_id: "team_pit",
+          role: "offensive_coordinator" as const,
+        };
+      }
+      if (relationship.source_node_id === "coach:coach-1") {
+        return {
+          ...relationship,
+          source_node_id: "coach:mike-tomlin",
+          coach_id: "mike-tomlin",
+          target_node_id:
+            relationship.relationship_id === "hou-2025-oc"
+              ? "team-season:team_pit:2025"
+              : relationship.target_node_id.replace("team_den", "team_pit"),
+          team_id: "team_pit",
+          role: "head_coach" as const,
+        };
+      }
+      return relationship;
+    });
+  return fixture;
+}
+
 describe("buildRelationshipGraph", () => {
   it("keeps one canonical coach node across years, teams, and roles", () => {
     const graph = buildRelationshipGraph(
@@ -210,10 +275,73 @@ describe("buildRelationshipGraph", () => {
       expect(JSON.stringify(first.positions)).toBe(
         JSON.stringify(second.positions),
       );
-      expect(first.positions["team-season:team_den:2024"].x).toBeLessThan(
-        first.positions["team-season:team_den:2025"].x,
-      );
+      if (mode !== "team_history") {
+        expect(first.positions["team-season:team_den:2024"].x).toBeLessThan(
+          first.positions["team-season:team_den:2025"].x,
+        );
+      }
     }
+  });
+
+  it("renders Mike Tomlin and a multi-season QB once with every season edge", () => {
+    const graph = buildRelationshipGraph(
+      steelersHistory(),
+      defaultExplorerFilters(),
+    );
+    const visualNodes = graph.elements.filter(
+      (element) => !element.data.source,
+    );
+    expect(
+      visualNodes.filter((element) => element.data.id === "coach:mike-tomlin"),
+    ).toHaveLength(1);
+    expect(
+      visualNodes.filter((element) => element.data.id === "qb:qb-1"),
+    ).toHaveLength(1);
+    expect(
+      visualNodes.filter((element) =>
+        String(element.data.id).startsWith("instance:"),
+      ),
+    ).toHaveLength(0);
+    const edges = graph.elements.filter((element) => element.data.source);
+    expect(
+      edges
+        .filter((element) => element.data.source === "coach:mike-tomlin")
+        .map((element) => element.data.target),
+    ).toEqual(
+      expect.arrayContaining([
+        "team-season:team_pit:2024",
+        "team-season:team_pit:2025",
+      ]),
+    );
+    expect(
+      edges
+        .filter((element) => element.data.target === "qb:qb-1")
+        .map((element) => element.data.source),
+    ).toEqual(
+      expect.arrayContaining([
+        "team-season:team_pit:2024",
+        "team-season:team_pit:2025",
+      ]),
+    );
+  });
+
+  it("uses a top-to-bottom Dagre hierarchy for Team History", () => {
+    const graph = buildRelationshipGraph(
+      steelersHistory(),
+      defaultExplorerFilters(),
+    );
+    const root = graph.positions["team:team_pit"];
+    const headCoach = graph.positions["coach:mike-tomlin"];
+    const seasons = [
+      graph.positions["team-season:team_pit:2024"],
+      graph.positions["team-season:team_pit:2025"],
+    ];
+    const coordinator = graph.positions["coach:coach-2"];
+    const quarterback = graph.positions["qb:qb-1"];
+    expect(root.y).toBeLessThan(headCoach.y);
+    expect(seasons.every((position) => headCoach.y < position.y)).toBe(true);
+    expect(seasons.every((position) => position.y < coordinator.y)).toBe(true);
+    expect(coordinator.y).toBeLessThan(quarterback.y);
   });
 
   it("uses a deterministic bounded Full Network layout", () => {
@@ -231,7 +359,7 @@ describe("buildRelationshipGraph", () => {
     );
   });
 
-  it("uses a top-to-bottom deterministic layout on compact screens", () => {
+  it("keeps Team History top-to-bottom on compact screens", () => {
     const wide = buildRelationshipGraph(
       response(),
       defaultExplorerFilters(),
@@ -243,9 +371,6 @@ describe("buildRelationshipGraph", () => {
       true,
     );
     const id = "team-season:team_den:2024";
-    expect(compact.positions[id]).toEqual({
-      x: wide.positions[id].y,
-      y: wide.positions[id].x,
-    });
+    expect(compact.positions[id]).toEqual(wide.positions[id]);
   });
 });

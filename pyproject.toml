@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A leakage-aware NFL quarterback and coaching impact analytics platform"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-license = { text = "All rights reserved until a repository license is selected." }
+license = { text = "MIT" }
 authors = [{ name = "Project owner" }]
 dependencies = [
   "certifi>=2026.7.22",
