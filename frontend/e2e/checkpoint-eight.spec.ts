@@ -108,6 +108,11 @@ test("explores a verified team history with interval-preserving relationship car
   await expect(
     page.getByRole("heading", { name: "Relationship explorer list" }),
   ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await expect(
     page.getByText("verified", { exact: true }).first(),
   ).toBeVisible();

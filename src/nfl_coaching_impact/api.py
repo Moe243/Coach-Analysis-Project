@@ -769,7 +769,11 @@ def relationship_explorer(
                 team_id=row["team_id"],
                 season=row["season"],
                 dropbacks=row["dropbacks"],
-                actual_epa_per_dropback=row["epa_per_dropback"],
+                actual_epa_per_dropback=(
+                    row["pae_actual_epa_per_dropback"]
+                    if row["performance_above_expectation"] is not None
+                    else row["epa_per_dropback"]
+                ),
                 expected_epa_per_dropback=row["expected_epa_per_dropback"],
                 performance_above_expectation=row["performance_above_expectation"],
                 qualifies_default=row["qualifies_default"],

@@ -1,7 +1,7 @@
 # Checkpoint eight report
 
 Date: 2026-08-31
-Status: Relationship Explorer implemented; awaiting final integrity review
+Status: Relationship Explorer approved after final integrity review
 
 ## Outcome
 
@@ -77,7 +77,7 @@ The graph transformer is memoized from the response, filter state, and compact b
 
 ### Frontend
 
-- 52/52 Vitest unit and component tests passed across eight files.
+- 53/53 Vitest unit and component tests passed across eight files.
 - 33/33 Playwright journeys passed across desktop, tablet, and mobile Chromium projects.
 - TypeScript project checking passed.
 - ESLint passed with zero warnings.
@@ -92,9 +92,9 @@ Playwright uses deterministic relationship responses for the four new explorer m
 
 ### Python, PostgreSQL, API, and network
 
-- Offline Python discovery: 115 tests total; 74 passed and 41 intentionally skipped.
-- The 41 offline skips were 39 separately callable PostgreSQL/API tests and two opt-in network tests. They are not reported as passes in the offline result.
-- Disposable PostgreSQL/API behavior: 39/39 passed.
+- Offline Python discovery: 116 tests total; 74 passed and 42 intentionally skipped.
+- The 42 offline skips were 40 separately callable PostgreSQL/API tests and two opt-in network tests. They are not reported as passes in the offline result.
+- Disposable PostgreSQL/API behavior: 40/40 passed.
 - Opt-in network integration: 2/2 passed, covering nflverse boundary assets and the coaching citation/content registry.
 - Ruff lint passed.
 - Ruff formatting verification passed for 55 Python files.
@@ -125,8 +125,10 @@ The PostgreSQL/API tests prove bounded/anchor validation, empty responses, genui
 
 ## Remaining checkpoint-eight defects
 
+The final integrity review corrected two P2 findings before approval: a stale single-season graph description in `LIMITATIONS.md`, and an API mapping that could mix the QB-stat actual EPA value with a PAE artifact's expected/PAE pair if publication inputs drifted. Relationship responses now use the internally constrained PAE actual/expected/PAE triplet when PAE is available and retain the QB-stat actual only when PAE is unavailable. A behavioral PostgreSQL regression proves the displayed arithmetic remains coherent.
+
 No known approval-blocking Checkpoint Eight defect remains after the completed test, integration, deterministic-build, and responsive QA passes.
 
 ## Exact next phase
 
-Perform a read-only final integrity review of the complete Checkpoint Eight and Relationship Explorer diff. Do not commit, push, start Checkpoint Nine, or ingest PFR data until that review is approved.
+Checkpoint Nine remains unstarted and requires separate explicit approval. PFR remains `PERMISSION REQUIRED BEFORE INGESTION`; no ingestion or automated collection is authorized.

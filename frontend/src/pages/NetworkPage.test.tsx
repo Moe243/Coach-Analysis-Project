@@ -112,6 +112,37 @@ describe("NetworkPage Relationship Explorer", () => {
     );
   });
 
+  it("reconstructs every supported display filter and canonical selection from the URL", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&roles=head_coach&verification=verified&provisional=exclude&coaches=hide&eligible=true&min_dropbacks=200&pae_min=0.01&pae_max=0.08&selected=qb%3Aqb-1&focus=qb%3Aqb-1",
+    );
+    expect(await screen.findByText("Selected quarterback")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Show & filter"));
+    expect(screen.getByRole("checkbox", { name: "Head coach" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Offensive coordinator" }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Coaches" })).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Include provisional" }),
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Eligible QBs only" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("spinbutton", { name: "Minimum dropbacks" }),
+    ).toHaveValue(200);
+    expect(screen.getByRole("spinbutton", { name: "Minimum PAE" })).toHaveValue(
+      0.01,
+    );
+    expect(screen.getByRole("spinbutton", { name: "Maximum PAE" })).toHaveValue(
+      0.08,
+    );
+    expect(screen.getByText("focused")).toBeInTheDocument();
+  });
+
   it("keeps independent QB facts when a role filter removes every coach edge", async () => {
     installApiFixture();
     renderRoute(

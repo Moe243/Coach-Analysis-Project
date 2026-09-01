@@ -911,6 +911,73 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 f"qb-team-season:{player_id}:{row['team_id']}:{season}",
             )
 
+    def test_relationship_explorer_keeps_the_pae_triplet_internally_consistent(self) -> None:
+        with psycopg.connect(self.url, autocommit=True) as connection:
+            (
+                load_id,
+                player_id,
+                team_id,
+                season,
+                original_expected,
+                original_actual,
+                original_pae,
+            ) = connection.execute(
+                "SELECT load_id, player_id, team_id, season, "
+                "expected_epa_per_dropback, actual_epa_per_dropback, "
+                "performance_above_expectation "
+                "FROM serving_qb_pae ORDER BY season, player_id, team_id LIMIT 1"
+            ).fetchone()
+            expected = 0.125
+            pae_actual = -0.075
+            pae = pae_actual - expected
+            try:
+                with connection.transaction():
+                    connection.execute(
+                        "UPDATE serving_qb_pae SET expected_epa_per_dropback=%s, "
+                        "actual_epa_per_dropback=%s, performance_above_expectation=%s "
+                        "WHERE load_id=%s AND player_id=%s AND team_id=%s AND season=%s",
+                        (expected, pae_actual, pae, load_id, player_id, team_id, season),
+                    )
+                response = self.client.get(
+                    "/relationships/explorer",
+                    params={
+                        "mode": "qb_journey",
+                        "player_id": player_id,
+                        "start_season": season,
+                        "end_season": season,
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                edge = next(
+                    row
+                    for row in response.json()["relationships"]
+                    if row["relationship_type"] == "qb_team_season" and row["team_id"] == team_id
+                )
+                self.assertAlmostEqual(edge["actual_epa_per_dropback"], pae_actual)
+                self.assertAlmostEqual(edge["expected_epa_per_dropback"], expected)
+                self.assertAlmostEqual(edge["performance_above_expectation"], pae)
+                self.assertAlmostEqual(
+                    edge["actual_epa_per_dropback"] - edge["expected_epa_per_dropback"],
+                    edge["performance_above_expectation"],
+                )
+            finally:
+                with connection.transaction():
+                    connection.execute(
+                        "UPDATE serving_qb_pae SET expected_epa_per_dropback=%s, "
+                        "actual_epa_per_dropback=%s, performance_above_expectation=%s "
+                        "WHERE load_id=%s "
+                        "AND player_id=%s AND team_id=%s AND season=%s",
+                        (
+                            original_expected,
+                            original_actual,
+                            original_pae,
+                            load_id,
+                            player_id,
+                            team_id,
+                            season,
+                        ),
+                    )
+
     def test_relationship_explorer_preserves_interval_and_evidence_states(self) -> None:
         with psycopg.connect(self.url) as connection:
             oc_team, oc_season = connection.execute(
