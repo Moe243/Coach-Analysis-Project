@@ -10,6 +10,7 @@ Checkpoint nine is complete. The React/Vite application is deployed as a Render 
 - Frontend: `https://nfl-coaching-impact-engine.onrender.com`
 - API: `https://nfl-coaching-impact-api.onrender.com`
 - OpenAPI: `https://nfl-coaching-impact-api.onrender.com/docs`
+- Final implementation commit: `16f88e790351bf69402ca4fbe87c277985ec40da`
 - License: MIT; third-party data remains subject to its original terms.
 
 The frontend labels free-service startup as “API is waking up” and automatically retries network, 429, 502, 503, and 504 failures. Deterministic validation and client errors are not retried.
@@ -80,6 +81,8 @@ After the documentation update, the 120-test offline suite, 64-test frontend sui
 
 Final live inspection exposed one issue that mocks had missed: dense Team History data could make Dagre reject a canonical multigraph containing parallel and cross-season role edges, leaving only the skip link after React failed. The graph builder now keeps every canonical coach on a consistent side of assignment edges and falls back to deterministic top-to-bottom role layers if Dagre still rejects a valid dense multigraph. Two focused regression tests cover mixed-role canonical identities and deterministic vertical fallback; the final frontend count is 64.
 
+After Render deployed commit `16f88e7`, Coach Journey, QB Journey, 16-season Houston Team History, and five-season Houston Full Network all rendered their complete accessible relationship surfaces with zero browser console errors. The Team History response rendered PAE metadata rather than the prior empty application shell. This post-deploy check is the release gate for the final tag.
+
 ## Security and release checks
 
 - `DATABASE_URL` and CORS configuration are provider environment variables.
@@ -98,7 +101,7 @@ The NFL Coaching Impact Engine asks whether quarterbacks outperform a strictly p
 
 - Built a reproducible Python and SQL/PostgreSQL pipeline spanning 27 NFL seasons, producing 1,689 versioned QB-team-season records with canonical IDs, deterministic artifacts, and behavioral integrity tests.
 - Developed a leakage-safe statistical model for quarterback Performance Above Expectation and an exploratory partial-pooling coach analysis with explicit uncertainty, suppression, and noncausal interpretation.
-- Shipped a FastAPI and React/TypeScript analytics application with four Relationship Explorer modes, 1,000-node/2,000-edge safeguards, responsive accessibility, and 198 automated offline, database/API, network, frontend, and browser checks.
+- Shipped a FastAPI and React/TypeScript analytics application with four Relationship Explorer modes, 1,000-node/2,000-edge safeguards, responsive accessibility, and 260 automated offline, database/API, network, frontend, and browser checks.
 
 ## Interview explanation
 
