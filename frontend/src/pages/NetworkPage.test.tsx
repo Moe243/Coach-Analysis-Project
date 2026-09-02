@@ -121,9 +121,13 @@ describe("NetworkPage Relationship Explorer", () => {
       "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
     );
     await screen.findByRole("heading", { name: "Relationship explorer list" });
-    expect(screen.getByText(/Head coach · Weeks 1–9/)).toBeInTheDocument();
-    expect(screen.getByText(/Head coach · Weeks 10–18/)).toBeInTheDocument();
-    expect(screen.getByText("interim")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/Head coach · Weeks 1–9/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Head coach · Weeks 10–18/).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("interim").length).toBeGreaterThan(0);
     expect(screen.getAllByText("verified").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Denver staff" })).toHaveAttribute(
       "href",
@@ -279,7 +283,7 @@ describe("NetworkPage Relationship Explorer", () => {
     installApiFixture();
     renderRoute(
       <NetworkPage />,
-      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&selected=qb%3Aqb-1",
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&display=network&selected=qb%3Aqb-1",
     );
     expect(await screen.findByText("Selected quarterback")).toBeInTheDocument();
     expect(
@@ -296,6 +300,44 @@ describe("NetworkPage Relationship Explorer", () => {
     expect(
       screen.getByRole("link", { name: "Open QB profile" }),
     ).toHaveAttribute("href", "/qbs/qb-1");
+  });
+
+  it("defaults journey and history modes to the chronological timeline", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    expect(
+      await screen.findByLabelText("Chronological relationship timeline"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Timeline" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const seasons = screen
+      .getAllByRole("button")
+      .filter((button) => button.classList.contains("timeline-anchor"));
+    expect(seasons.map((button) => button.textContent)).toEqual([
+      expect.stringContaining("2024"),
+      expect.stringContaining("2025"),
+      expect.stringContaining("2025"),
+    ]);
+  });
+
+  it("preserves the canonical graph as an explicit Network display", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    await screen.findByLabelText("Chronological relationship timeline");
+    fireEvent.click(screen.getByRole("button", { name: "Network" }));
+    expect(await screen.findByTestId("relationship-graph")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Network" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("shows an invalid URL state before making an unbounded Full Network request", async () => {

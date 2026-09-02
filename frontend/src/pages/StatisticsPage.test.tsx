@@ -8,7 +8,7 @@ import { renderRoute } from "../test/render";
 describe("StatisticsPage", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("renders PAE, evidence, team abbreviation, and eligibility from the API", async () => {
+  it("renders the readable default quarterback comparison columns", async () => {
     installApiFixture();
     renderRoute(<StatisticsPage />, "/statistics?season=2025");
     expect(
@@ -16,8 +16,9 @@ describe("StatisticsPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("+0.070")).toBeInTheDocument();
     expect(screen.getByText("DEN")).toBeInTheDocument();
-    expect(screen.getByText("eligible")).toBeInTheDocument();
-    expect(screen.getByText(/Head coach · verified/)).toBeInTheDocument();
+    expect(screen.getByText("4,100")).toBeInTheDocument();
+    expect(screen.getByText("31")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
   });
 
   it("shows an empty state for no matching rows", async () => {
@@ -103,6 +104,18 @@ describe("StatisticsPage", () => {
     expect(screen.getByLabelText("Sort")).toHaveValue("epa");
   });
 
+  it("sends extended metric sorts through the published QB endpoint", async () => {
+    const fetchMock = installApiFixture();
+    renderRoute(<StatisticsPage />, "/statistics?sort=passing_touchdowns");
+    await screen.findByRole("link", { name: "Test Quarterback" });
+    expect(screen.getByLabelText("Sort")).toHaveValue("passing_touchdowns");
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/qbs?sort=passing_touchdowns"),
+      ),
+    ).toBe(true);
+  });
+
   it("applies role and evidence filters without fabricating fallback rows", async () => {
     installApiFixture();
     renderRoute(
@@ -131,13 +144,13 @@ describe("StatisticsPage", () => {
       screen.getByRole("checkbox", { name: "Show expanded metrics" }),
     );
     expect(
-      await screen.findByRole("columnheader", { name: "INT rate" }),
+      await screen.findByRole("columnheader", { name: "Details" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("2.0%")).toBeInTheDocument();
-    expect(screen.getByText("11-6-0")).toBeInTheDocument();
-    expect(screen.getByText("67.0%")).toBeInTheDocument();
-    expect(screen.getByText("4,450")).toBeInTheDocument();
-    expect(screen.getByText("421")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Performance, context, and staff"));
+    expect(screen.getByText(/402\/600/)).toBeInTheDocument();
+    expect(screen.getByText(/ANY\/A: 6.58/)).toBeInTheDocument();
+    expect(screen.getByText(/Fumbles: 6 \(2 lost\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Test Coach/)).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent("expanded=true");
   });
 
@@ -163,7 +176,7 @@ describe("StatisticsPage", () => {
       screen.getByRole("checkbox", { name: "Show expanded metrics" }),
     ).toBeChecked();
     expect(
-      await screen.findByRole("columnheader", { name: "Success" }),
+      await screen.findByRole("columnheader", { name: "Details" }),
     ).toBeInTheDocument();
   });
 

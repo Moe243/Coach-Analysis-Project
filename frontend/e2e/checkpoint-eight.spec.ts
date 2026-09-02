@@ -78,8 +78,13 @@ test("shows PAE with its formula and out-of-sample explanation", async ({
 test("searches for a coach and opens connected quarterback context", async ({
   page,
 }) => {
-  await page.goto("/statistics");
+  await page.goto("/statistics?expanded=true");
   await page.getByPlaceholder("Search coaching context").fill("Todd Bowles");
+  await expect(page).toHaveURL(/coach=Todd(?:\+|%20)Bowles/);
+  await expect(page.getByText("Loading published data")).toHaveCount(0, {
+    timeout: 20_000,
+  });
+  await page.getByText("Performance, context, and staff").first().click();
   const coach = page.getByRole("link", { name: "Todd Bowles" }).first();
   await expect(coach).toBeVisible();
   await coach.click();

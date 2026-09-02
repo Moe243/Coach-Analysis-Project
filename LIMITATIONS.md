@@ -79,6 +79,8 @@ The deployed analytical interface inherits all data completeness and identificat
 
 The Relationship Explorer supports multi-season Coach Journey, QB Journey, and Team History views plus an anchored Full Network limited to five seasons. Server caps of 1,000 nodes and 2,000 relationships prevent dense all-history hairballs. Its metadata-complete relationship list is the authoritative accessible equivalent. Small screens prioritize readable record cards and horizontal-free layouts over showing every column simultaneously. Browser checks cover representative desktop, tablet, and mobile layouts, but broad cross-browser/device-lab coverage and visual regression automation remain future improvements.
 
+Stage 1 QB-facing lists use the canonical player position recorded in the historical player dimension. Hybrid-role players classified upstream at another position are intentionally absent from QB navigation even if they logged isolated quarterback plays; their historical facts are not deleted. Supplemental box-score fields may be null when weekly player-stat inputs are unavailable. PBP-derived team passing yards are net play yards, including the source's sack-loss behavior, and are not guaranteed to match every official box-score convention. Team ranks are descriptive target-season context and must not be used as preseason model features.
+
 ## Licensing and access
 
 Some nflverse datasets originate from third parties with separate terms. Direct Sports Reference scraping is excluded. CFBD raw responses cannot be published as a bulk dataset. Data availability or terms may change, requiring source re-audit before release.

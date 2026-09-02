@@ -305,7 +305,17 @@ def qbs(
     team_id: str | None = None,
     season: int | None = Query(None, ge=2010, le=2025),
     eligible: bool | None = None,
-    sort: Literal["name", "season", "dropbacks", "epa"] = "name",
+    sort: Literal[
+        "name",
+        "season",
+        "dropbacks",
+        "epa",
+        "pae",
+        "passing_yards",
+        "passing_touchdowns",
+        "interceptions",
+        "total_touchdowns",
+    ] = "name",
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> Page:
@@ -327,6 +337,22 @@ def qbs(
         "season": "season DESC, display_name, team_id, player_id",
         "dropbacks": "dropbacks DESC, display_name, season DESC, team_id, player_id",
         "epa": "epa_per_dropback DESC NULLS LAST, display_name, season DESC, team_id, player_id",
+        "pae": (
+            "performance_above_expectation DESC NULLS LAST, display_name, season DESC, "
+            "team_id, player_id"
+        ),
+        "passing_yards": (
+            "passing_yards DESC NULLS LAST, display_name, season DESC, team_id, player_id"
+        ),
+        "passing_touchdowns": (
+            "passing_touchdowns DESC NULLS LAST, display_name, season DESC, team_id, player_id"
+        ),
+        "interceptions": (
+            "interceptions DESC NULLS LAST, display_name, season DESC, team_id, player_id"
+        ),
+        "total_touchdowns": (
+            "total_touchdowns DESC NULLS LAST, display_name, season DESC, team_id, player_id"
+        ),
     }
     return _page(
         "api_qb_statistics",
@@ -459,6 +485,30 @@ def teams(search: str | None = None, limit: Limit = 50, offset: Offset = 0) -> P
         clauses=clauses,
         params=params,
         order="team_name, team_id",
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/team-seasons", response_model=Page)
+def team_seasons(
+    team_id: str | None = None,
+    season: int | None = Query(None, ge=2010, le=2025),
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> Page:
+    clauses, params = [], []
+    if team_id:
+        clauses.append("team_id = %s")
+        params.append(team_id)
+    if season is not None:
+        clauses.append("season = %s")
+        params.append(season)
+    return _page(
+        "api_team_season_statistics",
+        clauses=clauses,
+        params=params,
+        order="season DESC, team_id",
         limit=limit,
         offset=offset,
     )

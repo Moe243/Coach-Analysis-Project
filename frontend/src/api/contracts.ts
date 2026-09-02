@@ -30,6 +30,7 @@ export interface QbSeason {
   load_id: string;
   player_id: string;
   display_name: string;
+  position: "QB";
   team_id: string;
   season: number;
   scope: "analysis";
@@ -50,14 +51,79 @@ export interface QbSeason {
   starter_decisions?: number | null;
   team_points_scored?: number | null;
   completion_percentage?: number | null;
+  completions?: number | null;
+  attempts?: number | null;
   passing_yards?: number | null;
+  interceptions?: number | null;
+  sacks?: number | null;
+  yards_per_attempt?: number | null;
+  adjusted_net_yards_per_attempt?: number | null;
+  passing_touchdown_rate?: number | null;
+  interception_rate?: number | null;
   rushing_yards?: number | null;
   total_yards?: number | null;
   passing_touchdowns?: number | null;
   rushing_touchdowns?: number | null;
   total_touchdowns?: number | null;
   fumbles?: number | null;
+  fumbles_lost?: number | null;
+  expected_epa_per_dropback?: number | null;
+  actual_epa_per_dropback?: number | null;
+  performance_above_expectation?: number | null;
+  pae_eligibility_status?: string | null;
+  pae_reliability?: string | null;
+  pae_model_version?: string | null;
+  team_metric_version?: string | null;
+  team_games?: number | null;
+  team_wins?: number | null;
+  team_losses?: number | null;
+  team_ties?: number | null;
+  team_win_percentage?: number | null;
+  team_points_allowed?: number | null;
+  team_points_per_game?: number | null;
+  team_total_offensive_yards?: number | null;
+  team_passing_yards?: number | null;
+  team_rushing_yards?: number | null;
+  team_offensive_touchdowns?: number | null;
+  team_turnovers?: number | null;
+  team_sacks_allowed?: number | null;
+  team_offensive_epa_per_play?: number | null;
+  team_passing_epa_per_dropback?: number | null;
+  team_offensive_success_rate?: number | null;
+  team_points_per_game_rank?: number | null;
+  team_offensive_epa_per_play_rank?: number | null;
+  team_passing_epa_per_dropback_rank?: number | null;
   supplemental_payload?: Payload | null;
+}
+
+export interface TeamSeasonStatistics {
+  load_id: string;
+  team_id: string;
+  team_abbr: string;
+  team_name: string;
+  season: number;
+  team_metric_version: string;
+  team_games: number;
+  team_wins: number;
+  team_losses: number;
+  team_ties: number;
+  team_win_percentage: number;
+  team_points_scored: number;
+  team_points_allowed: number;
+  team_points_per_game: number;
+  team_total_offensive_yards: number | null;
+  team_passing_yards: number | null;
+  team_rushing_yards: number | null;
+  team_offensive_touchdowns: number | null;
+  team_turnovers: number | null;
+  team_sacks_allowed: number | null;
+  team_offensive_epa_per_play: number | null;
+  team_passing_epa_per_dropback: number | null;
+  team_offensive_success_rate: number | null;
+  team_points_per_game_rank: number | null;
+  team_offensive_epa_per_play_rank: number | null;
+  team_passing_epa_per_dropback_rank: number | null;
+  payload: Payload;
 }
 
 export interface QbPae {

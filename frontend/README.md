@@ -17,10 +17,10 @@ The default Vite proxy sends `/api` to `http://127.0.0.1:8000`. Set `VITE_API_PR
 
 ## Routes
 
-- `/statistics`: URL-synchronized QB-team-season search, filters, ordering, expanded metrics, and pagination; coaching filters identify team-season context rather than exact weekly exposure
+- `/statistics`: canonical-position QB-only, URL-synchronized QB-team-season search, extended metric ordering, compact default comparison columns, grouped expanded metrics, and pagination; coaching filters identify team-season context rather than exact weekly exposure
 - `/qbs/:playerId`: actual/expected/PAE history and source-backed coaching environments
 - `/coaches/:coachId`: role intervals, exploratory impact/suppression, connected QB contexts, and citations
-- `/network`: URL-backed Relationship Explorer with Coach Journey, QB Journey, Team History, and bounded Full Network; deterministic chronological layouts, canonical selection/focus history, source-backed assignment intervals, complete-key QB PAE context, and a keyboard-equivalent relationship surface
+- `/network`: URL-backed Relationship Explorer with Coach Journey, QB Journey, Team History, and bounded Full Network; timeline-first chronological journey/history views plus an explicit canonical Network display, canonical selection/focus history, source-backed assignment intervals, complete-key QB PAE context, and a keyboard-equivalent relationship surface
 - `/methodology`: metric, evidence, eligibility, uncertainty, and version interpretation
 
 ## Quality commands

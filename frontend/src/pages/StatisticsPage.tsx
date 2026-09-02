@@ -1,27 +1,19 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, FilterX, Search, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ApiError, apiGet, apiGetAll } from "../api/client";
+import { apiGet, apiGetAll } from "../api/client";
 import type {
   ApiPage,
   CoachAssignment,
   CoachRole,
-  QbPae,
   QbSeason,
   Team,
 } from "../api/contracts";
 import { DataErrorBoundary } from "../components/DataErrorBoundary";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { Pagination } from "../components/Pagination";
-import { StatusBadge } from "../components/StatusBadge";
-import {
-  integer,
-  payloadNumber,
-  percent,
-  roleLabel,
-  signed,
-} from "../lib/format";
+import { integer, percent, roleLabel, signed } from "../lib/format";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 
 const PAGE_SIZE = 25;
@@ -40,7 +32,16 @@ interface Filters {
   role: string;
   verification: string;
   eligibility: string;
-  sort: "name" | "season" | "dropbacks" | "epa";
+  sort:
+    | "name"
+    | "season"
+    | "dropbacks"
+    | "epa"
+    | "pae"
+    | "passing_yards"
+    | "passing_touchdowns"
+    | "interceptions"
+    | "total_touchdowns";
   minDropbacks: string;
   expanded: boolean;
   offset: number;
@@ -56,7 +57,17 @@ function getFilters(params: URLSearchParams): Filters {
     role: params.get("role") ?? "",
     verification: params.get("verification") ?? "",
     eligibility: params.get("eligibility") ?? "",
-    sort: ["name", "season", "dropbacks", "epa"].includes(sort ?? "")
+    sort: [
+      "name",
+      "season",
+      "dropbacks",
+      "epa",
+      "pae",
+      "passing_yards",
+      "passing_touchdowns",
+      "interceptions",
+      "total_touchdowns",
+    ].includes(sort ?? "")
       ? (sort as Filters["sort"])
       : "dropbacks",
     minDropbacks: params.get("minDropbacks") ?? "",
@@ -65,15 +76,12 @@ function getFilters(params: URLSearchParams): Filters {
   };
 }
 
-function PAECell({ pae }: { pae?: QbPae }) {
-  if (!pae) return <span title="No published value">—</span>;
+function PAECell({ value }: { value?: number | null }) {
+  if (value === null || value === undefined)
+    return <span title="No published value">—</span>;
   return (
-    <strong
-      className={
-        pae.performance_above_expectation >= 0 ? "metric-up" : "metric-down"
-      }
-    >
-      {signed(pae.performance_above_expectation)}
+    <strong className={value >= 0 ? "metric-up" : "metric-down"}>
+      {signed(value)}
     </strong>
   );
 }
@@ -180,6 +188,7 @@ export function StatisticsPage() {
   const filteredRows = useMemo(() => {
     const min = Number(filters.minDropbacks || 0);
     return (qbQuery.data?.items ?? []).filter((row) => {
+      if (row.position !== "QB") return false;
       if (min && row.dropbacks < min) return false;
       if (!assignmentFiltering) return true;
       const staff = assignmentMap.get(`${row.team_id}-${row.season}`) ?? [];
@@ -211,44 +220,18 @@ export function StatisticsPage() {
     ? filteredRows.slice(filters.offset, filters.offset + PAGE_SIZE)
     : filteredRows;
 
-  const paeQueries = useQueries({
-    queries: rows.map((row) => ({
-      queryKey: ["qb-pae", row.player_id],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        apiGet<ApiPage<QbPae>>(
-          `/qbs/${row.player_id}/pae`,
-          { limit: 50 },
-          signal,
-        ).catch((error: unknown) => {
-          if (error instanceof ApiError && error.status === 404) {
-            return { items: [], total: 0, limit: 50, offset: 0 };
-          }
-          throw error;
-        }),
-      staleTime: Infinity,
-    })),
-  });
-  const paeByKey = new Map<string, QbPae>();
-  paeQueries.forEach((query) =>
-    query.data?.items.forEach((pae) =>
-      paeByKey.set(`${pae.player_id}-${pae.team_id}-${pae.season}`, pae),
-    ),
-  );
   const teamMap = new Map(
     teams.data?.map((team) => [team.team_id, team]) ?? [],
   );
 
-  const paeLoading = paeQueries.some((query) => query.isLoading);
-  const paeError = paeQueries.find((query) => query.error)?.error;
   const isLoading =
-    qbQuery.isLoading || assignments.isLoading || teams.isLoading || paeLoading;
-  const error = qbQuery.error || assignments.error || teams.error || paeError;
+    qbQuery.isLoading || assignments.isLoading || teams.isLoading;
+  const error = qbQuery.error || assignments.error || teams.error;
   const retry = () => {
     void Promise.all([
       qbQuery.refetch(),
       assignments.refetch(),
       teams.refetch(),
-      ...paeQueries.map((query) => query.refetch()),
     ]);
   };
   const clearFilters = () => {
@@ -428,6 +411,11 @@ export function StatisticsPage() {
             >
               <option value="dropbacks">Dropbacks</option>
               <option value="epa">Actual EPA</option>
+              <option value="pae">PAE</option>
+              <option value="passing_yards">Passing yards</option>
+              <option value="passing_touchdowns">Passing touchdowns</option>
+              <option value="interceptions">Interceptions</option>
+              <option value="total_touchdowns">Total touchdowns</option>
               <option value="season">Most recent</option>
               <option value="name">Player name</option>
             </select>
@@ -497,8 +485,9 @@ export function StatisticsPage() {
                 <thead>
                   <tr>
                     <th>Quarterback</th>
-                    <th>Season / team</th>
-                    <th>Coaching context</th>
+                    <th>Team</th>
+                    <th>Season</th>
+                    <th>Record</th>
                     <th title="Actual EPA divided by eligible quarterback dropbacks">
                       Actual EPA/DB
                     </th>
@@ -507,24 +496,17 @@ export function StatisticsPage() {
                     </th>
                     <th title="Actual minus expected EPA per dropback">PAE</th>
                     <th>CPOE</th>
+                    <th>Pass yards</th>
+                    <th>Pass TD</th>
+                    <th>INT</th>
+                    <th>Total TD</th>
                     <th>Dropbacks</th>
-                    <th>Sample</th>
-                    {filters.expanded && <th>Success</th>}
-                    {filters.expanded && <th>Sack rate</th>}
-                    {filters.expanded && <th>INT rate</th>}
-                    {filters.expanded && <th>TD rate</th>}
-                    {filters.expanded && <th>Starter record</th>}
-                    {filters.expanded && <th>Comp.</th>}
-                    {filters.expanded && <th>Total yards</th>}
-                    {filters.expanded && <th>Total TD</th>}
-                    {filters.expanded && <th>Fumbles</th>}
-                    {filters.expanded && <th>Team points</th>}
+                    {filters.expanded && <th>Details</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => {
                     const key = `${row.player_id}-${row.team_id}-${row.season}`;
-                    const pae = paeByKey.get(key);
                     const staff = (
                       assignmentMap.get(`${row.team_id}-${row.season}`) ?? []
                     ).filter(
@@ -544,109 +526,100 @@ export function StatisticsPage() {
                             {row.games} games · {integer(row.starts)} starts
                           </small>
                         </td>
-                        <td data-label="Season / team">
-                          <strong>{row.season}</strong>
-                          <span>
-                            {teamMap.get(row.team_id)?.team_abbr ?? row.team_id}
-                          </span>
+                        <td data-label="Team">
+                          {teamMap.get(row.team_id)?.team_abbr ?? row.team_id}
                         </td>
-                        <td data-label="Coaching context">
-                          <div className="coach-stack">
-                            {staff.length ? (
-                              staff.slice(0, 3).map((assignment) => (
-                                <Link
-                                  key={assignment.assignment_key}
-                                  to={`/coaches/${assignment.coach_id}`}
-                                >
-                                  {assignment.canonical_name}
-                                  <small>
-                                    {roleLabel(assignment.role)} ·{" "}
-                                    {assignment.verification_status}
-                                  </small>
-                                </Link>
-                              ))
-                            ) : (
-                              <span>—</span>
-                            )}
-                            {staff.length > 3 && (
-                              <small>+{staff.length - 3} more intervals</small>
-                            )}
-                          </div>
-                        </td>
+                        <td data-label="Season">{row.season}</td>
+                        <td data-label="Record">{starterRecord(row)}</td>
                         <td data-label="Actual EPA/DB">
                           {signed(row.epa_per_dropback)}
                         </td>
                         <td data-label="Expected EPA/DB">
-                          {signed(pae?.expected_epa_per_dropback)}
+                          {signed(row.expected_epa_per_dropback)}
                         </td>
                         <td data-label="PAE">
-                          <PAECell pae={pae} />
+                          <PAECell value={row.performance_above_expectation} />
                         </td>
                         <td data-label="CPOE">{numberOrDash(row.cpoe)}</td>
+                        <td data-label="Passing yards">
+                          {integer(row.passing_yards)}
+                        </td>
+                        <td data-label="Passing touchdowns">
+                          {integer(row.passing_touchdowns)}
+                        </td>
+                        <td data-label="Interceptions">
+                          {integer(row.interceptions)}
+                        </td>
+                        <td data-label="Total touchdowns">
+                          {integer(row.total_touchdowns)}
+                        </td>
                         <td data-label="Dropbacks">
                           <strong>{integer(row.dropbacks)}</strong>
                         </td>
-                        <td data-label="Sample">
-                          <StatusBadge
-                            value={
-                              pae?.eligibility_status ??
-                              (row.qualifies_default
-                                ? "eligible"
-                                : "ineligible")
-                            }
-                          />
-                          {pae && <small>{pae.reliability} reliability</small>}
-                        </td>
                         {filters.expanded && (
-                          <td data-label="Success">
-                            {percent(row.success_rate)}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="Sack rate">
-                            {percent(row.sack_rate)}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="INT rate">
-                            {percent(
-                              payloadNumber(row.payload, "interception_rate"),
-                            )}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="TD rate">
-                            {percent(
-                              payloadNumber(row.payload, "touchdown_rate"),
-                            )}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="Starter record">
-                            {starterRecord(row)}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="Completion percentage">
-                            {percent(row.completion_percentage)}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="Total yards">
-                            {integer(row.total_yards)}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="Total touchdowns">
-                            {integer(row.total_touchdowns)}
-                          </td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="Fumbles">{integer(row.fumbles)}</td>
-                        )}
-                        {filters.expanded && (
-                          <td data-label="Team points">
-                            {integer(row.team_points_scored)}
+                          <td data-label="Details">
+                            <details className="season-totals">
+                              <summary>Performance, context, and staff</summary>
+                              <span>
+                                Sample:{" "}
+                                {row.pae_eligibility_status ??
+                                  (row.qualifies_default
+                                    ? "eligible"
+                                    : "ineligible")}{" "}
+                                · {row.pae_reliability ?? "unavailable"}{" "}
+                                reliability
+                              </span>
+                              <span>
+                                Completion: {integer(row.completions)}/
+                                {integer(row.attempts)} (
+                                {percent(row.completion_percentage)}) · YPA:{" "}
+                                {decimal(row.yards_per_attempt)} · ANY/A:{" "}
+                                {decimal(row.adjusted_net_yards_per_attempt)}
+                              </span>
+                              <span>
+                                Success: {percent(row.success_rate)} · Sacks:{" "}
+                                {integer(row.sacks)} ({percent(row.sack_rate)})
+                                · INT rate: {percent(row.interception_rate)} ·
+                                TD rate: {percent(row.passing_touchdown_rate)}
+                              </span>
+                              <span>
+                                Rushing: {integer(row.rushing_yards)} yards /{" "}
+                                {integer(row.rushing_touchdowns)} TD · Total:{" "}
+                                {integer(row.total_yards)} yards /{" "}
+                                {integer(row.total_touchdowns)} TD · Fumbles:{" "}
+                                {integer(row.fumbles)} (
+                                {integer(row.fumbles_lost)} lost)
+                              </span>
+                              <span>
+                                Team: {integer(row.team_points_scored)} points (
+                                {decimal(row.team_points_per_game)} per game,
+                                rank {integer(row.team_points_per_game_rank)}) ·{" "}
+                                {integer(row.team_total_offensive_yards)}{" "}
+                                offensive yards · EPA/play{" "}
+                                {signed(row.team_offensive_epa_per_play)} (rank{" "}
+                                {integer(row.team_offensive_epa_per_play_rank)})
+                              </span>
+                              <div className="coach-stack">
+                                {staff.length ? (
+                                  staff.map((assignment) => (
+                                    <Link
+                                      key={assignment.assignment_key}
+                                      to={`/coaches/${assignment.coach_id}`}
+                                    >
+                                      {assignment.canonical_name}
+                                      <small>
+                                        {roleLabel(assignment.role)} · Weeks{" "}
+                                        {assignment.start_week}–
+                                        {assignment.end_week} ·{" "}
+                                        {assignment.verification_status}
+                                      </small>
+                                    </Link>
+                                  ))
+                                ) : (
+                                  <span>No published coaching assignment.</span>
+                                )}
+                              </div>
+                            </details>
                           </td>
                         )}
                       </tr>
@@ -670,6 +643,10 @@ export function StatisticsPage() {
 
 function numberOrDash(value: number | null): string {
   return value === null ? "—" : value.toFixed(1);
+}
+
+function decimal(value?: number | null): string {
+  return value === null || value === undefined ? "—" : value.toFixed(2);
 }
 
 function starterRecord(row: QbSeason): string {

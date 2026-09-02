@@ -111,7 +111,7 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 
 ### Checkpoint-seven serving layer
 
-Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, coach model/data, and enhancement data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. Schema `checkpoint-7.3`, loader `serving-loader-v4`, and API `api-v1.3` are the current contracts. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
+Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, coach model/data, and enhancement data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. The local Stage 1 candidate uses schema `checkpoint-7.4`, loader `serving-loader-v5`, and API `api-v1.4`. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
 
 | Table/view | Grain or contract |
 |---|---|
@@ -119,7 +119,8 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | `serving_players`, `serving_player_external_ids` | GSIS player and external identifier per load |
 | `serving_games`, `serving_qb_games`, `serving_qb_seasons` | Game, QB-game-team, and QB-team-season facts with scope |
 | `serving_qb_pae` | One out-of-sample expected/actual/PAE record per QB-team-season |
-| `serving_qb_supplemental` | Additive QB-team-season starter record, team points, and weekly-player-stat box-score facts; complete key matches `serving_qb_seasons` |
+| `serving_qb_supplemental` | Additive QB-team-season starter record, completions/attempts, production, sacks, fumbles/lost, yards/attempt, and adjusted net yards/attempt; complete key matches `serving_qb_seasons` |
+| `serving_team_season_statistics` | One team-season with W-L-T, points, PBP-derived yards/TD/turnovers/sacks, EPA and success rates, and within-season competition ranks |
 | `serving_coaching_completeness` | One `(team_id, season, role)` audit cell with explicit assignment/manual-review state and interval metadata payload |
 | `serving_inherited_environment` | One team-season, strictly preseason context row with `feature_source_max_season < season` |
 | `serving_coach_assignments`, `serving_coach_citations` | Source-backed role interval and evidence |
@@ -127,7 +128,8 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | `serving_coach_exposures` | QB-assignment interval with observed/fractional dropbacks and assignment-matching coach, team, season, role, weeks, verification, confidence, basis, and shared status; deferred triggers revalidate changes from either side |
 | `serving_coach_effects`, `serving_coach_rankings` | Exploratory estimate and suppression contract per coach-role |
 | `serving_source_manifests`, `serving_pipeline_manifests` | Source and pipeline/model provenance |
-| `api_qb_statistics`, `api_qb_pae` | Published analysis-only QB metrics and PAE |
+| `api_qb_statistics`, `api_qb_pae` | Published analysis-only, canonical-position `QB` metrics and PAE; direct PAE attachment uses `(load_id, player_id, team_id, season)` |
+| `api_team_season_statistics` | Published team-season result, offense, efficiency, and rank facts |
 | `api_coaching_completeness`, `api_inherited_environment` | Complete coaching-role audit and leakage-safe inherited context |
 | `api_coach_impact`, `api_coach_comparisons` | Effects plus identification and suppression fields |
 | `api_coaching_assignments`, `api_coaching_network_edges` | Role intervals and staff edges with source/target verification, confidence, shared/provisional flags, full intervals, and overlap bounds |

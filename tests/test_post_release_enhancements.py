@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import polars as pl
 import pytest
 
 from nfl_coaching_impact.enhancements import (
+    EnhancementConfig,
     build_coaching_completeness,
     build_inherited_environment_features,
     build_qb_supplemental_statistics,
+    build_team_season_statistics,
+    run_enhancement_pipeline,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _qb_seasons() -> pl.DataFrame:
@@ -26,6 +33,7 @@ def _qb_seasons() -> pl.DataFrame:
                 "dropbacks": 40,
                 "attempts": 35,
                 "completions": 21,
+                "sacks": 5,
                 "interceptions": 2,
                 "epa_per_dropback": 0.1,
                 "cpoe": 1.2,
@@ -45,6 +53,7 @@ def _qb_seasons() -> pl.DataFrame:
                 "dropbacks": 20,
                 "attempts": 18,
                 "completions": 12,
+                "sacks": 2,
                 "interceptions": 0,
                 "epa_per_dropback": 0.2,
                 "cpoe": 2.0,
@@ -111,6 +120,8 @@ def test_supplemental_stats_preserve_multi_team_grain_and_reconcile() -> None:
                 "rushing_yards": rushing,
                 "rushing_tds": rushing_tds,
                 "fumbles_total": fumbles,
+                "fumbles_lost_total": 1,
+                "sack_yards_lost": 10,
             }
             for team, passing, passing_tds, rushing, rushing_tds, fumbles in (
                 ("team_buf", 300, 2, 20, 1, 2),
@@ -128,6 +139,11 @@ def test_supplemental_stats_preserve_multi_team_grain_and_reconcile() -> None:
     assert buffalo["total_yards"] == 320
     assert buffalo["total_touchdowns"] == 3
     assert buffalo["completion_percentage"] == 0.6
+    assert buffalo["yards_per_attempt"] == pytest.approx(300 / 35)
+    assert buffalo["adjusted_net_yards_per_attempt"] == pytest.approx(
+        (300 - 10 + 20 * 2 - 45 * 2) / (35 + 5)
+    )
+    assert buffalo["fumbles_lost"] == 1
     assert buffalo["team_points_scored"] == 24
     assert jacksonville["team_points_scored"] == 10
 
@@ -144,6 +160,8 @@ def test_supplemental_missing_box_score_data_remains_null() -> None:
             "rushing_yards": pl.Int64,
             "rushing_tds": pl.Int64,
             "fumbles_total": pl.Int64,
+            "fumbles_lost_total": pl.Int64,
+            "sack_yards_lost": pl.Int64,
         }
     )
     games = pl.DataFrame(
@@ -302,7 +320,114 @@ def test_inherited_environment_uses_only_target_minus_one_inputs() -> None:
     assert arizona["sos_pass_defense_strength"] == 0.75
 
 
+def test_team_statistics_reconcile_results_offense_and_competition_ranks() -> None:
+    games = pl.DataFrame(
+        [
+            {
+                "season": 2024,
+                "game_type": "REG",
+                "home_team_id": "team_ari",
+                "away_team_id": "team_atl",
+                "home_score": 24,
+                "away_score": 17,
+            },
+            {
+                "season": 2024,
+                "game_type": "REG",
+                "home_team_id": "team_atl",
+                "away_team_id": "team_ari",
+                "home_score": 20,
+                "away_score": 20,
+            },
+        ]
+    )
+    pbp = pl.DataFrame(
+        [
+            {
+                "season": 2024,
+                "season_type": "REG",
+                "posteam": team,
+                "pass": is_pass,
+                "rush": 1 - is_pass,
+                "yards_gained": yards,
+                "pass_touchdown": pass_td,
+                "rush_touchdown": rush_td,
+                "interception": interception,
+                "fumble_lost": fumble,
+                "fumbled_1_team": team if fumble else None,
+                "fumbled_2_team": None,
+                "fumble_recovery_1_team": "ARI" if fumble else None,
+                "fumble_recovery_2_team": None,
+                "sack": sack,
+                "qb_kneel": 0,
+                "qb_spike": 0,
+                "epa": epa,
+                "success": success,
+                "qb_dropback": is_pass,
+                "qb_epa": epa if is_pass else None,
+            }
+            for (
+                team,
+                is_pass,
+                yards,
+                pass_td,
+                rush_td,
+                interception,
+                fumble,
+                sack,
+                epa,
+                success,
+            ) in (
+                ("ARI", 1, 20.0, 1, 0, 0, 0, 0, 1.2, 1),
+                ("ARI", 0, 8.0, 0, 1, 0, 0, 0, 0.4, 1),
+                ("ATL", 1, -7.0, 0, 0, 0, 0, 1, -1.0, 0),
+                ("ATL", 0, 3.0, 0, 0, 0, 1, 0, -0.2, 0),
+                ("ARI", 1, 0.0, 0, 0, 1, 1, 0, -1.5, 0),
+            )
+        ]
+    )
+    pbp = pbp.with_columns(
+        pl.when((pl.col("posteam") == "ARI") & (pl.col("interception") == 1))
+        .then(pl.lit("ATL"))
+        .otherwise(pl.col("fumbled_1_team"))
+        .alias("fumbled_1_team")
+    )
+    result = build_team_season_statistics(pbp, games)
+    ari = result.filter(pl.col("team_id") == "team_ari").row(0, named=True)
+    atl = result.filter(pl.col("team_id") == "team_atl").row(0, named=True)
+    assert (ari["team_wins"], ari["team_losses"], ari["team_ties"]) == (1, 0, 1)
+    assert ari["team_win_percentage"] == 0.75
+    assert ari["team_total_offensive_yards"] == 28
+    assert ari["team_offensive_touchdowns"] == 2
+    assert ari["team_turnovers"] == 1
+    assert atl["team_turnovers"] == 1
+    assert atl["team_sacks_allowed"] == 1
+    assert ari["team_points_per_game_rank"] == 1
+
+
 class PostReleaseEnhancementTest(unittest.TestCase):
+    def test_clean_stage_one_builds_are_byte_identical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = run_enhancement_pipeline(
+                EnhancementConfig(project_root=ROOT, output_dir=root / "first")
+            )
+            second = run_enhancement_pipeline(
+                EnhancementConfig(project_root=ROOT, output_dir=root / "second")
+            )
+            self.assertEqual(first.data_version, second.data_version)
+            first_files = {
+                path.relative_to(first.output_path): path.read_bytes()
+                for path in first.output_path.rglob("*")
+                if path.is_file()
+            }
+            second_files = {
+                path.relative_to(second.output_path): path.read_bytes()
+                for path in second.output_path.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(first_files, second_files)
+
     def test_supplemental_grain_and_reconciliation(self) -> None:
         test_supplemental_stats_preserve_multi_team_grain_and_reconcile()
 
@@ -314,3 +439,6 @@ class PostReleaseEnhancementTest(unittest.TestCase):
 
     def test_environment_timing(self) -> None:
         test_inherited_environment_uses_only_target_minus_one_inputs()
+
+    def test_team_statistics(self) -> None:
+        test_team_statistics_reconcile_results_offense_and_competition_ranks()

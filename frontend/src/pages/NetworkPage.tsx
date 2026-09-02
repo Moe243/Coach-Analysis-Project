@@ -134,12 +134,138 @@ function QbMetrics({
   );
 }
 
+function RelationshipTimeline({
+  nodes,
+  relationships,
+  selected,
+  onSelect,
+}: {
+  nodes: RelationshipNode[];
+  relationships: Relationship[];
+  selected: string | null;
+  onSelect: (nodeId: string) => void;
+}) {
+  const nodesById = new Map(nodes.map((node) => [node.node_id, node]));
+  const teamSeasons = nodes
+    .filter((node) => node.node_type === "team_season")
+    .sort(
+      (left, right) =>
+        left.season - right.season || left.team_id.localeCompare(right.team_id),
+    );
+  return (
+    <div
+      className="relationship-timeline"
+      aria-label="Chronological relationship timeline"
+    >
+      {teamSeasons.map((teamSeason) => {
+        const context = relationships.filter(
+          (relationship) => relationship.target_node_id === teamSeason.node_id,
+        );
+        const assignments = context.filter(
+          (relationship) =>
+            relationship.relationship_type === "coach_assignment",
+        );
+        const qbFacts = context.filter(
+          (relationship) => relationship.relationship_type === "qb_team_season",
+        );
+        return (
+          <article className="timeline-season" key={teamSeason.node_id}>
+            <button
+              className={
+                selected === teamSeason.node_id
+                  ? "timeline-anchor is-selected"
+                  : "timeline-anchor"
+              }
+              type="button"
+              onClick={() => onSelect(teamSeason.node_id)}
+            >
+              <span>{teamSeason.season}</span>
+              <strong>{teamSeason.team_abbr}</strong>
+              <small>{teamSeason.team_name}</small>
+            </button>
+            <div className="timeline-context">
+              <section>
+                <p className="timeline-heading">Coaching assignments</p>
+                {assignments.length ? (
+                  assignments.map((assignment) => {
+                    if (assignment.relationship_type !== "coach_assignment")
+                      return null;
+                    const coach = nodesById.get(assignment.source_node_id);
+                    return (
+                      <button
+                        type="button"
+                        className={
+                          selected === assignment.source_node_id
+                            ? "timeline-relationship is-selected"
+                            : "timeline-relationship"
+                        }
+                        key={assignment.relationship_id}
+                        onClick={() => onSelect(assignment.source_node_id)}
+                      >
+                        <strong>
+                          {coach ? nodeLabel(coach) : assignment.coach_id}
+                        </strong>
+                        <span>
+                          {roleLabel(assignment.role)} · Weeks{" "}
+                          {assignment.start_week}–{assignment.end_week}
+                        </span>
+                        <RelationshipBadges relationship={assignment} />
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p>No coaching assignment matches the current filters.</p>
+                )}
+              </section>
+              <section>
+                <p className="timeline-heading">Quarterback seasons</p>
+                {qbFacts.length ? (
+                  qbFacts.map((qbFact) => {
+                    if (qbFact.relationship_type !== "qb_team_season")
+                      return null;
+                    const qb = nodesById.get(qbFact.source_node_id);
+                    return (
+                      <button
+                        type="button"
+                        className={
+                          selected === qbFact.source_node_id
+                            ? "timeline-relationship is-selected"
+                            : "timeline-relationship"
+                        }
+                        key={qbFact.relationship_id}
+                        onClick={() => onSelect(qbFact.source_node_id)}
+                      >
+                        <strong>{qb ? nodeLabel(qb) : qbFact.player_id}</strong>
+                        <QbMetrics relationship={qbFact} />
+                        <RelationshipBadges relationship={qbFact} />
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p>No QB-team-season fact matches the current QB filters.</p>
+                )}
+              </section>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 export function NetworkPage() {
   const [params, setParams] = useSearchParams();
   const rawMode = params.get("mode") ?? "team_history";
   const mode = (
     validModes.has(rawMode) ? rawMode : "team_history"
   ) as RelationshipMode;
+  const displayParameter = params.get("display");
+  const display =
+    displayParameter === "timeline" || displayParameter === "network"
+      ? displayParameter
+      : mode === "full_network"
+        ? "network"
+        : "timeline";
   const startSeason = Number(params.get("start_season") ?? 2020);
   const endSeason = Number(params.get("end_season") ?? 2025);
   const coachId = params.get("coach_id") ?? "";
@@ -236,7 +362,9 @@ export function NetworkPage() {
     () =>
       [
         ...new Map(
-          (quarterbacks.data ?? []).map((qb) => [qb.player_id, qb]),
+          (quarterbacks.data ?? [])
+            .filter((qb) => qb.position === "QB")
+            .map((qb) => [qb.player_id, qb]),
         ).values(),
       ].sort((left, right) =>
         left.display_name.localeCompare(right.display_name),
@@ -449,7 +577,7 @@ export function NetworkPage() {
       <div className="page-heading">
         <div>
           <p className="eyebrow">
-            Canonical entities · Source-backed intervals · API v1.2
+            Canonical entities · Source-backed intervals · API v1.4
           </p>
           <h1>Relationship Explorer</h1>
           <p>
@@ -742,6 +870,24 @@ export function NetworkPage() {
           <strong>{modeLabels[mode]}</strong>
           <p>{modeDescriptions[mode]}</p>
         </div>
+        <div className="view-toggle" aria-label="Relationship display">
+          <button
+            type="button"
+            className={display === "timeline" ? "is-active" : undefined}
+            aria-pressed={display === "timeline"}
+            onClick={() => setUrl({ display: "timeline" })}
+          >
+            Timeline
+          </button>
+          <button
+            type="button"
+            className={display === "network" ? "is-active" : undefined}
+            aria-pressed={display === "network"}
+            onClick={() => setUrl({ display: "network" })}
+          >
+            Network
+          </button>
+        </div>
         <div className="explorer-actions" aria-label="Explorer navigation">
           <button
             className="button button-secondary"
@@ -820,42 +966,53 @@ export function NetworkPage() {
                   <strong>{graph.relationships.length}</strong> relationships ·{" "}
                   {startSeason}–{endSeason}
                 </p>
-                <div>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() =>
-                      coreRef.current?.zoom(coreRef.current.zoom() * 1.2)
-                    }
-                    aria-label="Zoom in"
-                  >
-                    <ZoomIn aria-hidden="true" />
-                  </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() =>
-                      coreRef.current?.zoom(coreRef.current.zoom() / 1.2)
-                    }
-                    aria-label="Zoom out"
-                  >
-                    <ZoomOut aria-hidden="true" />
-                  </button>
-                  <button
-                    className="button button-ghost"
-                    type="button"
-                    onClick={() => coreRef.current?.fit(undefined, 36)}
-                  >
-                    Fit graph
-                  </button>
-                </div>
+                {display === "network" && (
+                  <div>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      onClick={() =>
+                        coreRef.current?.zoom(coreRef.current.zoom() * 1.2)
+                      }
+                      aria-label="Zoom in"
+                    >
+                      <ZoomIn aria-hidden="true" />
+                    </button>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      onClick={() =>
+                        coreRef.current?.zoom(coreRef.current.zoom() / 1.2)
+                      }
+                      aria-label="Zoom out"
+                    >
+                      <ZoomOut aria-hidden="true" />
+                    </button>
+                    <button
+                      className="button button-ghost"
+                      type="button"
+                      onClick={() => coreRef.current?.fit(undefined, 36)}
+                    >
+                      Fit graph
+                    </button>
+                  </div>
+                )}
               </div>
-              <NetworkGraph
-                elements={graph.elements}
-                selected={selected ?? null}
-                onSelect={selectNode}
-                register={register}
-              />
+              {display === "network" ? (
+                <NetworkGraph
+                  elements={graph.elements}
+                  selected={selected ?? null}
+                  onSelect={selectNode}
+                  register={register}
+                />
+              ) : (
+                <RelationshipTimeline
+                  nodes={graph.nodes}
+                  relationships={graph.relationships}
+                  selected={selected ?? null}
+                  onSelect={selectNode}
+                />
+              )}
               <div className="network-legend">
                 <span>
                   <i className="legend-coach" /> Coach

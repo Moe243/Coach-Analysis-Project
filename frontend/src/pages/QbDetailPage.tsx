@@ -236,21 +236,55 @@ export function QbDetailPage() {
                           {integer(season.total_yards)} yards ·{" "}
                           {integer(season.total_touchdowns)} TD
                         </summary>
+                        <strong>Performance</strong>
                         <span>
-                          Starter record: {starterRecord(season)} · Team points:{" "}
-                          {integer(season.team_points_scored)}
+                          Starter record: {starterRecord(season)} · Dropbacks:{" "}
+                          {integer(season.dropbacks)} · Success:{" "}
+                          {percent(season.success_rate)}
+                        </span>
+                        <strong>Passing</strong>
+                        <span>
+                          {integer(season.completions)}/
+                          {integer(season.attempts)} (
+                          {percent(season.completion_percentage)}) ·{" "}
+                          {integer(season.passing_yards)} yards ·{" "}
+                          {integer(season.passing_touchdowns)} TD ·{" "}
+                          {integer(season.interceptions)} INT
                         </span>
                         <span>
-                          Passing: {integer(season.passing_yards)} yards /{" "}
-                          {integer(season.passing_touchdowns)} TD
+                          Yards/attempt: {decimal(season.yards_per_attempt)} ·
+                          ANY/A:{" "}
+                          {decimal(season.adjusted_net_yards_per_attempt)} · TD
+                          rate: {percent(season.passing_touchdown_rate)} · INT
+                          rate: {percent(season.interception_rate)} · Sacks:{" "}
+                          {integer(season.sacks)} ({percent(season.sack_rate)})
+                        </span>
+                        <strong>Rushing and totals</strong>
+                        <span>
+                          {integer(season.rushing_yards)} rushing yards /{" "}
+                          {integer(season.rushing_touchdowns)} TD ·{" "}
+                          {integer(season.total_yards)} total yards /{" "}
+                          {integer(season.total_touchdowns)} total TD
                         </span>
                         <span>
-                          Rushing: {integer(season.rushing_yards)} yards /{" "}
-                          {integer(season.rushing_touchdowns)} TD
+                          Fumbles: {integer(season.fumbles)} · Lost:{" "}
+                          {integer(season.fumbles_lost)}
+                        </span>
+                        <strong>Team context</strong>
+                        <span>
+                          {integer(season.team_points_scored)} points ·{" "}
+                          {decimal(season.team_points_per_game)} per game (rank{" "}
+                          {integer(season.team_points_per_game_rank)}) ·{" "}
+                          {integer(season.team_total_offensive_yards)} offensive
+                          yards
                         </span>
                         <span>
-                          Completion: {percent(season.completion_percentage)} ·
-                          Fumbles: {integer(season.fumbles)}
+                          Offensive EPA/play:{" "}
+                          {signed(season.team_offensive_epa_per_play)} (rank{" "}
+                          {integer(season.team_offensive_epa_per_play_rank)}) ·
+                          Passing EPA/dropback:{" "}
+                          {signed(season.team_passing_epa_per_dropback)} (rank{" "}
+                          {integer(season.team_passing_epa_per_dropback_rank)})
                         </span>
                       </details>
                     </td>
@@ -344,4 +378,8 @@ function starterRecord(season: QbProfile["seasons"][number]): string {
   )
     return "—";
   return `${season.starter_wins}-${season.starter_losses}-${season.starter_ties}`;
+}
+
+function decimal(value?: number | null): string {
+  return value === null || value === undefined ? "—" : value.toFixed(2);
 }

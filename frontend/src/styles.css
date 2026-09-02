@@ -255,6 +255,12 @@ h1 {
   color: var(--muted);
   font-size: 0.78rem;
 }
+.season-totals > strong {
+  display: block;
+  margin-top: 0.65rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
 
 .filter-panel {
   position: relative;
@@ -1632,6 +1638,95 @@ code {
 .explorer-actions .button-secondary {
   color: var(--ink);
 }
+.view-toggle {
+  display: flex;
+  padding: 0.2rem;
+  border: 1px solid #455a75;
+  border-radius: 4px;
+}
+.view-toggle button {
+  padding: 0.45rem 0.7rem;
+  color: #c8d2df;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-weight: 800;
+}
+.view-toggle button.is-active {
+  color: var(--ink);
+  background: white;
+}
+.relationship-timeline {
+  min-height: 470px;
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+  color: var(--ink);
+  background: #f3f6f3;
+}
+.timeline-season {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 0.85rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+.timeline-anchor,
+.timeline-relationship {
+  padding: 0.7rem;
+  text-align: left;
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.timeline-anchor {
+  align-self: start;
+  display: grid;
+  gap: 0.18rem;
+  border-left: 4px solid var(--orange);
+}
+.timeline-anchor span,
+.timeline-anchor small,
+.timeline-relationship span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.timeline-anchor strong {
+  font-size: 1rem;
+}
+.timeline-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+.timeline-context section {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+}
+.timeline-context .timeline-heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.timeline-context p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.timeline-relationship {
+  display: grid;
+  gap: 0.25rem;
+}
+.timeline-anchor.is-selected,
+.timeline-relationship.is-selected {
+  border-color: var(--field);
+  box-shadow: inset 0 0 0 2px var(--field-pale);
+}
 .explorer-actions button:disabled,
 .accessible-explorer-navigation button:disabled {
   opacity: 0.45;
@@ -1822,6 +1917,10 @@ code {
   }
   .selection-panel {
     order: -1;
+  }
+  .timeline-season,
+  .timeline-context {
+    grid-template-columns: 1fr;
   }
   .network-canvas {
     min-height: 320px;

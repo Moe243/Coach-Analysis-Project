@@ -19,8 +19,9 @@ from .errors import PipelineError
 from .pipeline import _output_checksums, _update_latest, _validate_existing_version, _write_json
 from .sources import sha256_file
 
-ENHANCEMENT_PIPELINE_VERSION = "post-release-enhancements-v1"
-SUPPLEMENTAL_METRIC_VERSION = "qb-supplemental-v1"
+ENHANCEMENT_PIPELINE_VERSION = "post-release-enhancements-v2"
+SUPPLEMENTAL_METRIC_VERSION = "qb-supplemental-v2"
+TEAM_METRIC_VERSION = "team-season-statistics-v1"
 ENVIRONMENT_FEATURE_VERSION = "inherited-environment-v1"
 
 
@@ -122,6 +123,8 @@ def _player_stat_totals(player_stats: pl.DataFrame) -> pl.DataFrame:
         "rushing_yards",
         "rushing_tds",
         "fumbles_total",
+        "fumbles_lost_total",
+        "sack_yards_lost",
     }
     missing = required - set(player_stats.columns)
     if missing:
@@ -143,6 +146,8 @@ def _player_stat_totals(player_stats: pl.DataFrame) -> pl.DataFrame:
             _sum_if_observed("rushing_yards"),
             _sum_if_observed("rushing_tds", "rushing_touchdowns"),
             _sum_if_observed("fumbles_total", "fumbles"),
+            _sum_if_observed("fumbles_lost_total", "fumbles_lost"),
+            _sum_if_observed("sack_yards_lost"),
         )
     )
 
@@ -165,6 +170,7 @@ def build_qb_supplemental_statistics(
         "dropbacks",
         "attempts",
         "completions",
+        "sacks",
         "interceptions",
         "epa_per_dropback",
         "cpoe",
@@ -183,6 +189,22 @@ def build_qb_supplemental_statistics(
             .then(pl.col("completions") / pl.col("attempts"))
             .otherwise(None)
             .alias("completion_percentage"),
+            pl.when(pl.col("attempts") > 0)
+            .then(pl.col("passing_yards") / pl.col("attempts"))
+            .otherwise(None)
+            .alias("yards_per_attempt"),
+            pl.when((pl.col("attempts") + pl.col("sacks")) > 0)
+            .then(
+                (
+                    pl.col("passing_yards")
+                    - pl.col("sack_yards_lost")
+                    + 20 * pl.col("passing_touchdowns_box")
+                    - 45 * pl.col("interceptions")
+                )
+                / (pl.col("attempts") + pl.col("sacks"))
+            )
+            .otherwise(None)
+            .alias("adjusted_net_yards_per_attempt"),
             pl.when(
                 pl.col("passing_touchdowns_box").is_not_null()
                 & pl.col("rushing_touchdowns").is_not_null()
@@ -212,6 +234,137 @@ def build_qb_supplemental_statistics(
     )
     if bad_record.height:
         raise PipelineError("starter record components do not reconcile")
+    return result
+
+
+def build_team_season_statistics(pbp: pl.DataFrame, games: pl.DataFrame) -> pl.DataFrame:
+    """Build schedule results and deterministic PBP offense at team-season grain."""
+
+    regular_games = games.filter(
+        (pl.col("game_type") == "REG") & pl.col("season").is_between(2010, 2025)
+    )
+    results = pl.concat(
+        [
+            regular_games.select(
+                "season",
+                pl.col("home_team_id").alias("team_id"),
+                pl.col("home_score").alias("points_for"),
+                pl.col("away_score").alias("points_against"),
+            ),
+            regular_games.select(
+                "season",
+                pl.col("away_team_id").alias("team_id"),
+                pl.col("away_score").alias("points_for"),
+                pl.col("home_score").alias("points_against"),
+            ),
+        ]
+    )
+    results = (
+        results.group_by("season", "team_id")
+        .agg(
+            pl.len().alias("team_games"),
+            (pl.col("points_for") > pl.col("points_against")).sum().alias("team_wins"),
+            (pl.col("points_for") < pl.col("points_against")).sum().alias("team_losses"),
+            (pl.col("points_for") == pl.col("points_against")).sum().alias("team_ties"),
+            pl.col("points_for").sum().alias("team_points_scored"),
+            pl.col("points_against").sum().alias("team_points_allowed"),
+        )
+        .with_columns(
+            ((pl.col("team_wins") + 0.5 * pl.col("team_ties")) / pl.col("team_games")).alias(
+                "team_win_percentage"
+            ),
+            (pl.col("team_points_scored") / pl.col("team_games")).alias("team_points_per_game"),
+        )
+    )
+
+    offense = pbp.filter(
+        (pl.col("season_type") == "REG")
+        & pl.col("season").is_between(2010, 2025)
+        & pl.col("posteam").is_not_null()
+        & ((pl.col("pass") == 1) | (pl.col("rush") == 1))
+    ).with_columns(
+        pl.col("posteam")
+        .replace_strict(TEAM_ALIAS_TO_CANONICAL, default=None, return_dtype=pl.String)
+        .alias("team_abbr"),
+    )
+    if offense.filter(pl.col("team_abbr").is_null()).height:
+        raise PipelineError("team statistics contain unresolved offensive team aliases")
+    offense = offense.with_columns(
+        pl.concat_str([pl.lit("team_"), pl.col("team_abbr").str.to_lowercase()]).alias("team_id")
+    )
+    team_offense = offense.group_by("season", "team_id").agg(
+        pl.when(pl.col("pass") == 1)
+        .then(pl.col("yards_gained"))
+        .otherwise(0)
+        .sum()
+        .alias("team_passing_yards"),
+        pl.when(pl.col("rush") == 1)
+        .then(pl.col("yards_gained"))
+        .otherwise(0)
+        .sum()
+        .alias("team_rushing_yards"),
+        (pl.col("pass_touchdown").fill_null(0) + pl.col("rush_touchdown").fill_null(0))
+        .sum()
+        .alias("team_offensive_touchdowns"),
+        (
+            pl.col("interception").fill_null(0)
+            + (
+                (pl.col("fumbled_1_team") == pl.col("posteam"))
+                & pl.col("fumble_recovery_1_team").is_not_null()
+                & (pl.col("fumble_recovery_1_team") != pl.col("posteam"))
+            ).cast(pl.Int8)
+            + (
+                (pl.col("fumbled_2_team") == pl.col("posteam"))
+                & pl.col("fumble_recovery_2_team").is_not_null()
+                & (pl.col("fumble_recovery_2_team") != pl.col("posteam"))
+            ).cast(pl.Int8)
+        )
+        .sum()
+        .alias("team_turnovers"),
+        pl.col("sack").fill_null(0).sum().alias("team_sacks_allowed"),
+        pl.col("yards_gained").sum().alias("team_total_offensive_yards"),
+    )
+    analytics = (
+        offense.filter(
+            (pl.col("qb_kneel").fill_null(0) != 1) & (pl.col("qb_spike").fill_null(0) != 1)
+        )
+        .group_by("season", "team_id")
+        .agg(
+            pl.col("epa").mean().alias("team_offensive_epa_per_play"),
+            pl.col("success").mean().alias("team_offensive_success_rate"),
+            pl.when(pl.col("qb_dropback") == 1)
+            .then(pl.col("qb_epa"))
+            .otherwise(None)
+            .mean()
+            .alias("team_passing_epa_per_dropback"),
+        )
+    )
+    result = (
+        results.join(team_offense, on=["season", "team_id"], how="left", validate="1:1")
+        .join(analytics, on=["season", "team_id"], how="left", validate="1:1")
+        .with_columns(
+            pl.col("team_points_per_game")
+            .rank(method="min", descending=True)
+            .over("season")
+            .cast(pl.Int16)
+            .alias("team_points_per_game_rank"),
+            pl.col("team_offensive_epa_per_play")
+            .rank(method="min", descending=True)
+            .over("season")
+            .cast(pl.Int16)
+            .alias("team_offensive_epa_per_play_rank"),
+            pl.col("team_passing_epa_per_dropback")
+            .rank(method="min", descending=True)
+            .over("season")
+            .cast(pl.Int16)
+            .alias("team_passing_epa_per_dropback_rank"),
+            pl.lit(TEAM_METRIC_VERSION).alias("team_metric_version"),
+        )
+        .with_columns(pl.col(pl.Float64).round(12))
+        .sort("season", "team_id")
+    )
+    if result.select("season", "team_id").n_unique() != result.height:
+        raise PipelineError("team-season statistics have duplicate business keys")
     return result
 
 
@@ -356,6 +509,19 @@ def build_pbp_environment_inputs(pbp: pl.DataFrame) -> tuple[pl.DataFrame, pl.Da
         "qb_hit",
         "sack",
         "qb_epa",
+        "epa",
+        "success",
+        "yards_gained",
+        "pass",
+        "rush",
+        "pass_touchdown",
+        "rush_touchdown",
+        "interception",
+        "fumble_lost",
+        "fumbled_1_team",
+        "fumbled_2_team",
+        "fumble_recovery_1_team",
+        "fumble_recovery_2_team",
     }
     missing = required - set(pbp.columns)
     if missing:
@@ -679,6 +845,7 @@ def _identity(project_root: Path, historical_version: str) -> tuple[str, dict[st
         "pipeline_version": ENHANCEMENT_PIPELINE_VERSION,
         "supplemental_metric_version": SUPPLEMENTAL_METRIC_VERSION,
         "environment_feature_version": ENVIRONMENT_FEATURE_VERSION,
+        "team_metric_version": TEAM_METRIC_VERSION,
         "historical_version": historical_version,
         "inputs": source_hashes,
     }
@@ -710,10 +877,23 @@ def _read_environment_pbp(historical: Path) -> pl.DataFrame:
         "qb_hit",
         "sack",
         "qb_epa",
+        "epa",
+        "success",
+        "yards_gained",
+        "pass",
+        "rush",
+        "pass_touchdown",
+        "rush_touchdown",
+        "interception",
+        "fumble_lost",
+        "fumbled_1_team",
+        "fumbled_2_team",
+        "fumble_recovery_1_team",
+        "fumble_recovery_2_team",
     ]
     paths = [
         historical / "bronze" / "play_by_play" / f"season={season}" / "play_by_play.parquet"
-        for season in range(2008, 2025)
+        for season in range(2008, 2026)
     ]
     missing = [path for path in paths if not path.is_file()]
     if missing:
@@ -796,7 +976,8 @@ def run_enhancement_pipeline(config: EnhancementConfig) -> EnhancementResult:
     review_focus = completeness.filter(
         pl.col("requires_manual_review") | pl.col("has_unclear_interval")
     )
-    protection, pass_defense = build_pbp_environment_inputs(_read_environment_pbp(historical))
+    pbp = _read_environment_pbp(historical)
+    protection, pass_defense = build_pbp_environment_inputs(pbp)
     environment = (
         build_inherited_environment_features(
             protection,
@@ -829,12 +1010,18 @@ def run_enhancement_pipeline(config: EnhancementConfig) -> EnhancementResult:
         .with_columns(pl.lit(version).alias("data_version"))
         .select("data_version", pl.exclude("data_version"))
     )
+    team_statistics = (
+        build_team_season_statistics(pbp, pl.read_parquet(silver / "games.parquet"))
+        .with_columns(pl.lit(version).alias("data_version"))
+        .select("data_version", pl.exclude("data_version"))
+    )
 
     staging = output_root / ".staging" / uuid.uuid4().hex
     try:
         staging.mkdir(parents=True)
         tables = {
             "qb_supplemental_statistics": qb_stats,
+            "team_season_statistics": team_statistics,
             "coaching_completeness": completeness,
             "coaching_manual_review_focus": review_focus,
             "inherited_environment_features": environment,
@@ -850,6 +1037,7 @@ def run_enhancement_pipeline(config: EnhancementConfig) -> EnhancementResult:
             "historical_data_version": historical_version,
             "supplemental_metric_version": SUPPLEMENTAL_METRIC_VERSION,
             "environment_feature_version": ENVIRONMENT_FEATURE_VERSION,
+            "team_metric_version": TEAM_METRIC_VERSION,
             "source_hashes": source_hashes,
             "table_counts": counts,
             "status": "succeeded",

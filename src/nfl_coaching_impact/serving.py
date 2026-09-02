@@ -20,9 +20,9 @@ from psycopg.types.json import Jsonb
 from .errors import PipelineError
 from .pipeline import _validate_existing_version
 
-SCHEMA_VERSION = "checkpoint-7.3"
-LOADER_VERSION = "serving-loader-v4"
-API_CONTRACT_VERSION = "api-v1.3"
+SCHEMA_VERSION = "checkpoint-7.4"
+LOADER_VERSION = "serving-loader-v5"
+API_CONTRACT_VERSION = "api-v1.4"
 PUBLICATION_NAMESPACE = uuid.UUID("c79812ad-1480-48ec-9972-e94b6f158a31")
 
 
@@ -179,6 +179,7 @@ def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any],
         "coach_effects": pl.read_parquet(coach / "coach_effect_estimates.parquet"),
         "coach_rankings": pl.read_parquet(coach / "preliminary_coach_rankings.parquet"),
         "qb_supplemental": pl.read_parquet(enhancement / "qb_supplemental_statistics.parquet"),
+        "team_statistics": pl.read_parquet(enhancement / "team_season_statistics.parquet"),
         "coaching_completeness": pl.read_parquet(enhancement / "coaching_completeness.parquet"),
         "inherited_environment": pl.read_parquet(
             enhancement / "inherited_environment_features.parquet"
@@ -234,7 +235,12 @@ def _validate_version_contracts(frames: dict[str, Any], versions: ServingVersion
         versions.expected_model
     }:
         raise PipelineError("coach exposures expected-performance model version mismatch")
-    for name in ("qb_supplemental", "coaching_completeness", "inherited_environment"):
+    for name in (
+        "qb_supplemental",
+        "team_statistics",
+        "coaching_completeness",
+        "inherited_environment",
+    ):
         if set(frames[name]["data_version"].unique().to_list()) != {versions.enhancement}:
             raise PipelineError(f"{name} enhancement data version mismatch")
 
@@ -275,6 +281,10 @@ def _validate_sources(
         "qb_supplemental": (
             {"player_id", "team_id", "season", "supplemental_metric_version"},
             ["player_id", "team_id", "season"],
+        ),
+        "team_statistics": (
+            {"team_id", "season", "team_metric_version", "team_games"},
+            ["team_id", "season"],
         ),
         "coaching_completeness": (
             {"team_id", "season", "role", "assignment_status"},
@@ -414,6 +424,7 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                         "serving_coach_assignments",
                         "serving_coach_effects",
                         "serving_qb_supplemental",
+                        "serving_team_season_statistics",
                         "serving_coaching_completeness",
                         "serving_inherited_environment",
                     )
@@ -624,8 +635,14 @@ def _insert_frames(
         ],
     )
     many(
-        "INSERT INTO serving_qb_supplemental VALUES "
-        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO serving_qb_supplemental "
+        "(load_id, player_id, team_id, season, supplemental_metric_version, "
+        "starter_wins, starter_losses, starter_ties, starter_decisions, "
+        "team_points_scored, completion_percentage, passing_yards, rushing_yards, "
+        "total_yards, passing_touchdowns, rushing_touchdowns, total_touchdowns, "
+        "fumbles, payload, completions, attempts, interceptions, sacks, "
+        "yards_per_attempt, adjusted_net_yards_per_attempt, fumbles_lost) VALUES "
+        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         [
             (
                 lid,
@@ -647,8 +664,49 @@ def _insert_frames(
                 r.get("total_touchdowns"),
                 r.get("fumbles"),
                 _payload(r),
+                r.get("completions"),
+                r.get("attempts"),
+                r.get("interceptions"),
+                r.get("sacks"),
+                r.get("yards_per_attempt"),
+                r.get("adjusted_net_yards_per_attempt"),
+                r.get("fumbles_lost"),
             )
             for r in frames["qb_supplemental"].to_dicts()
+        ],
+    )
+    many(
+        "INSERT INTO serving_team_season_statistics VALUES "
+        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        [
+            (
+                lid,
+                r["team_id"],
+                r["season"],
+                r["team_metric_version"],
+                r["team_games"],
+                r["team_wins"],
+                r["team_losses"],
+                r["team_ties"],
+                r["team_win_percentage"],
+                r["team_points_scored"],
+                r["team_points_allowed"],
+                r["team_points_per_game"],
+                r.get("team_total_offensive_yards"),
+                r.get("team_passing_yards"),
+                r.get("team_rushing_yards"),
+                r.get("team_offensive_touchdowns"),
+                r.get("team_turnovers"),
+                r.get("team_sacks_allowed"),
+                r.get("team_offensive_epa_per_play"),
+                r.get("team_passing_epa_per_dropback"),
+                r.get("team_offensive_success_rate"),
+                r.get("team_points_per_game_rank"),
+                r.get("team_offensive_epa_per_play_rank"),
+                r.get("team_passing_epa_per_dropback_rank"),
+                _payload(r),
+            )
+            for r in frames["team_statistics"].to_dicts()
         ],
     )
     many(

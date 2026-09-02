@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { CoachDetailPage } from "./CoachDetailPage";
 import { QbDetailPage } from "./QbDetailPage";
@@ -28,6 +28,11 @@ describe("detail pages", () => {
     expect(screen.getByText("Head coach · Weeks 1–18")).toBeInTheDocument();
     expect(screen.getByText("4,450 yards · 35 TD")).toBeInTheDocument();
     expect(screen.getByText(/Starter record: 11-6-0/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("4,450 yards · 35 TD"));
+    expect(screen.getByText(/Yards\/attempt: 6.83/)).toBeInTheDocument();
+    expect(screen.getByText(/ANY\/A: 6.58/)).toBeInTheDocument();
+    expect(screen.getByText(/Fumbles: 6 · Lost: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/24.76 per game \(rank 8\)/)).toBeInTheDocument();
   });
 
   it("labels coach impact as exploratory and suppressed and links citations", async () => {

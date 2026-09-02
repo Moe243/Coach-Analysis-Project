@@ -102,6 +102,17 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
             {row["team_id"]: row["passing_yards"] for row in rows},
             {"team_buf": 241, "team_jax": 280},
         )
+        self.assertTrue(all(row["position"] == "QB" for row in rows))
+        self.assertTrue(all("adjusted_net_yards_per_attempt" in row for row in rows))
+        self.assertTrue(all("passing_touchdown_rate" in row for row in rows))
+        self.assertTrue(all("interception_rate" in row for row in rows))
+        team_stats = self.client.get(
+            "/team-seasons", params={"team_id": "team_buf", "season": 2010}
+        )
+        self.assertEqual(team_stats.status_code, 200)
+        self.assertEqual(team_stats.json()["total"], 1)
+        self.assertEqual(team_stats.json()["items"][0]["team_games"], 16)
+        self.assertIn("team_offensive_epa_per_play_rank", team_stats.json()["items"][0])
         completeness = self.client.get(
             "/coaching/completeness",
             params={"team_id": "team_hou", "season": 2020, "role": "play_caller"},
@@ -128,6 +139,48 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                     (load_id,),
                 )
 
+    def test_qb_endpoints_exclude_non_quarterback_positions(self) -> None:
+        for name, player_id in (
+            ("Terrelle Pryor", "00-0028825"),
+            ("Taysom Hill", "00-0033357"),
+        ):
+            response = self.client.get("/qbs", params={"search": name})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["total"], 0)
+            self.assertEqual(self.client.get(f"/qbs/{player_id}").status_code, 404)
+
+        with psycopg.connect(self.url) as connection:
+            load_id = connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
+            team_id = connection.execute(
+                "SELECT team_id FROM serving_teams WHERE load_id = %s ORDER BY team_id LIMIT 1",
+                (load_id,),
+            ).fetchone()[0]
+            connection.execute(
+                "INSERT INTO serving_players VALUES "
+                "(%s, 'not-a-qb', 'Position Fixture', 'WR', '{}')",
+                (load_id,),
+            )
+            connection.execute(
+                "INSERT INTO serving_qb_seasons VALUES "
+                "(%s, 'not-a-qb', %s, 2025, 'analysis', 1, 0, 1, 0, NULL, 0, 0, "
+                "false, 'test', '{}')",
+                (load_id, team_id),
+            )
+        listing = self.client.get("/qbs", params={"search": "Position Fixture"})
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json()["total"], 0)
+        self.assertEqual(self.client.get("/qbs/not-a-qb").status_code, 404)
+        self.assertEqual(self.client.get("/qbs/not-a-qb/pae").status_code, 404)
+        with psycopg.connect(self.url) as connection:
+            connection.execute(
+                "DELETE FROM serving_qb_seasons WHERE load_id = %s AND player_id = 'not-a-qb'",
+                (load_id,),
+            )
+            connection.execute(
+                "DELETE FROM serving_players WHERE load_id = %s AND player_id = 'not-a-qb'",
+                (load_id,),
+            )
+
     def test_independent_clean_loads_have_identical_analytical_checksums(self) -> None:
         database = f"nfl_c7_clean_{secrets.token_hex(5)}"
         url = self._create_database(database)
@@ -144,6 +197,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 "api_review_queue_summary",
                 "api_coaching_completeness",
                 "api_inherited_environment",
+                "api_team_season_statistics",
             )
             checksums = []
             for connection_url in (self.url, url):
@@ -178,7 +232,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 "c3-f6c1aa118ff43b90",
                 "c5-8fd5d1aba2598c59",
                 "c6-400a5b474aa37a35",
-                "enh-e1dd0f9ca678b345",
+                "enh-5b374031c236ee54",
             ),
         )
         self.assertEqual(manifest_count, 5)
@@ -639,7 +693,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code, 200)
         response = self.client.get("/versions")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["api_contract_version"], "api-v1.3")
+        self.assertEqual(response.json()["api_contract_version"], "api-v1.4")
 
     def test_relationship_explorer_all_modes_use_the_active_publication(self) -> None:
         with psycopg.connect(self.url) as connection:
@@ -678,7 +732,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 body = response.json()
                 self.assertEqual(body["query"]["mode"], mode)
                 self.assertEqual(body["versions"]["load_id"], load_id)
-                self.assertEqual(body["versions"]["api_contract_version"], "api-v1.3")
+                self.assertEqual(body["versions"]["api_contract_version"], "api-v1.4")
 
     def test_relationship_explorer_requires_a_bounded_valid_scope(self) -> None:
         invalid = (
@@ -1212,7 +1266,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertFalse(body["semantics"]["exact_weekly_overlap"])
         self.assertIn("within the same season", body["semantics"]["coach_qb_context"])
         self.assertEqual(body["versions"]["load_id"], load_id)
-        self.assertEqual(body["versions"]["api_contract_version"], "api-v1.3")
+        self.assertEqual(body["versions"]["api_contract_version"], "api-v1.4")
         node_ids = [row["node_id"] for row in body["nodes"]]
         relationship_ids = [row["relationship_id"] for row in body["relationships"]]
         self.assertEqual(len(node_ids), len(set(node_ids)))

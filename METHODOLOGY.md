@@ -152,6 +152,24 @@ The checkpoint-six identity hashes the historical QB-game input, checkpoint-five
 
 Checkpoint seven does not recompute metrics or models. It verifies every upstream checksum, required column, business key, lineage, interval, citation, fractional exposure, and model/data version before insertion. Exposure lineage is checked in Python and by deferred PostgreSQL triggers in both directions against coach, team, season, role, interval, verification, confidence, interval basis, and shared status; coordinated assignment/exposure changes remain valid when their final deferred state agrees. Each manual CSV is captured once, hashed and parsed from those same bytes, then rehashed immediately before publication so a mid-load edit aborts the transaction. All tables and the publication-pointer swap share one PostgreSQL transaction; a failed candidate load preserves the previous publication. The load identity hashes schema/loader/API versions, all upstream analytical identities, and every `data/manual/*.csv` file. Independent empty databases must produce the same load ID and identical ordered JSON checksums for all eight serving views; database timestamps are execution metadata and may differ.
 
+## Stage 1 descriptive statistics
+
+Canonical player position is the publication rule for quarterback-facing lists and profiles:
+only `position = QB` is served, while historical source rows remain intact. Supplemental QB
+totals come from nflverse weekly player statistics. Yards per attempt is passing yards divided
+by attempts. Adjusted net yards per attempt is `(passing yards - sack yards lost + 20 × passing
+TD - 45 × interceptions) / (attempts + sacks)`. Missing inputs yield null rather than an
+imputed result.
+
+Team-season results use regular-season schedules. Offensive yards, touchdowns, turnovers,
+sacks allowed, EPA/play, passing EPA/dropback, and success rate use regular-season nflverse
+PBP at `(team_id, season)` grain, excluding kneels and spikes from efficiency rates. Within-season
+ranks use competition ranking (`1, 2, 2, 4`) in descending order; ties retain the same rank.
+Turnovers count interceptions plus fumbles recovered by another team when the fumbling team is
+the offense; a return-team fumble after an interception is not reassigned to the original offense.
+These target-season team facts are descriptive display context and are not added to the
+leakage-safe expected-performance model.
+
 ## Interface interpretation
 
 Checkpoint eight performs no new football aggregation or model fitting. It displays the checkpoint-seven contracts at QB-team-season, coach-role, assignment-interval, citation, and relationship grains. PAE remains actual EPA/dropback minus the preseason expectation; eligibility changes the reliability label and available filters, never the arithmetic. Missing numeric values render as unavailable rather than zero. Coach estimates retain exploratory, identification, suppression, and conditional-bootstrap language, and no ordinal coach rank is derived in the browser.
