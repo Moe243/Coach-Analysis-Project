@@ -8,7 +8,12 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-Checkpoint eight's six confirmed interface defects are corrected, and the responsive Relationship Explorer now consumes the bounded authoritative API contract. Coach Journey, QB Journey, Team History, and bounded Full Network preserve canonical identities, assignment intervals, QB-team-season PAE grain, missingness, evidence states, and suppression language. The graph and keyboard-accessible relationship explorer share the same response objects; neither turns same-team-season context into exact weekly overlap or causal coach attribution. Checkpoint nine deployment configuration targets a Render static site, a Render free FastAPI service, and Neon PostgreSQL; live URLs are recorded only after verification.
+All nine checkpoints are complete. The responsive application and bounded Relationship Explorer are deployed on Render against the approved PostgreSQL publication on Neon. Coach Journey, QB Journey, Team History, and bounded Full Network preserve canonical identities, assignment intervals, QB-team-season PAE grain, missingness, evidence states, and suppression language. The graph and keyboard-accessible relationship explorer share the same response objects; neither turns same-team-season context into exact weekly overlap or causal coach attribution.
+
+- [Live application](https://nfl-coaching-impact-engine.onrender.com)
+- [Live API](https://nfl-coaching-impact-api.onrender.com)
+- [Interactive API documentation](https://nfl-coaching-impact-api.onrender.com/docs)
+- [Checkpoint-nine release report](docs/CHECKPOINT_9_REPORT.md)
 
 - Analysis seasons: 2010-2025
 - Warm-up only: 1999-2009
@@ -178,7 +183,7 @@ Secrets will be loaded from environment variables. Copy `.env.example` to `.env`
 
 ## Deployment and licensing
 
-The reproducible Render/Neon release procedure is documented in [the deployment guide](docs/DEPLOYMENT.md). Render receives `DATABASE_URL`, `CORS_ORIGINS`, and `VITE_API_BASE_URL` through provider environment variables only. The client shows an “API is waking up” state and retries transient cold-start failures automatically.
+The reproducible Render/Neon release procedure is documented in [the deployment guide](docs/DEPLOYMENT.md). Render receives `DATABASE_URL`, `CORS_ORIGINS`, and `VITE_API_BASE_URL` through provider environment variables only. The client shows an “API is waking up” state and retries transient cold-start failures automatically. The public API is intentionally read-only and unauthenticated; free-tier cold starts and availability limits remain explicit.
 
 Original code and documentation are available under the [MIT License](LICENSE). Third-party datasets and derived material remain subject to their original terms; read the [third-party data notice](THIRD_PARTY_DATA_NOTICE.md) and [data-source register](DATA_SOURCES.md). The PFR decision remains `PERMISSION REQUIRED BEFORE INGESTION`.
 
@@ -197,6 +202,7 @@ Original code and documentation are available under the [MIT License](LICENSE). 
 - [Checkpoint six report](docs/CHECKPOINT_6_REPORT.md)
 - [Checkpoint seven report](docs/CHECKPOINT_7_REPORT.md)
 - [Checkpoint eight report](docs/CHECKPOINT_8_REPORT.md)
+- [Checkpoint nine report](docs/CHECKPOINT_9_REPORT.md)
 
 ## Interpretation standard
 

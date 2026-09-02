@@ -1,6 +1,6 @@
 # Checkpoint-eight frontend
 
-This package is the local React/TypeScript interface for the NFL Coaching Impact Engine. It reads the checkpoint-seven FastAPI contract and contains no embedded production data, database credentials, or model calculations.
+This package is the React/TypeScript interface for the NFL Coaching Impact Engine. The production site is [live on Render](https://nfl-coaching-impact-engine.onrender.com). It reads the FastAPI contract and contains no embedded production data, database credentials, or model calculations.
 
 ## Local setup
 

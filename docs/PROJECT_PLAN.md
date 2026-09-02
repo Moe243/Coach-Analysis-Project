@@ -47,14 +47,14 @@ Create Alembic migrations, curated PostgreSQL loads, FastAPI search/filter/detai
 
 Exit criterion implemented: migrations are repeatable; the loader publishes canonical, analytical, provenance, and review facts atomically and idempotently; serving views exclude warm-up output where required; disposable PostgreSQL/API behavior tests pass; and independent clean loads have identical analytical checksums.
 
-## Checkpoint eight — frontend (implemented; pending approval)
+## Checkpoint eight — frontend (complete)
 
 Build a responsive React/TypeScript interface with URL-synchronized quarterback, coach, team, season, role, evidence, eligibility, ordering, and metric filters; QB and coach detail routes; source citations; a focused coaching-network graph with a semantic list alternative; and an interpretation guide.
 
 Exit criterion implemented: real checkpoint-seven API flows were exercised at desktop, tablet, and mobile widths; component/API/accessibility tests, lint, formatting, type checking, and the production build pass; loading, empty, error, pagination, deep-link, evidence, uncertainty, and suppression states are covered. Deployment and portfolio packaging remain checkpoint nine work.
 
-## Checkpoint nine — portfolio polish
+## Checkpoint nine — production release and portfolio polish (complete)
 
-Add screenshots/GIFs, CI, Docker Compose application workflow, conclusions, employer-oriented README narrative, reproducibility review, and deployment documentation.
+Deploy the approved application publication, verify the live frontend/API/database and all explorer modes, add provider-safe release configuration, licensing, portfolio material, reproducibility evidence, and production documentation.
 
-Exit criterion: clean-clone setup works and conclusions answer the research question without causal overstatement.
+Exit criterion met: the Render frontend and API serve the approved Neon publication; exact-origin CORS, health/version contracts, core API records, and all four Relationship Explorer modes were verified live. Release documentation, licensing, cold-start behavior, provider-only secret handling, and recruiter-oriented project material are complete. Coach results remain explicitly exploratory.

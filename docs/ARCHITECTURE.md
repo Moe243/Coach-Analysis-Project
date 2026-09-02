@@ -82,7 +82,7 @@ Coach assignments use week and date bounds. A deterministic environment key repr
 
 ## API contracts
 
-FastAPI connects through `DATABASE_URL`, marks every request transaction read-only, and queries only current-publication views/tables. Whitelisted sorting with complete business-key tie-breakers, bound parameters, limit 1-200, nonnegative offsets, typed role/status validation, 404 details, and empty pages form API contract `api-v1.2`. OpenAPI documents the routes. Authentication and deployment remain deferred; the local server is not safe for public exposure.
+FastAPI connects through `DATABASE_URL`, marks every request transaction read-only, and queries only current-publication views/tables. Whitelisted sorting with complete business-key tie-breakers, bound parameters, limit 1-200, nonnegative offsets, typed role/status validation, 404 details, and empty pages form API contract `api-v1.2`. OpenAPI documents the routes. The API is deployed as a read-only Render service behind provider TLS. It remains intentionally unauthenticated, permits CORS only from the exact frontend origin, and exposes no mutation routes. Neon is the sole production PostgreSQL service.
 
 `GET /relationships/explorer` returns a bounded, deterministic `Coach -> Team-Season <- QB` subgraph without adding a duplicate analytical table. Coach nodes retain canonical `coach_id`; QB nodes retain GSIS `player_id`; team-season nodes serialize `(team_id, season)`. Coach relationships remain one sourced `assignment_key` interval, while QB relationships remain one `(player_id, team_id, season)` record and left-join PAE on that complete key. Team-history and team-anchored full-network scopes come directly from authoritative QB statistics as well as filtered assignments; role, verification, and provisional filters therefore affect coach edges only. Coach, QB, and team-history modes require their corresponding identity. Full-network mode requires an identity/team anchor and is capped at five seasons; all modes also enforce 1,000-node and 2,000-relationship response limits. The endpoint returns one version block and stamps every relationship with the active publication ID, eliminating frontend N+1 PAE requests for the future explorer.
 
@@ -94,7 +94,7 @@ No display substitutes zero for a missing value. Verification, confidence, inter
 
 The semantic relationship list is an equivalent exploration surface, not a fallback summary. It exposes canonical entity actions, assignment keys, roles, interval bounds/basis, verification, confidence, interim/shared/retained/provisional flags, citation availability, QB dropbacks, actual/expected EPA, PAE, eligibility, reliability, and versions. Select, Focus, Reset, and Back are available without the graph. Supported explorer state is URL-backed with canonical IDs. Client filters operate on the single bounded response and never issue N+1 PAE calls; coach-only filters affect coach assignments without deleting independent QB facts. A server 413 is rendered as a complete failure with narrowing guidance and no partial graph.
 
-Local development proxies `/api` to the checkpoint-seven server. A production host would need a same-origin reverse proxy or an explicit `VITE_API_BASE_URL`; deployment remains checkpoint nine work.
+Local development proxies `/api` to FastAPI. The Render static build uses the explicit public `VITE_API_BASE_URL`; free-service cold starts are surfaced and retried only for transient failures.
 
 ## Security and compliance
 

@@ -201,9 +201,19 @@ function teamHistoryDagre(
 
   const headCoachIds = new Set<string>();
   relationships.forEach((relationship) => {
+    if (
+      relationship.relationship_type === "coach_assignment" &&
+      relationship.role === "head_coach"
+    ) {
+      headCoachIds.add(relationship.source_node_id);
+    }
+  });
+  relationships.forEach((relationship) => {
     if (relationship.relationship_type === "coach_assignment") {
-      const isHeadCoach = relationship.role === "head_coach";
-      if (isHeadCoach) headCoachIds.add(relationship.source_node_id);
+      // A canonical coach can hold head-coach and subordinate roles across the
+      // requested history. Keep that identity on one layer so reciprocal
+      // coach<->season edges cannot turn the Dagre input into a cycle.
+      const isHeadCoach = headCoachIds.has(relationship.source_node_id);
       dagre.setEdge(
         isHeadCoach ? relationship.source_node_id : relationship.target_node_id,
         isHeadCoach ? relationship.target_node_id : relationship.source_node_id,
@@ -245,14 +255,50 @@ function teamHistoryDagre(
       );
     }
   });
-  runDagreLayout(dagre);
-
-  const positions: Record<string, Position> = Object.fromEntries(
-    dagre.nodes().map((id) => {
-      const node = dagre.node(id) as { x: number; y: number };
-      return [id, { x: node.x, y: node.y }];
-    }),
-  );
+  let positions: Record<string, Position>;
+  try {
+    runDagreLayout(dagre);
+    positions = Object.fromEntries(
+      dagre.nodes().map((id) => {
+        const node = dagre.node(id) as { x: number; y: number };
+        return [id, { x: node.x, y: node.y }];
+      }),
+    );
+  } catch {
+    // Dagre can reject dense canonical multigraphs when one person owns
+    // parallel or cross-season role edges. Preserve the canonical graph and
+    // fall back to stable top-to-bottom layers instead of crashing the route.
+    const layer = (ids: string[], y: number, spacing: number) =>
+      ids.forEach((id, index) => {
+        positions[id] = { x: 100 + index * spacing, y };
+      });
+    positions = { [teamRootId]: { x: 100, y: 60 } };
+    layer([...headCoachIds].sort(), 190, 170);
+    layer(
+      teamSeasons.map((node) => node.node_id),
+      360,
+      150,
+    );
+    layer(
+      nodes
+        .filter(
+          (node) =>
+            node.node_type === "coach" && !headCoachIds.has(node.node_id),
+        )
+        .map((node) => node.node_id)
+        .sort(),
+      530,
+      150,
+    );
+    layer(
+      nodes
+        .filter((node) => node.node_type === "quarterback")
+        .map((node) => node.node_id)
+        .sort(),
+      700,
+      135,
+    );
+  }
   const elements: ElementDefinition[] = [
     {
       data: {
@@ -276,7 +322,7 @@ function teamHistoryDagre(
     ...relationships.map((relationship) => {
       const headCoach =
         relationship.relationship_type === "coach_assignment" &&
-        relationship.role === "head_coach";
+        headCoachIds.has(relationship.source_node_id);
       return {
         data: {
           id: `relationship:${relationship.relationship_id}`,

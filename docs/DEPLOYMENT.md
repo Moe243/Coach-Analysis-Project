@@ -1,5 +1,11 @@
 # Production deployment
 
+Verified production endpoints:
+
+- Frontend: `https://nfl-coaching-impact-engine.onrender.com`
+- API: `https://nfl-coaching-impact-api.onrender.com`
+- OpenAPI: `https://nfl-coaching-impact-api.onrender.com/docs`
+
 Checkpoint nine deploys the project as three independently managed services:
 
 - React/Vite static site on Render
@@ -25,6 +31,12 @@ variables and are never committed.
    Relationship Explorer modes from the public frontend origin.
 7. Record the verified URLs and evidence in `CHECKPOINT_9_REPORT.md`, then tag
    the release.
+
+The verified publication load is `5d8d74f5-70a5-53a8-8af7-e5c61d9f1892`
+under schema `checkpoint-7.2`, loader `serving-loader-v3`, and API contract
+`api-v1.2`. Migrations are applied from immutable Alembic revision resources;
+the loader publishes in one transaction and changes the active pointer only
+after every validation succeeds.
 
 The static-site rewrite sends client-side routes to `index.html`. The API CORS
 configuration rejects wildcard origins. Render health checks call `/health`,

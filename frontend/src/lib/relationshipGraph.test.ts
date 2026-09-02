@@ -167,6 +167,60 @@ describe("buildRelationshipGraph", () => {
     ]);
   });
 
+  it("keeps mixed head-coach and subordinate-role identities acyclic", () => {
+    const fixture = response();
+    const mixedRole = fixture.relationships.find(
+      (relationship) =>
+        relationship.relationship_type === "coach_assignment" &&
+        relationship.source_node_id === "coach:coach-1" &&
+        relationship.role !== "head_coach",
+    );
+    expect(mixedRole).toBeDefined();
+
+    expect(() =>
+      buildRelationshipGraph(fixture, defaultExplorerFilters()),
+    ).not.toThrow();
+    const graph = buildRelationshipGraph(fixture, defaultExplorerFilters());
+    const mixedEdges = graph.elements.filter((element) =>
+      String(element.data.id).includes(mixedRole!.relationship_id),
+    );
+    expect(mixedEdges).toHaveLength(1);
+    expect(mixedEdges[0].data.source).toBe("coach:coach-1");
+  });
+
+  it("falls back to deterministic vertical layers for dense canonical histories", () => {
+    const fixture = response();
+    const assignment = fixture.relationships.find(
+      (relationship): relationship is CoachAssignmentRelationship =>
+        relationship.relationship_type === "coach_assignment",
+    )!;
+    for (let index = 0; index < 5; index += 1) {
+      fixture.relationships.push({
+        ...assignment,
+        assignment_key: `${assignment.assignment_key}-parallel-${index}`,
+        relationship_id: `${assignment.relationship_id}-parallel-${index}`,
+      });
+    }
+    const graph = buildRelationshipGraph(fixture, defaultExplorerFilters());
+    const root = graph.elements.find((element) => element.data.kind === "team");
+    const seasons = graph.nodes.filter(
+      (node) => node.node_type === "team_season",
+    );
+    expect(root?.position).toEqual({ x: 100, y: 60 });
+    expect(root?.position?.y).toBeLessThan(
+      Math.min(...seasons.map((node) => graph.positions[node.node_id].y)),
+    );
+    expect(seasons.map((node) => graph.positions[node.node_id].x)).toEqual(
+      [...seasons]
+        .sort(
+          (left, right) =>
+            left.season - right.season ||
+            left.node_id.localeCompare(right.node_id),
+        )
+        .map((node) => graph.positions[node.node_id].x),
+    );
+  });
+
   it("preserves interim, shared, verified, and provisional states", () => {
     const graph = buildRelationshipGraph(response(), defaultExplorerFilters());
     const assignments = graph.relationships.filter(
