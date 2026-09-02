@@ -21,6 +21,7 @@ export interface Versions {
   expected_model_version: string;
   coach_data_version: string;
   coach_model_version: string;
+  enhancement_data_version: string;
 }
 
 export type Payload = Record<string, unknown>;
@@ -42,6 +43,21 @@ export interface QbSeason {
   qualifies_default: boolean;
   metric_version: string;
   payload: Payload;
+  supplemental_metric_version?: string | null;
+  starter_wins?: number | null;
+  starter_losses?: number | null;
+  starter_ties?: number | null;
+  starter_decisions?: number | null;
+  team_points_scored?: number | null;
+  completion_percentage?: number | null;
+  passing_yards?: number | null;
+  rushing_yards?: number | null;
+  total_yards?: number | null;
+  passing_touchdowns?: number | null;
+  rushing_touchdowns?: number | null;
+  total_touchdowns?: number | null;
+  fumbles?: number | null;
+  supplemental_payload?: Payload | null;
 }
 
 export interface QbPae {

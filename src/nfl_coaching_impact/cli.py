@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .coach_impact import CoachImpactConfig, run_coach_impact_pipeline
 from .constants import VERTICAL_SLICE_SEASONS
+from .enhancements import EnhancementConfig, run_enhancement_pipeline
 from .expected_performance import (
     ExpectedPerformanceConfig,
     run_expected_performance_pipeline,
@@ -73,6 +74,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serving.add_argument("--project-root", type=Path, default=Path.cwd())
     serving.add_argument("--database-url", required=True)
+    enhancements = subparsers.add_parser(
+        "enhancements",
+        description="Build additive QB statistics and coaching completeness artifacts",
+    )
+    enhancements.add_argument("--project-root", type=Path, default=Path.cwd())
+    enhancements.add_argument("--historical-dir", type=Path)
+    enhancements.add_argument("--output-dir", type=Path)
     return parser
 
 
@@ -190,6 +198,27 @@ def main(argv: list[str] | None = None) -> int:
                     "reused_existing": result.reused_existing,
                     "versions": result.versions.__dict__,
                     "row_counts": result.row_counts,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command == "enhancements":
+        result = run_enhancement_pipeline(
+            EnhancementConfig(
+                project_root=args.project_root.resolve(),
+                historical_dir=args.historical_dir,
+                output_dir=args.output_dir,
+            )
+        )
+        print(
+            json.dumps(
+                {
+                    "data_version": result.data_version,
+                    "output_path": str(result.output_path),
+                    "reused_existing": result.reused_existing,
+                    "table_counts": result.table_counts,
                 },
                 indent=2,
                 sort_keys=True,

@@ -21,7 +21,7 @@ All nine checkpoints are complete. The responsive application and bounded Relati
 - Primary outcome: EPA per quarterback dropback
 - Default coach-ranking threshold: three qualifying QB seasons, two distinct quarterbacks, and 600 verified exposure dropbacks
 
-The serving publication contains historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35`. Read [the checkpoint-eight report](docs/CHECKPOINT_8_REPORT.md).
+The approved serving publication contains historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35`. The additive enhancement artifacts are local, checksum-protected inputs for the next intentional serving publication; they do not alter the deployed publication automatically. Read [the checkpoint-eight report](docs/CHECKPOINT_8_REPORT.md) and [post-release enhancement foundation](docs/POST_RELEASE_ENHANCEMENTS.md).
 
 ## Football decision supported
 
@@ -65,9 +65,9 @@ DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make db-load
 DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make api
 ```
 
-OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, network data, citations, review summaries, and `GET /relationships/explorer`. List responses contain `items`, `total`, `limit`, and `offset`; every ordering ends in a stable business key. Invalid role/status filters return 422, missing details return 404, and no-match lists return an empty page. Network edges retain both assignments' verification, confidence, shared/provisional, interval, and overlap metadata. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
+OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, coaches and exploratory impact, teams, assignments, coaching completeness, inherited environment context, network data, citations, review summaries, and `GET /relationships/explorer`. List responses contain `items`, `total`, `limit`, and `offset`; every ordering ends in a stable business key. Invalid role/status filters return 422, missing details return 404, and no-match lists return an empty page. Network edges retain both assignments' verification, confidence, shared/provisional, interval, and overlap metadata. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
 
-The relationship endpoint implements API contract `api-v1.2` and returns a deterministic, bounded `Coach -> Team-Season <- QB` subgraph. Coach-assignment relationships remain one `assignment_key`; QB relationships remain one `(player_id, team_id, season)` and receive PAE only through that complete key. Team-history and team-anchored full-network requests seed QB facts independently from `api_qb_statistics`, so role, verification, and provisional filters affect coach edges without deleting valid QB-team-season facts. Coach/QB/team-history modes require the corresponding anchor. Full-network mode requires an anchor and at most five seasons, and every response is capped at 1,000 nodes and 2,000 relationships. The response explicitly labels coach-QB context as same-team-season context, not exact weekly exposure or causation.
+The relationship endpoint implements API contract `api-v1.3` and returns a deterministic, bounded `Coach -> Team-Season <- QB` subgraph. Coach-assignment relationships remain one `assignment_key`; QB relationships remain one `(player_id, team_id, season)` and receive PAE only through that complete key. Team-history and team-anchored full-network requests seed QB facts independently from `api_qb_statistics`, so role, verification, and provisional filters affect coach edges without deleting valid QB-team-season facts. Coach/QB/team-history modes require the corresponding anchor. Full-network mode requires an anchor and at most five seasons, and every response is capped at 1,000 nodes and 2,000 relationships. The response explicitly labels coach-QB context as same-team-season context, not exact weekly exposure or causation.
 
 The `/network` Relationship Explorer stores supported mode, canonical anchor, year range, role/evidence/QB filters, selected entity, and focused entity in the URL. Journey and Team History views use deterministic chronological positions; compact screens transpose those lanes into a top-to-bottom presentation, and bounded Full Network uses stable type columns rather than randomized layout. Select highlights the direct neighborhood, Focus opens a bounded canonical journey/history, Reset clears view filters while retaining the current scope, and Back restores the prior meaningful focus. HTTP 413 is shown as a complete failure with narrowing guidance; partial graphs are never presented.
 
@@ -112,6 +112,16 @@ make PYTHON=.venv/bin/python coach-impact
 ```
 
 The command publishes interval-compatible exposures, exploratory role-specific coach-associated PAE estimates, coach-specific conditional 200-draw block-bootstrap intervals where support is adequate, identification diagnostics, model comparisons, sensitivity results, overlap diagnostics, exclusions, and suppressed ranking contracts under `data/processed/coach_impact/<data-version>/`. Verified primary estimates never consume provisional assignments. Generated outputs remain ignored by Git.
+
+## Build post-release enhancement artifacts
+
+```bash
+PYTHONPATH=src .venv/bin/python -m nfl_coaching_impact.cli enhancements --project-root .
+```
+
+This additive command does not modify checkpoint-three, five, or six outputs. It produces
+QB/team box-score and result facts, a complete coaching-role audit, and strictly preseason
+inherited environment features. It does not calculate or publish a Coach QB Impact Score.
 
 ## Validate checkpoint four
 

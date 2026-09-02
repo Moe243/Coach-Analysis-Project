@@ -56,6 +56,15 @@ Checkpoint six does not publish any coach ranking. Although 81 head coaches clea
 
 The primary model excludes 1,856 QB-coach intervals below 25 fractional exposure dropbacks. This includes Tim Kelly and Bill O'Brien in shared Houston Week 4: each receives 20 effective dropbacks from 40 observed and is excluded. Provisional season designations provide broad OC and QB-coach sensitivity coverage but not verified weekly tenure, so they never enter primary estimates. The single verified QB-coach identity cannot support a role model. Weighted Ridge effective degrees of freedom can leave little residual information in sparse roles, reinforcing their exploratory status. Bootstrap percentiles are conditional on a coach appearing in a QB-season resample; intervals are suppressed below 160 successful appearances out of 200. No validated full-window offensive-line, receiver-quality, defensive-strength, or opponent-strength table exists yet, so those requested contexts remain unmodeled rather than fabricated.
 
+The post-release inherited context artifact is preparatory and is not yet a model covariate.
+Protection is a QB-hit/sack proxy, not a blocking grade. Opening depth charts can omit late
+preseason movement and the 2025 asset lacks a comparable weekly opening snapshot, leaving its
+skill-player context null. Player-stat production can be incomplete or revised upstream, and the
+simple position-standardized composites do not measure route quality, blocking, injuries, or
+scheme fit. Target schedule is known before the season, but its opponents' prior pass-defense is
+an imperfect forecast. NGS and FTN coverage is too recent for a historical core and remains
+validation-only. These limitations are why the artifact does not alter PAE or coach estimates.
+
 ## External validity
 
 Results apply to NFL quarterback environments observed in this period. They should not be assumed to measure a coach's effect on other positions, future teams, college players, or unobserved tactical responsibilities.

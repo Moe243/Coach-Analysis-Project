@@ -26,6 +26,8 @@ describe("detail pages", () => {
     expect(screen.getAllByText("+0.070").length).toBeGreaterThan(0);
     expect(screen.getByText("expected-test")).toBeInTheDocument();
     expect(screen.getByText("Head coach · Weeks 1–18")).toBeInTheDocument();
+    expect(screen.getByText("4,450 yards · 35 TD")).toBeInTheDocument();
+    expect(screen.getByText(/Starter record: 11-6-0/)).toBeInTheDocument();
   });
 
   it("labels coach impact as exploratory and suppressed and links citations", async () => {

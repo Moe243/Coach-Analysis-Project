@@ -134,7 +134,25 @@ describe("StatisticsPage", () => {
       await screen.findByRole("columnheader", { name: "INT rate" }),
     ).toBeInTheDocument();
     expect(screen.getByText("2.0%")).toBeInTheDocument();
+    expect(screen.getByText("11-6-0")).toBeInTheDocument();
+    expect(screen.getByText("67.0%")).toBeInTheDocument();
+    expect(screen.getByText("4,450")).toBeInTheDocument();
+    expect(screen.getByText("421")).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent("expanded=true");
+  });
+
+  it("defines PAE exactly and separates eligibility from reliability", async () => {
+    installApiFixture();
+    renderRoute(<StatisticsPage />);
+    fireEvent.click(await screen.findByText("How these metrics are defined"));
+    expect(
+      screen.getByText(
+        "Actual EPA/dropback minus preseason Expected EPA/dropback.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Eligibility uses the 200-dropback/),
+    ).toBeInTheDocument();
   });
 
   it("restores expanded metrics from the URL", async () => {

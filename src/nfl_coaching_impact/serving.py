@@ -20,9 +20,9 @@ from psycopg.types.json import Jsonb
 from .errors import PipelineError
 from .pipeline import _validate_existing_version
 
-SCHEMA_VERSION = "checkpoint-7.2"
-LOADER_VERSION = "serving-loader-v3"
-API_CONTRACT_VERSION = "api-v1.2"
+SCHEMA_VERSION = "checkpoint-7.3"
+LOADER_VERSION = "serving-loader-v4"
+API_CONTRACT_VERSION = "api-v1.3"
 PUBLICATION_NAMESPACE = uuid.UUID("c79812ad-1480-48ec-9972-e94b6f158a31")
 
 
@@ -33,6 +33,7 @@ class ServingVersions:
     expected_model: str
     coach: str
     coach_model: str
+    enhancement: str
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,7 @@ def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any],
     historical_version, historical = _latest(processed / "historical")
     expected_version, expected = _latest(processed / "expected_performance")
     coach_version, coach = _latest(processed / "coach_impact")
+    enhancement_version, enhancement = _latest(processed / "enhancements")
     silver = historical / "silver"
     frames = {
         "teams": pl.read_parquet(silver / "teams.parquet"),
@@ -176,6 +178,11 @@ def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any],
         "coach_exposures": pl.read_parquet(coach / "coach_modeling_exposures.parquet"),
         "coach_effects": pl.read_parquet(coach / "coach_effect_estimates.parquet"),
         "coach_rankings": pl.read_parquet(coach / "preliminary_coach_rankings.parquet"),
+        "qb_supplemental": pl.read_parquet(enhancement / "qb_supplemental_statistics.parquet"),
+        "coaching_completeness": pl.read_parquet(enhancement / "coaching_completeness.parquet"),
+        "inherited_environment": pl.read_parquet(
+            enhancement / "inherited_environment_features.parquet"
+        ),
     }
     expected_models = frames["qb_pae"]["model_version"].unique().to_list()
     coach_models = frames["coach_effects"]["coach_model_version"].unique().to_list()
@@ -187,6 +194,7 @@ def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any],
         str(expected_models[0]),
         coach_version,
         str(coach_models[0]),
+        enhancement_version,
     )
     _validate_version_contracts(frames, versions)
     manifest_paths = [
@@ -196,6 +204,8 @@ def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any],
         historical / "RUN_MANIFEST.json",
         expected / "RUN_MANIFEST.json",
         coach / "RUN_MANIFEST.json",
+        enhancement / "OUTPUT_CHECKSUMS.json",
+        enhancement / "RUN_MANIFEST.json",
     ]
     return versions, frames, manifest_paths
 
@@ -224,6 +234,9 @@ def _validate_version_contracts(frames: dict[str, Any], versions: ServingVersion
         versions.expected_model
     }:
         raise PipelineError("coach exposures expected-performance model version mismatch")
+    for name in ("qb_supplemental", "coaching_completeness", "inherited_environment"):
+        if set(frames[name]["data_version"].unique().to_list()) != {versions.enhancement}:
+            raise PipelineError(f"{name} enhancement data version mismatch")
 
 
 def _validate_sources(
@@ -259,9 +272,44 @@ def _validate_sources(
         ),
         "coach_effects": ({"coach_id", "role", "estimated_effect"}, ["coach_id", "role"]),
         "coach_rankings": ({"coach_id", "role", "ranking_status"}, ["coach_id", "role"]),
+        "qb_supplemental": (
+            {"player_id", "team_id", "season", "supplemental_metric_version"},
+            ["player_id", "team_id", "season"],
+        ),
+        "coaching_completeness": (
+            {"team_id", "season", "role", "assignment_status"},
+            ["team_id", "season", "role"],
+        ),
+        "inherited_environment": (
+            {"team_id", "season", "feature_source_max_season"},
+            ["team_id", "season"],
+        ),
     }
     for table, (columns, key) in contracts.items():
         _required(frames[table], table, columns, key)
+    analysis_keys = set(
+        frames["qb_seasons"]
+        .filter(pl.col("scope") == "analysis")
+        .select("player_id", "team_id", "season")
+        .iter_rows()
+    )
+    supplemental_keys = set(
+        frames["qb_supplemental"].select("player_id", "team_id", "season").iter_rows()
+    )
+    if supplemental_keys != analysis_keys:
+        raise PipelineError("supplemental QB rows must exactly match analysis QB-season keys")
+    invalid_environment = frames["inherited_environment"].filter(
+        pl.col("feature_source_max_season") >= pl.col("season")
+    )
+    if invalid_environment.height:
+        raise PipelineError("inherited environment contains target-season leakage")
+    unresolved_completeness_teams = sorted(
+        set(frames["coaching_completeness"]["team_id"].unique().to_list()) - team_by_abbr.keys()
+    )
+    if unresolved_completeness_teams:
+        raise PipelineError(
+            f"coaching completeness contains unresolved teams: {unresolved_completeness_teams}"
+        )
     exposures = frames["coach_exposures"]
     invalid_fraction = exposures.filter(
         (pl.col("exposure_fraction") <= 0)
@@ -365,6 +413,9 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                         "serving_coaches",
                         "serving_coach_assignments",
                         "serving_coach_effects",
+                        "serving_qb_supplemental",
+                        "serving_coaching_completeness",
+                        "serving_inherited_environment",
                     )
                 }
                 if any(value == 0 for value in loaded_counts.values()):
@@ -381,9 +432,10 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                 """INSERT INTO serving_loads
                    (load_id, schema_version, loader_version, api_contract_version,
                     historical_data_version, expected_data_version, expected_model_version,
-                    coach_data_version, coach_model_version, manifest_sha256,
+                    coach_data_version, coach_model_version, enhancement_data_version,
+                    manifest_sha256,
                     manual_manifest_sha256)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     load_id,
                     SCHEMA_VERSION,
@@ -394,6 +446,7 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
                     versions.expected_model,
                     versions.coach,
                     versions.coach_model,
+                    versions.enhancement,
                     hashlib.sha256(
                         (_manifest_digest(manifest_paths) + manual.digest).encode()
                     ).hexdigest(),
@@ -571,6 +624,34 @@ def _insert_frames(
         ],
     )
     many(
+        "INSERT INTO serving_qb_supplemental VALUES "
+        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        [
+            (
+                lid,
+                r["player_id"],
+                r["team_id"],
+                r["season"],
+                r["supplemental_metric_version"],
+                r["starter_wins"],
+                r["starter_losses"],
+                r["starter_ties"],
+                r["starter_decisions"],
+                r.get("team_points_scored"),
+                r.get("completion_percentage"),
+                r.get("passing_yards"),
+                r.get("rushing_yards"),
+                r.get("total_yards"),
+                r.get("passing_touchdowns_box"),
+                r.get("rushing_touchdowns"),
+                r.get("total_touchdowns"),
+                r.get("fumbles"),
+                _payload(r),
+            )
+            for r in frames["qb_supplemental"].to_dicts()
+        ],
+    )
+    many(
         "INSERT INTO serving_coaches VALUES (%s,%s,%s,%s)",
         [(lid, r["coach_id"], r["canonical_name"], r["normalized_name"]) for r in coaches],
     )
@@ -629,6 +710,53 @@ def _insert_frames(
                 _payload(r),
             )
             for r in reviews
+        ],
+    )
+    many(
+        "INSERT INTO serving_coaching_completeness VALUES "
+        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        [
+            (
+                lid,
+                team_by_abbr[r["team_id"]],
+                r["season"],
+                r["role"],
+                r["assignment_status"],
+                r["review_status"],
+                r["requires_manual_review"],
+                r["assignment_count"],
+                r["verified_assignment_count"],
+                r["citation_count"],
+                r["has_in_season_change"],
+                r["has_interim"],
+                r["has_shared_duty"],
+                r["has_unclear_interval"],
+                _payload(r),
+            )
+            for r in frames["coaching_completeness"].to_dicts()
+        ],
+    )
+    many(
+        "INSERT INTO serving_inherited_environment VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        [
+            (
+                lid,
+                r["team_id"],
+                r["season"],
+                r["feature_version"],
+                r["feature_source_max_season"],
+                r.get("prior_pressure_rate"),
+                r.get("prior_protection_score"),
+                r.get("wr_quality_score"),
+                r.get("te_quality_score"),
+                r.get("receiving_quality_score"),
+                r.get("run_quality_score"),
+                r.get("sos_pass_defense_strength"),
+                _payload(r),
+            )
+            for r in frames["inherited_environment"]
+            .filter(pl.col("season").is_between(2010, 2025))
+            .to_dicts()
         ],
     )
     many(
@@ -725,6 +853,7 @@ def _insert_frames(
         / "expected_performance"
         / versions.expected,
         "coach_impact": project_root / "data" / "processed" / "coach_impact" / versions.coach,
+        "enhancements": project_root / "data" / "processed" / "enhancements" / versions.enhancement,
     }
     manifests = []
     for pipeline_name, root in roots.items():

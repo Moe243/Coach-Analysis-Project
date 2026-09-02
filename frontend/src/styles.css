@@ -209,6 +209,53 @@ h1 {
   color: #aab6c7;
 }
 
+.metric-glossary {
+  margin: -0.5rem 0 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--surface);
+  padding: 0.8rem 1rem;
+}
+
+.metric-glossary summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.metric-glossary dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0 0;
+}
+
+.metric-glossary dl > div {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.7rem;
+}
+
+.metric-glossary dt {
+  font-weight: 700;
+}
+
+.metric-glossary dd {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+}
+
+.season-totals summary {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.season-totals span {
+  display: block;
+  min-width: 16rem;
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .filter-panel {
   position: relative;
   display: grid;

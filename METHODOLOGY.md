@@ -37,6 +37,30 @@ The project calculation is authoritative even when an upstream season-summary fi
 - WPA/dropback: summed QB-attributed WPA divided by eligible dropbacks.
 - Year-over-year change: current value minus the prior NFL season for the same player after combining any multi-team rows; team changes remain visible in the current grain.
 
+### Additive QB/team facts
+
+The post-release supplemental layer keeps the QB-team-season grain and does not modify PAE.
+Starter W-L-T counts only scheduled regular-season games where the QB is the recorded home or
+away starter. Team points are the team's regular-season scored points, repeated as context for
+each QB-team-season rather than credited to an individual QB. Passing/rushing yards, passing/
+rushing touchdowns, and fumbles use aggregated nflverse weekly player statistics; total yards
+and total touchdowns are sums only when both components are observed. Completion percentage is
+completions divided by pass attempts. Missing factual inputs stay null.
+
+### Preparatory inherited environment features
+
+The first environment layer is a future-model input contract, not a current PAE or coach-model
+control. Every record has `feature_source_max_season = target season - 1`. Protection is a
+prior-season regular-season PBP proxy: `(QB hits OR sacks) / eligible team dropbacks`, with a
+season-standardized inverse score. Receiving/run context starts from the target team's Week 1
+depth-chart WR/TE/RB identities, then aggregates their prior-season position-standardized,
+opportunity-shrunk production; WR and TE remain separate alongside the combined receiving score.
+Strength of schedule averages the target schedule opponents' prior-season pass-defense EPA
+allowed strength. There is no current-season final offensive feature, no current-season defense
+control, no roster-name inference, and no imputation of unavailable player production in version
+one. NGS (2016+) and FTN (2022+) may validate/sensitize this layer later but cannot define the
+2010–2025 core.
+
 Denominators of zero produce null, not zero. Every published rate stores its numerator and denominator or can be reconstructed from stored fields.
 
 Checkpoint three exposes exact season-minus-one prior metrics across the complete consecutive history. It aggregates a player's multi-team prior season before joining, requires 200 prior dropbacks before exposing prior EPA/dropback or CPOE, and never fills a missing year with an older or future season. Warm-up seasons from 1999-2009 seed historical context but are never analysis-qualified.

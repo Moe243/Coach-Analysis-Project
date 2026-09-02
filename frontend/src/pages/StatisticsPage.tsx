@@ -277,6 +277,60 @@ export function StatisticsPage() {
           </aside>
         </div>
 
+        <details className="metric-glossary">
+          <summary>How these metrics are defined</summary>
+          <dl>
+            <div>
+              <dt>EPA</dt>
+              <dd>
+                Expected points added by a play relative to the prior game
+                state.
+              </dd>
+            </div>
+            <div>
+              <dt>EPA/dropback</dt>
+              <dd>
+                QB EPA over attempts, sacks, and scrambles, excluding kneels and
+                spikes.
+              </dd>
+            </div>
+            <div>
+              <dt>Expected EPA/dropback</dt>
+              <dd>
+                The strictly preseason, expanding-window model prediction.
+              </dd>
+            </div>
+            <div>
+              <dt>PAE</dt>
+              <dd>
+                Actual EPA/dropback minus preseason Expected EPA/dropback.
+              </dd>
+            </div>
+            <div>
+              <dt>CPOE</dt>
+              <dd>
+                Completion percentage over expectation on eligible attempts.
+              </dd>
+            </div>
+            <div>
+              <dt>Success rate</dt>
+              <dd>Share of eligible dropbacks with positive EPA.</dd>
+            </div>
+            <div>
+              <dt>Sack rate</dt>
+              <dd>Sacks divided by pass attempts plus sacks.</dd>
+            </div>
+            <div>
+              <dt>Eligibility / reliability</dt>
+              <dd>
+                Eligibility uses the 200-dropback publication threshold;
+                reliability is a separate sample-support label and neither is a
+                coach-effect claim.
+              </dd>
+            </div>
+          </dl>
+        </details>
+
         <form
           className="filter-panel"
           onSubmit={(event) => event.preventDefault()}
@@ -459,6 +513,12 @@ export function StatisticsPage() {
                     {filters.expanded && <th>Sack rate</th>}
                     {filters.expanded && <th>INT rate</th>}
                     {filters.expanded && <th>TD rate</th>}
+                    {filters.expanded && <th>Starter record</th>}
+                    {filters.expanded && <th>Comp.</th>}
+                    {filters.expanded && <th>Total yards</th>}
+                    {filters.expanded && <th>Total TD</th>}
+                    {filters.expanded && <th>Fumbles</th>}
+                    {filters.expanded && <th>Team points</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -561,6 +621,34 @@ export function StatisticsPage() {
                             )}
                           </td>
                         )}
+                        {filters.expanded && (
+                          <td data-label="Starter record">
+                            {starterRecord(row)}
+                          </td>
+                        )}
+                        {filters.expanded && (
+                          <td data-label="Completion percentage">
+                            {percent(row.completion_percentage)}
+                          </td>
+                        )}
+                        {filters.expanded && (
+                          <td data-label="Total yards">
+                            {integer(row.total_yards)}
+                          </td>
+                        )}
+                        {filters.expanded && (
+                          <td data-label="Total touchdowns">
+                            {integer(row.total_touchdowns)}
+                          </td>
+                        )}
+                        {filters.expanded && (
+                          <td data-label="Fumbles">{integer(row.fumbles)}</td>
+                        )}
+                        {filters.expanded && (
+                          <td data-label="Team points">
+                            {integer(row.team_points_scored)}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -582,4 +670,14 @@ export function StatisticsPage() {
 
 function numberOrDash(value: number | null): string {
   return value === null ? "—" : value.toFixed(1);
+}
+
+function starterRecord(row: QbSeason): string {
+  if (
+    typeof row.starter_wins !== "number" ||
+    typeof row.starter_losses !== "number" ||
+    typeof row.starter_ties !== "number"
+  )
+    return "—";
+  return `${row.starter_wins}-${row.starter_losses}-${row.starter_ties}`;
 }

@@ -176,6 +176,7 @@ export function QbDetailPage() {
                 <th>Sack rate</th>
                 <th>Dropbacks</th>
                 <th>Eligibility</th>
+                <th>Season totals</th>
               </tr>
             </thead>
             <tbody>
@@ -228,6 +229,30 @@ export function QbDetailPage() {
                       ) : (
                         "—"
                       )}
+                    </td>
+                    <td data-label="Season totals">
+                      <details className="season-totals">
+                        <summary>
+                          {integer(season.total_yards)} yards ·{" "}
+                          {integer(season.total_touchdowns)} TD
+                        </summary>
+                        <span>
+                          Starter record: {starterRecord(season)} · Team points:{" "}
+                          {integer(season.team_points_scored)}
+                        </span>
+                        <span>
+                          Passing: {integer(season.passing_yards)} yards /{" "}
+                          {integer(season.passing_touchdowns)} TD
+                        </span>
+                        <span>
+                          Rushing: {integer(season.rushing_yards)} yards /{" "}
+                          {integer(season.rushing_touchdowns)} TD
+                        </span>
+                        <span>
+                          Completion: {percent(season.completion_percentage)} ·
+                          Fumbles: {integer(season.fumbles)}
+                        </span>
+                      </details>
                     </td>
                   </tr>
                 );
@@ -309,4 +334,14 @@ export function QbDetailPage() {
       </section>
     </section>
   );
+}
+
+function starterRecord(season: QbProfile["seasons"][number]): string {
+  if (
+    typeof season.starter_wins !== "number" ||
+    typeof season.starter_losses !== "number" ||
+    typeof season.starter_ties !== "number"
+  )
+    return "—";
+  return `${season.starter_wins}-${season.starter_losses}-${season.starter_ties}`;
 }

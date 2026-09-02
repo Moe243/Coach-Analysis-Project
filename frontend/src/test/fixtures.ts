@@ -15,14 +15,15 @@ import type {
 
 export const versions: Versions = {
   load_id: "test-load",
-  schema_version: "checkpoint-7.2",
-  loader_version: "serving-loader-v3",
-  api_contract_version: "api-v1.2",
+  schema_version: "checkpoint-7.3",
+  loader_version: "serving-loader-v4",
+  api_contract_version: "api-v1.3",
   historical_data_version: "c3-test",
   expected_data_version: "c5-test",
   expected_model_version: "expected-test",
   coach_data_version: "c6-test",
   coach_model_version: "coach-impact-test",
+  enhancement_data_version: "enh-test",
 };
 
 export const teams: Team[] = [
@@ -59,6 +60,21 @@ export const qbSeason: QbSeason = {
   qualifies_default: true,
   metric_version: "qb-dropback-v1",
   payload: { interception_rate: 0.02, touchdown_rate: 0.06 },
+  supplemental_metric_version: "qb-supplemental-v1",
+  starter_wins: 11,
+  starter_losses: 6,
+  starter_ties: 0,
+  starter_decisions: 17,
+  team_points_scored: 421,
+  completion_percentage: 0.67,
+  passing_yards: 4100,
+  rushing_yards: 350,
+  total_yards: 4450,
+  passing_touchdowns: 31,
+  rushing_touchdowns: 4,
+  total_touchdowns: 35,
+  fumbles: 6,
+  supplemental_payload: {},
 };
 
 export const qbPae: QbPae = {

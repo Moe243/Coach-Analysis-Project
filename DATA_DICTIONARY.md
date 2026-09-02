@@ -111,7 +111,7 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 
 ### Checkpoint-seven serving layer
 
-Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, and coach model/data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. Schema `checkpoint-7.2`, loader `serving-loader-v3`, and API `api-v1.2` are the current contracts. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
+Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, coach model/data, and enhancement data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. Schema `checkpoint-7.3`, loader `serving-loader-v4`, and API `api-v1.3` are the current contracts. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
 
 | Table/view | Grain or contract |
 |---|---|
@@ -119,12 +119,16 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | `serving_players`, `serving_player_external_ids` | GSIS player and external identifier per load |
 | `serving_games`, `serving_qb_games`, `serving_qb_seasons` | Game, QB-game-team, and QB-team-season facts with scope |
 | `serving_qb_pae` | One out-of-sample expected/actual/PAE record per QB-team-season |
+| `serving_qb_supplemental` | Additive QB-team-season starter record, team points, and weekly-player-stat box-score facts; complete key matches `serving_qb_seasons` |
+| `serving_coaching_completeness` | One `(team_id, season, role)` audit cell with explicit assignment/manual-review state and interval metadata payload |
+| `serving_inherited_environment` | One team-season, strictly preseason context row with `feature_source_max_season < season` |
 | `serving_coach_assignments`, `serving_coach_citations` | Source-backed role interval and evidence |
 | `serving_review_queue` | Manual-review item with full source payload |
 | `serving_coach_exposures` | QB-assignment interval with observed/fractional dropbacks and assignment-matching coach, team, season, role, weeks, verification, confidence, basis, and shared status; deferred triggers revalidate changes from either side |
 | `serving_coach_effects`, `serving_coach_rankings` | Exploratory estimate and suppression contract per coach-role |
 | `serving_source_manifests`, `serving_pipeline_manifests` | Source and pipeline/model provenance |
 | `api_qb_statistics`, `api_qb_pae` | Published analysis-only QB metrics and PAE |
+| `api_coaching_completeness`, `api_inherited_environment` | Complete coaching-role audit and leakage-safe inherited context |
 | `api_coach_impact`, `api_coach_comparisons` | Effects plus identification and suppression fields |
 | `api_coaching_assignments`, `api_coaching_network_edges` | Role intervals and staff edges with source/target verification, confidence, shared/provisional flags, full intervals, and overlap bounds |
 | `api_source_citations`, `api_review_queue_summary` | Evidence and unresolved-review counts |
@@ -135,6 +139,21 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | Relationship QB-team-season edge | One `(player_id, team_id, season)`; retains dropbacks, actual/expected EPA per dropback, PAE, qualification, eligibility, reliability, out-of-sample status, metric/model/data versions, and publication version. Missing PAE fields remain null. |
 
 Team-history and team-anchored full-network scopes source QB-team-season records independently from `api_qb_statistics`. Coaching role, verification, and provisional filters apply only to coach-assignment relationships; PAE joins retain the complete `(load_id, player_id, team_id, season)` key.
+
+### Post-release QB/team and environment fields
+
+`api_qb_statistics` now exposes additive `starter_wins`, `starter_losses`, `starter_ties`,
+`starter_decisions`, `team_points_scored`, `completion_percentage`, `passing_yards`,
+`rushing_yards`, `total_yards`, `passing_touchdowns`, `rushing_touchdowns`,
+`total_touchdowns`, and `fumbles`. Results and points derive from regular-season nflverse
+schedules; box-score fields derive from regular-season nflverse weekly player statistics.
+These are factual supplemental fields, not PAE inputs. A null field is unavailable, not zero.
+
+`api_inherited_environment` exposes only inputs known entering a target season:
+prior-season PBP pressure-event protection proxy, opening-depth-chart WR/TE/RB prior-production
+scores and coverage, plus target-schedule opponents' prior-season pass-defense strength.
+`feature_source_max_season` guards timing. There is no league-average fill in version one and
+no target-season final offensive performance or defensive control in the first equation work.
 
 ### Committed checkpoint-four files
 

@@ -93,6 +93,41 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertTrue(second.reused_existing)
         self.assertEqual(second.load_id, self.first.load_id)
 
+    def test_supplemental_stats_completeness_and_environment_api(self) -> None:
+        response = self.client.get("/qbs", params={"search": "Trent Edwards", "season": 2010})
+        self.assertEqual(response.status_code, 200)
+        rows = response.json()["items"]
+        self.assertEqual({row["team_id"] for row in rows}, {"team_buf", "team_jax"})
+        self.assertEqual(
+            {row["team_id"]: row["passing_yards"] for row in rows},
+            {"team_buf": 241, "team_jax": 280},
+        )
+        completeness = self.client.get(
+            "/coaching/completeness",
+            params={"team_id": "team_hou", "season": 2020, "role": "play_caller"},
+        )
+        self.assertEqual(completeness.status_code, 200)
+        self.assertEqual(completeness.json()["total"], 1)
+        self.assertEqual(completeness.json()["items"][0]["review_status"], "manual_review")
+        self.assertEqual(
+            self.client.get("/coaching/completeness", params={"role": "invalid"}).status_code,
+            422,
+        )
+        environment = self.client.get(
+            "/environment", params={"team_id": "team_den", "season": 2024}
+        )
+        self.assertEqual(environment.status_code, 200)
+        self.assertEqual(environment.json()["items"][0]["feature_source_max_season"], 2023)
+
+        with psycopg.connect(self.url) as connection:
+            load_id = connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
+            with self.assertRaises(psycopg.Error), connection.transaction():
+                connection.execute(
+                    "UPDATE serving_inherited_environment "
+                    "SET feature_source_max_season = season WHERE load_id = %s",
+                    (load_id,),
+                )
+
     def test_independent_clean_loads_have_identical_analytical_checksums(self) -> None:
         database = f"nfl_c7_clean_{secrets.token_hex(5)}"
         url = self._create_database(database)
@@ -107,6 +142,8 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 "api_coaching_network_edges",
                 "api_source_citations",
                 "api_review_queue_summary",
+                "api_coaching_completeness",
+                "api_inherited_environment",
             )
             checksums = []
             for connection_url in (self.url, url):
@@ -128,16 +165,23 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
     def test_publication_has_complete_versions_and_manifests(self) -> None:
         with psycopg.connect(self.url) as connection:
             versions = connection.execute(
-                "SELECT historical_data_version, expected_data_version, coach_data_version "
+                "SELECT historical_data_version, expected_data_version, coach_data_version, "
+                "enhancement_data_version "
                 "FROM serving_loads"
             ).fetchone()
             manifest_count = connection.execute(
                 "SELECT count(*) FROM serving_pipeline_manifests"
             ).fetchone()[0]
         self.assertEqual(
-            versions, ("c3-f6c1aa118ff43b90", "c5-8fd5d1aba2598c59", "c6-400a5b474aa37a35")
+            versions,
+            (
+                "c3-f6c1aa118ff43b90",
+                "c5-8fd5d1aba2598c59",
+                "c6-400a5b474aa37a35",
+                "enh-e1dd0f9ca678b345",
+            ),
         )
-        self.assertEqual(manifest_count, 4)
+        self.assertEqual(manifest_count, 5)
 
     def test_invalid_lineage_duplicate_and_fraction_are_rejected(self) -> None:
         with psycopg.connect(self.url, autocommit=True) as connection:
@@ -595,7 +639,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code, 200)
         response = self.client.get("/versions")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["api_contract_version"], "api-v1.2")
+        self.assertEqual(response.json()["api_contract_version"], "api-v1.3")
 
     def test_relationship_explorer_all_modes_use_the_active_publication(self) -> None:
         with psycopg.connect(self.url) as connection:
@@ -634,7 +678,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 body = response.json()
                 self.assertEqual(body["query"]["mode"], mode)
                 self.assertEqual(body["versions"]["load_id"], load_id)
-                self.assertEqual(body["versions"]["api_contract_version"], "api-v1.2")
+                self.assertEqual(body["versions"]["api_contract_version"], "api-v1.3")
 
     def test_relationship_explorer_requires_a_bounded_valid_scope(self) -> None:
         invalid = (
@@ -1168,7 +1212,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertFalse(body["semantics"]["exact_weekly_overlap"])
         self.assertIn("within the same season", body["semantics"]["coach_qb_context"])
         self.assertEqual(body["versions"]["load_id"], load_id)
-        self.assertEqual(body["versions"]["api_contract_version"], "api-v1.2")
+        self.assertEqual(body["versions"]["api_contract_version"], "api-v1.3")
         node_ids = [row["node_id"] for row in body["nodes"]]
         relationship_ids = [row["relationship_id"] for row in body["relationships"]]
         self.assertEqual(len(node_ids), len(set(node_ids)))

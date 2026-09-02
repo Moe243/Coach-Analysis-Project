@@ -44,6 +44,7 @@ class Versions(ApiModel):
     expected_model_version: str
     coach_data_version: str
     coach_model_version: str
+    enhancement_data_version: str
 
 
 class RelationshipCitation(ApiModel):
@@ -267,7 +268,8 @@ def _active_versions(connection: Any) -> Versions:
     row = connection.execute(
         "SELECT l.load_id::text, l.schema_version, l.loader_version, "
         "l.api_contract_version, l.historical_data_version, l.expected_data_version, "
-        "l.expected_model_version, l.coach_data_version, l.coach_model_version "
+        "l.expected_model_version, l.coach_data_version, l.coach_model_version, "
+        "l.enhancement_data_version "
         "FROM serving_loads l JOIN serving_publication p ON p.load_id = l.load_id"
     ).fetchone()
     if not row:
@@ -486,6 +488,55 @@ def assignments(
         clauses=clauses,
         params=params,
         order="season DESC, team_id, role, start_week, end_week, assignment_key",
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/coaching/completeness", response_model=Page)
+def coaching_completeness(
+    team_id: str | None = None,
+    season: int | None = Query(None, ge=2010, le=2025),
+    role: CoachRole | None = None,
+    assignment_status: Literal["verified", "provisional", "conflicting", "missing"] | None = None,
+    requires_manual_review: bool | None = None,
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> Page:
+    values = {
+        "team_id": team_id,
+        "season": season,
+        "role::text": role.value if role else None,
+        "assignment_status": assignment_status,
+        "requires_manual_review": requires_manual_review,
+    }
+    clauses = [f"{column} = %s" for column, value in values.items() if value is not None]
+    params = [value for value in values.values() if value is not None]
+    return _page(
+        "api_coaching_completeness",
+        clauses=clauses,
+        params=params,
+        order="season DESC, team_id, role",
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/environment", response_model=Page)
+def inherited_environment(
+    team_id: str | None = None,
+    season: int | None = Query(None, ge=2010, le=2025),
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> Page:
+    values = {"team_id": team_id, "season": season}
+    clauses = [f"{column} = %s" for column, value in values.items() if value is not None]
+    params = [value for value in values.values() if value is not None]
+    return _page(
+        "api_inherited_environment",
+        clauses=clauses,
+        params=params,
+        order="season DESC, team_id",
         limit=limit,
         offset=offset,
     )
