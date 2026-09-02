@@ -18,6 +18,10 @@ rankings, causal attribution, PFR collection, or source scraping.
   passing/rushing/total touchdowns, interceptions, sacks, yards per attempt,
   adjusted net yards per attempt, fumbles, and fumbles lost. Results come from canonical schedules; box-score totals come from validated
   nflverse weekly player statistics. `null` stays unavailable.
+- `canonical_qb_game_performance`, `canonical_qb_team_season_performance`, and
+  `canonical_qb_pae`: production-bound copies filtered by `canonical-position-qb-v1` without
+  mutating historical or expected-performance checkpoints.
+- `qb_eligibility_exclusions`: the explicit non-QB/missing-position audit for those copies.
 - `team_season_statistics`: one `(team_id, season)` row for 2010–2025 with regular-season
   W-L-T, points, PBP-derived offense, touchdowns, turnovers, sacks allowed, EPA/play,
   passing EPA/dropback, success rate, and competition ranks within each season.
@@ -35,8 +39,10 @@ rankings, causal attribution, PFR collection, or source scraping.
   pass-defense strength. No target-season final offensive result or defense control enters
   the feature set.
 
-The current local artifact contains 1,689 supplemental QB-team seasons, 512 team-seasons, 2,048
-coaching-completeness cells, and 544 environment rows (2009–2025). The 2025 depth-chart
+The current local artifact contains 1,187 canonical supplemental QB-team seasons, 2,022
+canonical QB-team seasons across warm-up and analysis scope, 16,080 canonical QB-game rows,
+1,187 canonical PAE rows, 512 team-seasons, 2,048 coaching-completeness cells, and 544
+environment rows (2009–2025). The 2025 depth-chart
 asset lacks a comparable weekly opening snapshot, so its WR/TE/RB context fields are null;
 no roster membership or production is fabricated. The pressure and schedule features remain
 available because they only consume the preceding season’s PBP and the published target
@@ -52,7 +58,7 @@ complete `(load_id, player_id, team_id, season)` key, preserving every existing 
 when an additive fact is unavailable. `GET /coaching/completeness` exposes the audit matrix;
 `GET /environment` exposes only timing-safe team-season context; `GET /team-seasons` exposes
 descriptive target-season team results and offense. API contract `api-v1.4`, schema
-`checkpoint-7.4`, and loader `serving-loader-v5` include the enhancement data version
+`checkpoint-7.4`, and loader `serving-loader-v6` include the enhancement data version
 in the deterministic serving identity. These additive code and artifact contracts require an
 explicit migration/load/release; this foundation does not mutate the existing deployed
 publication by itself.

@@ -143,11 +143,34 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         for name, player_id in (
             ("Terrelle Pryor", "00-0028825"),
             ("Taysom Hill", "00-0033357"),
+            ("Derrick Henry", "00-0032764"),
         ):
             response = self.client.get("/qbs", params={"search": name})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["total"], 0)
             self.assertEqual(self.client.get(f"/qbs/{player_id}").status_code, 404)
+
+        small_sample = self.client.get("/qbs", params={"search": "Kedon Slovis", "season": 2025})
+        self.assertEqual(small_sample.status_code, 200)
+        self.assertEqual(small_sample.json()["total"], 1)
+        self.assertEqual(small_sample.json()["items"][0]["dropbacks"], 2)
+        self.assertFalse(small_sample.json()["items"][0]["qualifies_default"])
+
+        with psycopg.connect(self.url) as connection:
+            for table in (
+                "serving_qb_games",
+                "serving_qb_seasons",
+                "serving_qb_pae",
+                "serving_qb_supplemental",
+                "serving_coach_exposures",
+            ):
+                non_qbs = connection.execute(
+                    f"SELECT count(*) FROM {table} facts "  # noqa: S608 - fixed table allowlist
+                    "JOIN serving_players p ON p.load_id=facts.load_id "
+                    "AND p.player_id=facts.player_id "
+                    "WHERE upper(p.position) <> 'QB' OR p.position IS NULL"
+                ).fetchone()[0]
+                self.assertEqual(non_qbs, 0, table)
 
         with psycopg.connect(self.url) as connection:
             load_id = connection.execute("SELECT load_id FROM serving_publication").fetchone()[0]
@@ -232,7 +255,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 "c3-f6c1aa118ff43b90",
                 "c5-8fd5d1aba2598c59",
                 "c6-400a5b474aa37a35",
-                "enh-5b374031c236ee54",
+                "enh-04254065cafd92ba",
             ),
         )
         self.assertEqual(manifest_count, 5)

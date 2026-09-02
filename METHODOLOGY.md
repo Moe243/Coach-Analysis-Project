@@ -161,6 +161,12 @@ by attempts. Adjusted net yards per attempt is `(passing yards - sack yards lost
 TD - 45 × interceptions) / (attempts + sacks)`. Missing inputs yield null rather than an
 imputed result.
 
+The same `canonical-position-qb-v1` rule partitions production-bound QB game, QB-team-season,
+PAE, supplemental, and coach-exposure rows. Dropback count never establishes QB identity: a
+canonical QB with one dropback remains a QB but stays analytically ineligible, while a WR/RB/TE/
+specialist trick-play passer is excluded. Missing canonical position is explicitly audited and
+excluded rather than guessed. Immutable source checkpoints and raw PBP remain unchanged.
+
 Team-season results use regular-season schedules. Offensive yards, touchdowns, turnovers,
 sacks allowed, EPA/play, passing EPA/dropback, and success rate use regular-season nflverse
 PBP at `(team_id, season)` grain, excluding kneels and spikes from efficiency rates. Within-season

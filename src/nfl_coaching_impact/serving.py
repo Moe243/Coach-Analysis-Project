@@ -19,9 +19,10 @@ from psycopg.types.json import Jsonb
 
 from .errors import PipelineError
 from .pipeline import _validate_existing_version
+from .qb_eligibility import assert_canonical_qb_rows, partition_canonical_qb_rows
 
 SCHEMA_VERSION = "checkpoint-7.4"
-LOADER_VERSION = "serving-loader-v5"
+LOADER_VERSION = "serving-loader-v6"
 API_CONTRACT_VERSION = "api-v1.4"
 PUBLICATION_NAMESPACE = uuid.UUID("c79812ad-1480-48ec-9972-e94b6f158a31")
 
@@ -170,11 +171,11 @@ def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any],
         "players": pl.read_parquet(silver / "players.parquet"),
         "player_external_ids": pl.read_parquet(silver / "player_external_ids.parquet"),
         "games": pl.read_parquet(silver / "games.parquet"),
-        "qb_games": pl.read_parquet(silver / "qb_game_performance.parquet"),
-        "qb_seasons": pl.read_parquet(silver / "qb_team_season_performance.parquet"),
+        "qb_games": pl.read_parquet(enhancement / "canonical_qb_game_performance.parquet"),
+        "qb_seasons": pl.read_parquet(enhancement / "canonical_qb_team_season_performance.parquet"),
         "source_manifests": pl.read_parquet(silver / "source_manifest.parquet"),
         "historical_manifest": pl.read_parquet(silver / "pipeline_manifest.parquet"),
-        "qb_pae": pl.read_parquet(expected / "qb_pae.parquet"),
+        "qb_pae": pl.read_parquet(enhancement / "canonical_qb_pae.parquet"),
         "coach_exposures": pl.read_parquet(coach / "coach_modeling_exposures.parquet"),
         "coach_effects": pl.read_parquet(coach / "coach_effect_estimates.parquet"),
         "coach_rankings": pl.read_parquet(coach / "preliminary_coach_rankings.parquet"),
@@ -185,6 +186,9 @@ def _source_tables(project_root: Path) -> tuple[ServingVersions, dict[str, Any],
             enhancement / "inherited_environment_features.parquet"
         ),
     }
+    frames["coach_exposures"], _ = partition_canonical_qb_rows(
+        frames["coach_exposures"], frames["players"], dataset="coach_modeling_exposures"
+    )
     expected_models = frames["qb_pae"]["model_version"].unique().to_list()
     coach_models = frames["coach_effects"]["coach_model_version"].unique().to_list()
     if len(expected_models) != 1 or len(coach_models) != 1:
@@ -297,6 +301,8 @@ def _validate_sources(
     }
     for table, (columns, key) in contracts.items():
         _required(frames[table], table, columns, key)
+    for table in ("qb_games", "qb_seasons", "qb_pae", "qb_supplemental", "coach_exposures"):
+        assert_canonical_qb_rows(frames[table], frames["players"], dataset=table)
     analysis_keys = set(
         frames["qb_seasons"]
         .filter(pl.col("scope") == "analysis")

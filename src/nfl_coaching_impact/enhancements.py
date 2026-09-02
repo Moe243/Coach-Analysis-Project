@@ -17,10 +17,11 @@ from .coaching import ROLES
 from .constants import ANALYSIS_SEASONS, CANONICAL_TEAM_IDS, TEAM_ALIAS_TO_CANONICAL
 from .errors import PipelineError
 from .pipeline import _output_checksums, _update_latest, _validate_existing_version, _write_json
+from .qb_eligibility import QB_ELIGIBILITY_VERSION, partition_canonical_qb_rows
 from .sources import sha256_file
 
-ENHANCEMENT_PIPELINE_VERSION = "post-release-enhancements-v2"
-SUPPLEMENTAL_METRIC_VERSION = "qb-supplemental-v2"
+ENHANCEMENT_PIPELINE_VERSION = "post-release-enhancements-v3"
+SUPPLEMENTAL_METRIC_VERSION = "qb-supplemental-v3"
 TEAM_METRIC_VERSION = "team-season-statistics-v1"
 ENVIRONMENT_FEATURE_VERSION = "inherited-environment-v1"
 
@@ -828,7 +829,9 @@ def _manual_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _identity(project_root: Path, historical_version: str) -> tuple[str, dict[str, str]]:
+def _identity(
+    project_root: Path, historical_version: str, expected_version: str
+) -> tuple[str, dict[str, str]]:
     inputs = [
         project_root / "data" / "manual" / name
         for name in (
@@ -841,12 +844,16 @@ def _identity(project_root: Path, historical_version: str) -> tuple[str, dict[st
         path.relative_to(project_root).as_posix(): sha256_file(path) for path in inputs
     }
     source_hashes["src/nfl_coaching_impact/enhancements.py"] = sha256_file(Path(__file__))
+    eligibility_source = Path(__file__).with_name("qb_eligibility.py")
+    source_hashes["src/nfl_coaching_impact/qb_eligibility.py"] = sha256_file(eligibility_source)
     payload = {
         "pipeline_version": ENHANCEMENT_PIPELINE_VERSION,
         "supplemental_metric_version": SUPPLEMENTAL_METRIC_VERSION,
         "environment_feature_version": ENVIRONMENT_FEATURE_VERSION,
         "team_metric_version": TEAM_METRIC_VERSION,
+        "qb_eligibility_version": QB_ELIGIBILITY_VERSION,
         "historical_version": historical_version,
+        "expected_version": expected_version,
         "inputs": source_hashes,
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
@@ -943,7 +950,10 @@ def run_enhancement_pipeline(config: EnhancementConfig) -> EnhancementResult:
         if config.historical_dir
         else _latest(config.project_root / "data" / "processed" / "historical")
     )
-    version, source_hashes = _identity(config.project_root, historical_version)
+    expected_version, expected = _latest(
+        config.project_root / "data" / "processed" / "expected_performance"
+    )
+    version, source_hashes = _identity(config.project_root, historical_version, expected_version)
     output_root = config.resolved_output_dir
     final_path = output_root / version
     if final_path.exists():
@@ -953,10 +963,32 @@ def run_enhancement_pipeline(config: EnhancementConfig) -> EnhancementResult:
 
     silver = historical / "silver"
     player_stats = _read_player_stats(historical)
+    players = pl.read_parquet(silver / "players.parquet")
+    source_qb_games = pl.read_parquet(silver / "qb_game_performance.parquet")
+    source_qb_seasons = pl.read_parquet(silver / "qb_team_season_performance.parquet")
+    qb_games, excluded_games = partition_canonical_qb_rows(
+        source_qb_games, players, dataset="qb_game_performance"
+    )
+    qb_seasons, excluded_seasons = partition_canonical_qb_rows(
+        source_qb_seasons, players, dataset="qb_team_season_performance"
+    )
+    source_qb_pae = pl.read_parquet(expected / "qb_pae.parquet")
+    qb_pae, excluded_pae = partition_canonical_qb_rows(source_qb_pae, players, dataset="qb_pae")
+    qb_games = qb_games.with_columns(pl.lit(QB_ELIGIBILITY_VERSION).alias("qb_eligibility_version"))
+    qb_seasons = qb_seasons.with_columns(
+        pl.lit(QB_ELIGIBILITY_VERSION).alias("qb_eligibility_version")
+    )
+    qb_pae = qb_pae.with_columns(pl.lit(QB_ELIGIBILITY_VERSION).alias("qb_eligibility_version"))
+    if set(qb_pae.select("player_id", "team_id", "season").iter_rows()) != set(
+        qb_seasons.filter(pl.col("scope") == "analysis")
+        .select("player_id", "team_id", "season")
+        .iter_rows()
+    ):
+        raise PipelineError("canonical QB PAE keys do not match canonical analysis-season keys")
     qb_stats = (
         build_qb_supplemental_statistics(
-            pl.read_parquet(silver / "qb_team_season_performance.parquet"),
-            pl.read_parquet(silver / "qb_game_performance.parquet"),
+            qb_seasons,
+            qb_games,
             pl.read_parquet(silver / "games.parquet"),
             player_stats,
         )
@@ -1015,11 +1047,35 @@ def run_enhancement_pipeline(config: EnhancementConfig) -> EnhancementResult:
         .with_columns(pl.lit(version).alias("data_version"))
         .select("data_version", pl.exclude("data_version"))
     )
+    exclusions = pl.concat(
+        [excluded_games, excluded_seasons, excluded_pae], how="diagonal_relaxed"
+    ).sort("source_dataset", "season", "team_id", "player_id")
+    eligibility_counts = {
+        "qb_game_performance": {
+            "before": source_qb_games.height,
+            "after": qb_games.height,
+            "removed": excluded_games.height,
+        },
+        "qb_team_season_performance": {
+            "before": source_qb_seasons.height,
+            "after": qb_seasons.height,
+            "removed": excluded_seasons.height,
+        },
+        "qb_pae": {
+            "before": source_qb_pae.height,
+            "after": qb_pae.height,
+            "removed": excluded_pae.height,
+        },
+    }
 
     staging = output_root / ".staging" / uuid.uuid4().hex
     try:
         staging.mkdir(parents=True)
         tables = {
+            "canonical_qb_game_performance": qb_games,
+            "canonical_qb_team_season_performance": qb_seasons,
+            "canonical_qb_pae": qb_pae,
+            "qb_eligibility_exclusions": exclusions,
             "qb_supplemental_statistics": qb_stats,
             "team_season_statistics": team_statistics,
             "coaching_completeness": completeness,
@@ -1038,6 +1094,9 @@ def run_enhancement_pipeline(config: EnhancementConfig) -> EnhancementResult:
             "supplemental_metric_version": SUPPLEMENTAL_METRIC_VERSION,
             "environment_feature_version": ENVIRONMENT_FEATURE_VERSION,
             "team_metric_version": TEAM_METRIC_VERSION,
+            "qb_eligibility_version": QB_ELIGIBILITY_VERSION,
+            "expected_data_version": expected_version,
+            "qb_eligibility_counts": eligibility_counts,
             "source_hashes": source_hashes,
             "table_counts": counts,
             "status": "succeeded",

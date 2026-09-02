@@ -16,8 +16,34 @@ from nfl_coaching_impact.enhancements import (
     build_team_season_statistics,
     run_enhancement_pipeline,
 )
+from nfl_coaching_impact.qb_eligibility import partition_canonical_qb_rows
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_canonical_position_controls_qb_identity_independently_of_dropbacks() -> None:
+    source = pl.DataFrame(
+        [
+            {"player_id": "qb-normal", "dropbacks": 400, "qualifies_default": True},
+            {"player_id": "qb-small", "dropbacks": 1, "qualifies_default": False},
+            {"player_id": "wr-trick", "dropbacks": 2, "qualifies_default": False},
+            {"player_id": "rb-trick", "dropbacks": 1, "qualifies_default": False},
+        ]
+    )
+    untouched = source.clone()
+    players = pl.DataFrame(
+        [
+            {"player_id": "qb-normal", "position": "QB"},
+            {"player_id": "qb-small", "position": "qb"},
+            {"player_id": "wr-trick", "position": "WR"},
+            {"player_id": "rb-trick", "position": "RB"},
+        ]
+    )
+    eligible, excluded = partition_canonical_qb_rows(source, players, dataset="fixture_qb_seasons")
+    assert source.equals(untouched)
+    assert eligible["player_id"].to_list() == ["qb-normal", "qb-small"]
+    assert eligible["qualifies_default"].to_list() == [True, False]
+    assert set(excluded["canonical_position"].to_list()) == {"WR", "RB"}
 
 
 def _qb_seasons() -> pl.DataFrame:
@@ -406,6 +432,9 @@ def test_team_statistics_reconcile_results_offense_and_competition_ranks() -> No
 
 
 class PostReleaseEnhancementTest(unittest.TestCase):
+    def test_canonical_qb_eligibility(self) -> None:
+        test_canonical_position_controls_qb_identity_independently_of_dropbacks()
+
     def test_clean_stage_one_builds_are_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -427,6 +456,49 @@ class PostReleaseEnhancementTest(unittest.TestCase):
                 if path.is_file()
             }
             self.assertEqual(first_files, second_files)
+            canonical = pl.read_parquet(
+                first.output_path / "canonical_qb_team_season_performance.parquet"
+            )
+            analysis = canonical.filter(pl.col("scope") == "analysis")
+            self.assertEqual(analysis.height, 1187)
+            self.assertEqual(analysis.select("player_id", "team_id", "season").n_unique(), 1187)
+            self.assertEqual(set(analysis["qb_eligibility_version"]), {"canonical-position-qb-v1"})
+            exclusions = pl.read_parquet(
+                first.output_path / "qb_eligibility_exclusions.parquet"
+            ).filter(pl.col("source_dataset") == "qb_team_season_performance")
+            self.assertEqual(exclusions.height, 877)
+            self.assertEqual(exclusions.filter(pl.col("canonical_position").is_null()).height, 0)
+            self.assertTrue({"WR", "RB", "TE", "P", "K"} <= set(exclusions["canonical_position"]))
+
+            historical_version = (ROOT / "data/processed/historical/LATEST").read_text().strip()
+            historical = ROOT / "data/processed/historical" / historical_version
+            source_seasons = pl.read_parquet(
+                historical / "silver/qb_team_season_performance.parquet"
+            )
+            self.assertEqual(source_seasons.filter(pl.col("scope") == "analysis").height, 1689)
+            raw_2018 = pl.read_parquet(
+                historical / "bronze/play_by_play/season=2018/play_by_play.parquet",
+                columns=["passer_player_id"],
+            )
+            self.assertGreater(
+                raw_2018.filter(pl.col("passer_player_id") == "00-0032764").height,
+                0,
+            )
+            expected_version = (
+                (ROOT / "data/processed/expected_performance/LATEST").read_text().strip()
+            )
+            source_pae = pl.read_parquet(
+                ROOT / "data/processed/expected_performance" / expected_version / "qb_pae.parquet"
+            )
+            canonical_pae = pl.read_parquet(first.output_path / "canonical_qb_pae.parquet")
+            keys = canonical_pae.select("player_id", "team_id", "season")
+            expected_kept = source_pae.join(
+                keys, on=["player_id", "team_id", "season"], how="semi"
+            ).sort("season", "team_id", "player_id")
+            actual_kept = canonical_pae.select(source_pae.columns).sort(
+                "season", "team_id", "player_id"
+            )
+            self.assertTrue(actual_kept.equals(expected_kept))
 
     def test_supplemental_grain_and_reconciliation(self) -> None:
         test_supplemental_stats_preserve_multi_team_grain_and_reconcile()

@@ -2,7 +2,7 @@ import axe from "axe-core";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { useLocation } from "react-router-dom";
 import { StatisticsPage } from "./StatisticsPage";
-import { installApiFixture, page } from "../test/fixtures";
+import { installApiFixture, page, qbSeason } from "../test/fixtures";
 import { renderRoute } from "../test/render";
 
 describe("StatisticsPage", () => {
@@ -25,6 +25,23 @@ describe("StatisticsPage", () => {
     installApiFixture({ "/qbs": page([]) });
     renderRoute(<StatisticsPage />);
     expect(await screen.findByText("No records match")).toBeInTheDocument();
+  });
+
+  it("defensively excludes a non-QB trick-play row", async () => {
+    const receiver = {
+      ...qbSeason,
+      player_id: "wr-trick",
+      display_name: "Trick Receiver",
+      position: "WR" as never,
+      dropbacks: 2,
+      qualifies_default: false,
+    };
+    installApiFixture({ "/qbs": page([qbSeason, receiver]) });
+    renderRoute(<StatisticsPage />);
+    expect(
+      await screen.findByRole("link", { name: "Test Quarterback" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Trick Receiver")).not.toBeInTheDocument();
   });
 
   it("shows a loading state while API requests are pending", () => {

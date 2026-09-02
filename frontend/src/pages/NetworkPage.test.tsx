@@ -2,7 +2,7 @@ import axe from "axe-core";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import type { ElementDefinition } from "cytoscape";
 import { NetworkPage } from "./NetworkPage";
-import { installApiFixture } from "../test/fixtures";
+import { installApiFixture, page, qbSeason } from "../test/fixtures";
 import { renderRoute } from "../test/render";
 
 vi.mock("../components/NetworkGraph", () => ({
@@ -40,6 +40,29 @@ vi.mock("../components/NetworkGraph", () => ({
 
 describe("NetworkPage Relationship Explorer", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("excludes non-QBs from the QB Journey selector", async () => {
+    const runningBack = {
+      ...qbSeason,
+      player_id: "rb-trick",
+      display_name: "Trick Running Back",
+      position: "RB" as never,
+      dropbacks: 1,
+      qualifies_default: false,
+    };
+    installApiFixture({ "/qbs": page([qbSeason, runningBack]) });
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=qb_journey&player_id=qb-1&start_season=2024&end_season=2025",
+    );
+    const selector = screen.getByRole("combobox", {
+      name: "Quarterback",
+    });
+    expect(
+      await screen.findByRole("option", { name: "Test Quarterback" }),
+    ).toBeInTheDocument();
+    expect(selector).not.toHaveTextContent("Trick Running Back");
+  });
 
   it.each([
     [

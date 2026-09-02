@@ -16,7 +16,7 @@ import type {
 export const versions: Versions = {
   load_id: "test-load",
   schema_version: "checkpoint-7.4",
-  loader_version: "serving-loader-v5",
+  loader_version: "serving-loader-v6",
   api_contract_version: "api-v1.4",
   historical_data_version: "c3-test",
   expected_data_version: "c5-test",
@@ -61,7 +61,7 @@ export const qbSeason: QbSeason = {
   qualifies_default: true,
   metric_version: "qb-dropback-v1",
   payload: { interception_rate: 0.02, touchdown_rate: 0.06 },
-  supplemental_metric_version: "qb-supplemental-v2",
+  supplemental_metric_version: "qb-supplemental-v3",
   starter_wins: 11,
   starter_losses: 6,
   starter_ties: 0,

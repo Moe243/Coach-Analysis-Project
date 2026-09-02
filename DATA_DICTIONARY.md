@@ -111,7 +111,7 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 
 ### Checkpoint-seven serving layer
 
-Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, coach model/data, and enhancement data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. The local Stage 1 candidate uses schema `checkpoint-7.4`, loader `serving-loader-v5`, and API `api-v1.4`. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
+Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, coach model/data, and enhancement data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. The local Stage 1 candidate uses schema `checkpoint-7.4`, loader `serving-loader-v6`, and API `api-v1.4`. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
 
 | Table/view | Grain or contract |
 |---|---|
@@ -120,6 +120,8 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | `serving_games`, `serving_qb_games`, `serving_qb_seasons` | Game, QB-game-team, and QB-team-season facts with scope |
 | `serving_qb_pae` | One out-of-sample expected/actual/PAE record per QB-team-season |
 | `serving_qb_supplemental` | Additive QB-team-season starter record, completions/attempts, production, sacks, fumbles/lost, yards/attempt, and adjusted net yards/attempt; complete key matches `serving_qb_seasons` |
+| `canonical_qb_game_performance`, `canonical_qb_team_season_performance`, `canonical_qb_pae` | Versioned production-bound copies containing only identities whose canonical position is `QB`; source checkpoints remain immutable |
+| `qb_eligibility_exclusions` | Explicit audit rows removed from QB publication, retaining source dataset, canonical position, and exclusion reason |
 | `serving_team_season_statistics` | One team-season with W-L-T, points, PBP-derived yards/TD/turnovers/sacks, EPA and success rates, and within-season competition ranks |
 | `serving_coaching_completeness` | One `(team_id, season, role)` audit cell with explicit assignment/manual-review state and interval metadata payload |
 | `serving_inherited_environment` | One team-season, strictly preseason context row with `feature_source_max_season < season` |
