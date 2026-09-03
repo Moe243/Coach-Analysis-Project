@@ -107,6 +107,12 @@ describe("buildRelationshipGraph", () => {
     expect(new Set(assignments.map((row) => row.role))).toEqual(
       new Set(["head_coach", "offensive_coordinator"]),
     );
+    const appearances = graph.elements.filter(
+      (element) =>
+        !element.data.source && element.data.canonicalId === "coach:coach-1",
+    );
+    expect(appearances).toHaveLength(2);
+    expect(new Set(appearances.map((element) => element.data.id)).size).toBe(2);
   });
 
   it("keeps one canonical QB node across years and teams", () => {
@@ -127,6 +133,12 @@ describe("buildRelationshipGraph", () => {
     expect(new Set(qbRows.map((row) => row.team_id))).toEqual(
       new Set(["team_den", "team_hou"]),
     );
+    expect(
+      graph.elements.filter(
+        (element) =>
+          !element.data.source && element.data.canonicalId === "qb:qb-1",
+      ),
+    ).toHaveLength(3);
   });
 
   it("preserves multi-team same-season QB records and their complete-key PAE", () => {
@@ -170,7 +182,7 @@ describe("buildRelationshipGraph", () => {
   it("keeps mixed head-coach and subordinate-role identities acyclic", () => {
     const fixture = response();
     const mixedRole = fixture.relationships.find(
-      (relationship) =>
+      (relationship): relationship is CoachAssignmentRelationship =>
         relationship.relationship_type === "coach_assignment" &&
         relationship.source_node_id === "coach:coach-1" &&
         relationship.role !== "head_coach",
@@ -181,44 +193,35 @@ describe("buildRelationshipGraph", () => {
       buildRelationshipGraph(fixture, defaultExplorerFilters()),
     ).not.toThrow();
     const graph = buildRelationshipGraph(fixture, defaultExplorerFilters());
-    const mixedEdges = graph.elements.filter((element) =>
-      String(element.data.id).includes(mixedRole!.relationship_id),
+    const mixedEdges = graph.elements.filter(
+      (element) =>
+        element.data.id === `relationship:${mixedRole!.relationship_id}`,
     );
     expect(mixedEdges).toHaveLength(1);
-    expect(mixedEdges[0].data.source).toBe("coach:coach-1");
+    expect(mixedEdges[0].data.source).toBe(
+      `appearance:coach:coach-1:${mixedRole!.assignment_key}`,
+    );
   });
 
-  it("falls back to deterministic vertical layers for dense canonical histories", () => {
-    const fixture = response();
-    const assignment = fixture.relationships.find(
-      (relationship): relationship is CoachAssignmentRelationship =>
-        relationship.relationship_type === "coach_assignment",
-    )!;
-    for (let index = 0; index < 5; index += 1) {
-      fixture.relationships.push({
-        ...assignment,
-        assignment_key: `${assignment.assignment_key}-parallel-${index}`,
-        relationship_id: `${assignment.relationship_id}-parallel-${index}`,
-      });
+  it("keeps chronological modes on a strict deterministic vertical season spine", () => {
+    for (const mode of [
+      "coach_journey",
+      "qb_journey",
+      "team_history",
+    ] as const) {
+      const first = buildRelationshipGraph(
+        response(mode),
+        defaultExplorerFilters(),
+      );
+      const second = buildRelationshipGraph(
+        response(mode),
+        defaultExplorerFilters(),
+      );
+      expect(first.positions).toEqual(second.positions);
+      expect(first.positions["team-season:team_den:2024"].y).toBeLessThan(
+        first.positions["team-season:team_den:2025"].y,
+      );
     }
-    const graph = buildRelationshipGraph(fixture, defaultExplorerFilters());
-    const root = graph.elements.find((element) => element.data.kind === "team");
-    const seasons = graph.nodes.filter(
-      (node) => node.node_type === "team_season",
-    );
-    expect(root?.position).toEqual({ x: 100, y: 60 });
-    expect(root?.position?.y).toBeLessThan(
-      Math.min(...seasons.map((node) => graph.positions[node.node_id].y)),
-    );
-    expect(seasons.map((node) => graph.positions[node.node_id].x)).toEqual(
-      [...seasons]
-        .sort(
-          (left, right) =>
-            left.season - right.season ||
-            left.node_id.localeCompare(right.node_id),
-        )
-        .map((node) => graph.positions[node.node_id].x),
-    );
   });
 
   it("preserves interim, shared, verified, and provisional states", () => {
@@ -312,90 +315,86 @@ describe("buildRelationshipGraph", () => {
     ).toBe(graph.relationships.length);
   });
 
-  it("generates byte-stable chronological positions for journey and history modes", () => {
-    for (const mode of [
-      "coach_journey",
-      "qb_journey",
-      "team_history",
-    ] as const) {
-      const first = buildRelationshipGraph(
-        response(mode),
-        defaultExplorerFilters(),
-      );
-      const second = buildRelationshipGraph(
-        response(mode),
-        defaultExplorerFilters(),
-      );
-      expect(JSON.stringify(first.positions)).toBe(
-        JSON.stringify(second.positions),
-      );
-      if (mode !== "team_history") {
-        expect(first.positions["team-season:team_den:2024"].x).toBeLessThan(
-          first.positions["team-season:team_den:2025"].x,
-        );
-      }
-    }
-  });
-
-  it("renders Mike Tomlin and a multi-season QB once with every season edge", () => {
+  it("keeps one canonical Mike Tomlin and QB identity behind chronological appearances", () => {
     const graph = buildRelationshipGraph(
       steelersHistory(),
       defaultExplorerFilters(),
     );
     const visualNodes = graph.elements.filter(
-      (element) => !element.data.source,
+      (element) => !element.data.source && element.data.kind !== "year",
     );
     expect(
-      visualNodes.filter((element) => element.data.id === "coach:mike-tomlin"),
+      graph.nodes.filter((node) => node.node_id === "coach:mike-tomlin"),
     ).toHaveLength(1);
     expect(
-      visualNodes.filter((element) => element.data.id === "qb:qb-1"),
+      graph.nodes.filter((node) => node.node_id === "qb:qb-1"),
     ).toHaveLength(1);
     expect(
       visualNodes.filter((element) =>
-        String(element.data.id).startsWith("instance:"),
+        String(element.data.id).startsWith("appearance:coach:mike-tomlin:"),
       ),
-    ).toHaveLength(0);
-    const edges = graph.elements.filter((element) => element.data.source);
+    ).toHaveLength(2);
     expect(
-      edges
-        .filter((element) => element.data.source === "coach:mike-tomlin")
-        .map((element) => element.data.target),
-    ).toEqual(
-      expect.arrayContaining([
-        "team-season:team_pit:2024",
-        "team-season:team_pit:2025",
-      ]),
-    );
+      visualNodes.filter((element) => element.data.canonicalId === "qb:qb-1"),
+    ).toHaveLength(2);
     expect(
-      edges
-        .filter((element) => element.data.target === "qb:qb-1")
-        .map((element) => element.data.source),
-    ).toEqual(
-      expect.arrayContaining([
-        "team-season:team_pit:2024",
-        "team-season:team_pit:2025",
-      ]),
-    );
+      graph.elements.filter(
+        (element) =>
+          element.data.kind === "identity_continuity" &&
+          element.data.canonicalId === "coach:mike-tomlin",
+      ),
+    ).toHaveLength(1);
+    expect(
+      graph.elements.filter(
+        (element) =>
+          element.data.kind === "identity_continuity" &&
+          element.data.canonicalId === "qb:qb-1",
+      ),
+    ).toHaveLength(1);
+    expect(
+      graph.elements.filter(
+        (element) => element.data.relationshipType === "factual",
+      ),
+    ).toHaveLength(graph.relationships.length);
   });
 
-  it("uses a top-to-bottom Dagre hierarchy for Team History", () => {
+  it("keeps Team History seasons vertical and people in stable season lanes", () => {
     const graph = buildRelationshipGraph(
       steelersHistory(),
       defaultExplorerFilters(),
     );
-    const root = graph.positions["team:team_pit"];
-    const headCoach = graph.positions["coach:mike-tomlin"];
-    const seasons = [
-      graph.positions["team-season:team_pit:2024"],
-      graph.positions["team-season:team_pit:2025"],
-    ];
-    const coordinator = graph.positions["coach:coach-2"];
-    const quarterback = graph.positions["qb:qb-1"];
-    expect(root.y).toBeLessThan(headCoach.y);
-    expect(seasons.every((position) => headCoach.y < position.y)).toBe(true);
-    expect(seasons.every((position) => position.y < coordinator.y)).toBe(true);
-    expect(coordinator.y).toBeLessThan(quarterback.y);
+    const season2024 = graph.positions["team-season:team_pit:2024"];
+    const season2025 = graph.positions["team-season:team_pit:2025"];
+    expect(season2024.y).toBeLessThan(season2025.y);
+    const tomlin2024 = graph.elements.find(
+      (element) =>
+        element.data.canonicalId === "coach:mike-tomlin" &&
+        element.data.season === 2024,
+    )!;
+    const qb2025 = graph.elements.find(
+      (element) =>
+        element.data.canonicalId === "qb:qb-1" && element.data.season === 2025,
+    )!;
+    expect(tomlin2024.position?.y).toBe(season2024.y);
+    expect(qb2025.position?.y).toBe(season2025.y);
+  });
+
+  it("keeps continuity edges separate from assignment and QB facts", () => {
+    const graph = buildRelationshipGraph(
+      steelersHistory(),
+      defaultExplorerFilters(),
+    );
+    const factual = graph.elements.filter(
+      (element) => element.data.relationshipType === "factual",
+    );
+    const continuity = graph.elements.filter(
+      (element) => element.data.relationshipType === "visual_continuity",
+    );
+    expect(factual).toHaveLength(graph.relationships.length);
+    expect(continuity.length).toBe(graph.continuityCount);
+    expect(
+      continuity.every((edge) => edge.data.kind === "identity_continuity"),
+    ).toBe(true);
   });
 
   it("uses a deterministic bounded Full Network layout", () => {
@@ -408,7 +407,19 @@ describe("buildRelationshipGraph", () => {
       defaultExplorerFilters(),
     );
     expect(first.positions).toEqual(second.positions);
-    expect(first.positions["coach:coach-1"].x).toBeLessThan(
+    const years = first.elements.filter(
+      (element) => element.data.kind === "year",
+    );
+    expect(years.map((element) => element.data.label)).toEqual([
+      "2024",
+      "2025",
+    ]);
+    const coach2024 = first.elements.find(
+      (element) =>
+        element.data.canonicalId === "coach:coach-1" &&
+        element.data.season === 2024,
+    )!;
+    expect(coach2024.position!.x).toBeLessThan(
       first.positions["team-season:team_den:2024"].x,
     );
   });

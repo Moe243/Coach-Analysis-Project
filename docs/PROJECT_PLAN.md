@@ -58,3 +58,25 @@ Exit criterion implemented: real checkpoint-seven API flows were exercised at de
 Deploy the approved application publication, verify the live frontend/API/database and all explorer modes, add provider-safe release configuration, licensing, portfolio material, reproducibility evidence, and production documentation.
 
 Exit criterion met: the Render frontend and API serve the approved Neon publication; exact-origin CORS, health/version contracts, core API records, and all four Relationship Explorer modes were verified live. Release documentation, licensing, cold-start behavior, provider-only secret handling, and recruiter-oriented project material are complete. Coach results remain explicitly exploratory.
+
+## Checkpoint ten — Coach Effect research foundation (complete)
+
+Preserve the four-phase PAE/PCAE/environment/decomposition research contract without assigning
+final weights or creating a production score. Document historical results, reproducibility gaps,
+rejected approaches, non-causal interpretation, and the coaching-evidence release gate.
+
+Exit criterion met: formulas and executable research components are preserved, missing inputs are
+explicit, and production Coach Effect remains blocked pending comprehensive OC, QB-coach, and
+weekly play-caller verification plus independent validation.
+
+## Checkpoint eleven — coaching evidence, historical PCAE, and explorer chronology (local)
+
+Create the complete 2010–2025 team-season-role status matrix; reconcile historical play
+eligibility; run leakage-safe PCAE only for verified weekly caller intervals; and add deterministic
+appearance/continuity layouts for three chronological views plus an all-years, year-banded Full
+Network. Preserve canonical API facts, production models, serving schema, and deployment.
+
+Exit criterion: all focused and full validation passes, research outputs are content-addressed and
+reproducible, every unresolved caller remains visible, complete Full Network size is measured with
+no silent truncation, and the uncommitted diff is ready for review. No deployment or production
+Coach Effect implementation is part of this checkpoint.

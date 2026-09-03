@@ -49,9 +49,13 @@ for index, url in enumerate(sorted(citation_urls - book_urls), start=1):
 evidence_path = ROOT / "data" / "manual" / "coaching_source_content_checks.csv"
 with evidence_path.open(newline="", encoding="utf-8") as handle:
     evidence_rows = list(csv.DictReader(handle))
+content_by_url: dict[str, str] = {}
 for row in evidence_rows:
-    request = urllib.request.Request(row["source_url"], headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(request, context=context, timeout=30) as response:
-        content = response.read().decode("utf-8", errors="replace")
+    content = content_by_url.get(row["source_url"])
+    if content is None:
+        request = urllib.request.Request(row["source_url"], headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(request, context=context, timeout=30) as response:
+            content = response.read().decode("utf-8", errors="replace")
+        content_by_url[row["source_url"]] = content
     validate_source_content(content, row["required_terms"], row["evidence_id"])
     print(f"content {row['evidence_id']}: ok")

@@ -1260,6 +1260,13 @@ td > span {
   border-radius: 0;
   background: transparent;
 }
+.network-legend .legend-continuity {
+  width: 20px;
+  height: 0;
+  border-top: 2px dotted #d8b65c;
+  border-radius: 0;
+  background: transparent;
+}
 .selection-panel {
   padding: 1.2rem;
   background: white;
@@ -1362,6 +1369,10 @@ td > span {
   background: white;
   border: 1px solid var(--line);
 }
+.method-grid .method-card-featured {
+  border-color: var(--field);
+  box-shadow: inset 0 4px 0 var(--field);
+}
 .method-grid article > svg {
   width: 26px;
   color: var(--field);
@@ -1387,6 +1398,30 @@ td > span {
   color: var(--ink);
   font-size: 0.8rem;
   line-height: 1.45;
+}
+.coach-effect-guide {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.8rem;
+}
+.coach-effect-guide div {
+  padding: 1rem;
+  background: white;
+  border: 1px solid var(--line);
+}
+.coach-effect-guide dt {
+  color: var(--ink);
+  font-weight: 800;
+}
+.coach-effect-guide dd {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+.coach-effect-caution {
+  margin-bottom: 0;
 }
 .long-copy {
   max-width: 900px;
@@ -1446,7 +1481,8 @@ code {
     flex-direction: column;
   }
   .impact-grid,
-  .method-grid {
+  .method-grid,
+  .coach-effect-guide {
     grid-template-columns: repeat(2, 1fr);
   }
   .environment-grid,
@@ -1483,6 +1519,7 @@ code {
   .profile-summary,
   .impact-grid,
   .method-grid,
+  .coach-effect-guide,
   .environment-grid,
   .citation-list,
   .connection-grid,

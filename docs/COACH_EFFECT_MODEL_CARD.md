@@ -3,6 +3,10 @@
 Status: research foundation only; exploratory, unweighted, non-causal, and blocked from
 production implementation.
 
+Checkpoint Eleven historical research version: `c11-75bc9b540fe22610`; expected-play model
+version `pcae-expanding-prior-seasons-v1`; eligibility version
+`pcae-play-eligibility-v2`. These ignored artifacts are not production model outputs.
+
 ## Intended use
 
 The Phase 1–4 artifacts support reproducible investigation of whether leakage-safe QB PAE and
@@ -20,8 +24,9 @@ must not be loaded by the database, API, frontend, or deployed pipeline. No nume
 ## Data coverage and current reproducibility
 
 - QB expectation/PAE: checkpoint-five analysis seasons 2010–2025, with 1999–2009 warm-up.
-- Play research: cached nflverse regular-season PBP for 2022–2025; model training 2022–2024 and
-  test year 2025.
+- Play research: cached nflverse regular-season PBP for 1999–2025; each scored season uses only
+  earlier seasons for training. Verified interval coverage currently permits PCAE rows in 2012,
+  2015, 2016, and 2020.
 - Coach assignments: repository manual tables preserve identity, role, source, verification,
   confidence, shared/interim status, and intervals, but are intentionally incomplete outside
   verified head-coach coverage.
@@ -29,11 +34,12 @@ must not be loaded by the database, API, frontend, or deployed pipeline. No nume
   table from the historical exploratory run are not committed.
 
 The specification's exact Phase 1 examples and Phase 2–4 summary numbers are retained as
-historically documented results, not claimed as a new reproduction. The current simple PBP
-run/pass/regular-season filter yields 134,138 plays rather than the documented 133,636, showing
-that the original 502-play eligibility exclusion must be recovered and reconciled. The reported
-32,813-play 2025 attribution cannot be reproduced until the missing comprehensive weekly
-play-caller evidence map is restored and audited.
+historically documented results unless explicitly reproduced. The current audit proves that the
+134,138 regular-season run/pass candidates in 2022–2025 include exactly 502 two-point
+conversions, yielding the documented 133,636 under `pcae-play-eligibility-v2`. The same rule
+yields exactly 32,813 eligible 2025 plays, but none can currently be assigned under the strict
+verified-weekly-caller contract. The historical claim that all 32,813 were attributed therefore
+still depends on the missing comprehensive caller map.
 
 ## Outputs
 
@@ -68,9 +74,11 @@ and suppression. One season or one QB is insufficient for an unqualified ranking
 ## Safeguards
 
 The code requires stable play keys, explicit team/week caller intervals, verified evidence,
-supported shared duties, deterministic ordering, and complete attribution. Call Value excludes
-the individual actual result. Research and serving directories are separated, formula contracts
-are tested, arbitrary final weights are prohibited, and documentation uses association language.
+deterministic ordering, and explicit suppression of shared, ambiguous, or uncovered attribution.
+Call Value excludes the individual actual result. Research and serving directories are separated,
+formula contracts are tested, output identity records NumPy, Polars, SciPy, and scikit-learn,
+mutable input hashes are revalidated immediately before publication, arbitrary final weights are
+prohibited, and documentation uses association language.
 
 ## Production release gate
 

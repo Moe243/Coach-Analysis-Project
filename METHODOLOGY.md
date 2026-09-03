@@ -180,11 +180,11 @@ leakage-safe expected-performance model.
 
 Checkpoint eight performs no new football aggregation or model fitting. It displays the checkpoint-seven contracts at QB-team-season, coach-role, assignment-interval, citation, and relationship grains. PAE remains actual EPA/dropback minus the preseason expectation; eligibility changes the reliability label and available filters, never the arithmetic. Missing numeric values render as unavailable rather than zero. Coach estimates retain exploratory, identification, suppression, and conditional-bootstrap language, and no ordinal coach rank is derived in the browser.
 
-Every visible coaching relationship preserves the source assignment's verification, confidence, interval, shared-duty, and provisional status. Coach Journey and QB Journey preserve canonical identities across teams and years; Team History preserves season lanes and in-season changes; Full Network remains anchored and bounded. These are navigation and evidence views, not causal or social-network models. Deterministic layout positions are a display transformation only and carry no analytical weight.
+Every visible coaching relationship preserves the source assignment's verification, confidence, interval, shared-duty, and provisional status. Coach Journey, QB Journey, and Team History use deterministic season-specific appearance nodes around a fixed vertical chronology; Full Network uses deterministic year bands and may cover all supported years. Appearances retain canonical identity, and dotted continuity edges are frontend navigation aids—not new football facts. These remain evidence views, not causal or social-network models.
 
 The relationship contract models two independently sourced facts: a coach assignment interval connects a canonical coach to a team-season, and an authoritative QB-team-season record connects a canonical QB to that same team-season. Team-anchored scopes seed QB facts directly from `api_qb_statistics`; coaching role, verification, and provisional filters cannot erase those independent records. PAE is joined only on `(load_id, player_id, team_id, season)`, so multi-team seasons cannot inherit another team's value. The resulting two-edge path means only: “QB participated for this team-season while this coaching assignment existed within the same season.” It does not establish weekly overlap, mentorship, influence, or causation. Exact weekly overlap would require a separate validated join to QB-game weeks or exposure lineage and is not asserted by this endpoint.
 
-The frontend transforms one server response into both the visual graph and the accessible relationship cards. Client-side role, interim, and shared filters affect coach-assignment relationships only; QB eligibility, dropback, and PAE filters affect QB-team-season facts only. Selection highlights direct graph adjacency. Focus replaces the current scope with the selected canonical coach/QB journey or one-season team history, while an explicit in-memory focus stack supports Back; Reset clears presentation filters without widening the server anchor. None of these interactions changes the source relationship grain.
+The frontend transforms one server response into both the visual graph and the accessible relationship cards. Client-side role, interim, and shared filters affect coach-assignment relationships only; QB eligibility, dropback, and PAE filters affect QB-team-season facts only. Selection resolves an appearance to its canonical ID, highlights every visible appearance of that identity and all connected team-season branches, and fades unrelated elements. Focus replaces scope with the canonical coach/QB journey or one-season team history, while an in-memory stack supports Back; Reset clears presentation filters without changing factual grain.
 
 ## Checkpoint-ten Coach Effect research
 
@@ -198,3 +198,17 @@ under the ignored `research/coach_effect/outputs/` directory.
 Production Coach Effect implementation remains blocked until OC, QB-coach, and play-caller
 assignments are comprehensively verified. A play-caller assignment requires explicit evidence
 and weekly or in-season intervals where applicable; a staff title is not sufficient.
+
+## Checkpoint-eleven historical PCAE
+
+The `pcae-play-eligibility-v2` contract starts with regular-season plays classified by nflverse
+as `pass` or `run`, requires non-null unique `(game_id, play_id)`, team/week/down identifiers and
+finite EPA, then excludes `two_point_attempt = 1`. Across 2022–2025, the 134,138 candidate rows
+contain exactly 502 such conversions and therefore reconcile to 133,636 eligible plays. The 2025
+eligible count is 32,813.
+
+For each target season, the unchanged Logistic expected-call and separate Ridge pass/run EPA
+models train on 1999 through the immediately prior season and use only the existing pre-snap
+features. Target-season actual EPA is never used in Call Value. Attribution requires a verified,
+cited, non-season-designation caller interval matching team, season, and week; shared or multiple
+matches and uncovered weeks remain unattributed. League-centered PCAE remains research-only.

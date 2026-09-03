@@ -382,12 +382,16 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
         if row["verification_status"] == "provisional" and row["interval_basis"] == (
             "season_designation"
         ):
-            expected_issue = (
-                "shared_duty_verification_required"
+            expected_issues = (
+                {
+                    "season_interval_verification_required",
+                    "partial_interval_unresolved",
+                    "shared_duty_verification_required",
+                }
                 if row["role"] == "play_caller"
-                else "season_interval_verification_required"
+                else {"season_interval_verification_required"}
             )
-            if (*grain, expected_issue) not in review_issues:
+            if not any((*grain, issue) in review_issues for issue in expected_issues):
                 raise CoachingDataError(
                     f"provisional season interval is not queued: {row['assignment_key']}"
                 )
@@ -402,7 +406,14 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
             allowed_provisional = (
                 row["verification_status"] == "provisional"
                 and row["confidence_level"] in {"medium", "low"}
-                and (*grain, "shared_duty_verification_required") in review_issues
+                and any(
+                    (*grain, issue) in review_issues
+                    for issue in (
+                        "season_interval_verification_required",
+                        "partial_interval_unresolved",
+                        "shared_duty_verification_required",
+                    )
+                )
             )
             if not (verified or allowed_provisional) or "play call" not in evidence:
                 raise CoachingDataError(

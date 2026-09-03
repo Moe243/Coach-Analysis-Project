@@ -144,6 +144,20 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 
 Team-history and team-anchored full-network scopes source QB-team-season records independently from `api_qb_statistics`. Coaching role, verification, and provisional filters apply only to coach-assignment relationships; PAE joins retain the complete `(load_id, player_id, team_id, season)` key.
 
+Checkpoint Eleven adds no database grain. Its frontend tree/network projection creates a coach
+appearance keyed by `(coach_id, assignment_key)` and a QB appearance keyed by
+`(player_id, team_id, season)`; each retains the canonical API node ID. Team-season node IDs are
+unchanged. A `visual_continuity` edge links consecutive appearances of one canonical identity and
+is explicitly distinct from factual `coach_assignment` and `qb_team_season` relationships.
+
+The ignored Checkpoint Eleven research export contains `coaching_coverage.csv` at one
+`(season, team_id, role)` cell, `unresolved_play_callers.csv` at the same filtered grain,
+`eligibility_reconciliation.csv` and `season_attribution.csv` at season grain, and
+`historical_pcae.csv` at verified caller/team/season/assignment-interval grain. Coverage status
+`partial_verified` means at least one interval is verified but complete team-season coverage is
+not. Research PCAE retains the formula/model/eligibility/data versions and explicitly states that
+shared or ambiguous plays were excluded.
+
 ### Post-release QB/team and environment fields
 
 `api_qb_statistics` now exposes additive `starter_wins`, `starter_losses`, `starter_ties`,
@@ -233,6 +247,6 @@ The ranking views retain ineligible rows for filtering and transparency, but ass
 
 ## Frontend display contract
 
-Checkpoint eight creates no analytical tables. Its default statistics grain is one published QB-team-season row from `api_qb_statistics`, augmented with the matching `api_qb_pae` row and source-backed staff intervals. The Relationship Explorer uses only the node and relationship grains documented above: one canonical coach, one canonical QB, one team-season, one assignment key, and one QB-team-season analytical result. Visual positions, selection, focus, and URL filters are presentation state rather than new data facts. `null` remains unavailable; it is never displayed as zero. The interface preserves `data_version`, `metric_version`, `model_version`, `training_cutoff_season`, `eligibility_status`, `reliability_label`, verification/confidence fields, interval bounds and basis, shared/provisional flags, identification and suppression reasons, and coach-specific bootstrap support.
+Checkpoint eight creates no analytical tables. Its default statistics grain is one published QB-team-season row from `api_qb_statistics`, augmented with the matching `api_qb_pae` row and source-backed staff intervals. The Relationship Explorer uses only the canonical node and factual relationship grains documented above; Checkpoint Eleven appearance and continuity elements are deterministic presentation state rather than duplicated analytical identities. Visual positions, selection, focus, and URL filters are likewise presentation state. `null` remains unavailable; it is never displayed as zero. The interface preserves `data_version`, `metric_version`, `model_version`, `training_cutoff_season`, `eligibility_status`, `reliability_label`, verification/confidence fields, interval bounds and basis, shared/provisional flags, identification and suppression reasons, and coach-specific bootstrap support.
 
 The legacy staff-overlap endpoint remains available, but `/network` now renders `GET /relationships/explorer`. Both Cytoscape and the accessible cards receive the same canonical node and relationship objects; the client does not reconstruct PAE or coaching semantics from separate requests. Coach-page quarterback links remain team-season overlaps filtered to published player position `QB`; they are not a new coach-exposure fact.

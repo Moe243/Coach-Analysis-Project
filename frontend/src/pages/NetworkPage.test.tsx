@@ -348,33 +348,37 @@ describe("NetworkPage Relationship Explorer", () => {
     ]);
   });
 
-  it("preserves the canonical graph as an explicit Network display", async () => {
+  it("offers the deterministic chronological graph as a Tree display", async () => {
     installApiFixture();
     renderRoute(
       <NetworkPage />,
       "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
     );
     await screen.findByLabelText("Chronological relationship timeline");
-    fireEvent.click(screen.getByRole("button", { name: "Network" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tree" }));
     expect(await screen.findByTestId("relationship-graph")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Network" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Tree" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
   });
 
-  it("shows an invalid URL state before making an unbounded Full Network request", async () => {
+  it("requests the complete supported Full Network without an anchor", async () => {
     const fetchMock = installApiFixture();
     renderRoute(
       <NetworkPage />,
-      "/network?mode=full_network&anchor=team&team_id=team_den&start_season=2010&end_season=2025",
+      "/network?mode=full_network&anchor=all&start_season=2010&end_season=2025",
     );
-    expect(await screen.findByText("Invalid explorer URL")).toBeInTheDocument();
-    expect(
-      fetchMock.mock.calls.some(([input]) =>
-        String(input).includes("/relationships/explorer"),
-      ),
-    ).toBe(false);
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(screen.getByRole("combobox", { name: "Start from" })).toHaveValue(
+      "all",
+    );
+    const requests = fetchMock.mock.calls
+      .map(([input]) => String(input))
+      .filter((request) => request.includes("/relationships/explorer"));
+    expect(requests).toEqual([
+      "/api/relationships/explorer?mode=full_network&start_season=2010&end_season=2025&include_provisional=true",
+    ]);
   });
 
   it("explains a 413 response and never presents a partial graph", async () => {

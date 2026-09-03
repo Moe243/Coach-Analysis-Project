@@ -27,19 +27,63 @@ describe("applyGraphSelection", () => {
     return cytoscape({
       headless: true,
       elements: [
-        { data: { id: "qb:a", kind: "quarterback" } },
-        { data: { id: "qb:b", kind: "quarterback" } },
-        { data: { id: "coach:a", kind: "coach" } },
-        { data: { id: "coach:b", kind: "coach" } },
-        { data: { id: "team:one", kind: "team_season" } },
-        { data: { id: "team:two", kind: "team_season" } },
-        { data: { id: "qb-one", source: "qb:a", target: "team:one" } },
-        { data: { id: "qb-two", source: "qb:b", target: "team:two" } },
         {
-          data: { id: "coach-one", source: "coach:a", target: "team:one" },
+          data: {
+            id: "appearance:qb:a:one",
+            canonicalId: "qb:a",
+            kind: "quarterback",
+          },
         },
         {
-          data: { id: "coach-two", source: "coach:b", target: "team:two" },
+          data: {
+            id: "appearance:qb:b:two",
+            canonicalId: "qb:b",
+            kind: "quarterback",
+          },
+        },
+        {
+          data: {
+            id: "appearance:coach:a:one",
+            canonicalId: "coach:a",
+            kind: "coach",
+          },
+        },
+        {
+          data: {
+            id: "appearance:coach:b:two",
+            canonicalId: "coach:b",
+            kind: "coach",
+          },
+        },
+        { data: { id: "team:one", kind: "team_season" } },
+        { data: { id: "team:two", kind: "team_season" } },
+        {
+          data: {
+            id: "qb-one",
+            source: "appearance:qb:a:one",
+            target: "team:one",
+          },
+        },
+        {
+          data: {
+            id: "qb-two",
+            source: "appearance:qb:b:two",
+            target: "team:two",
+          },
+        },
+        {
+          data: {
+            id: "coach-one",
+            source: "appearance:coach:a:one",
+            target: "team:one",
+          },
+        },
+        {
+          data: {
+            id: "coach-two",
+            source: "appearance:coach:b:two",
+            target: "team:two",
+          },
         },
       ],
     });
@@ -48,10 +92,22 @@ describe("applyGraphSelection", () => {
   it("expands a selected QB through its team-season to every coach in that branch", () => {
     const core = branchCore();
     applyGraphSelection(core, "qb:a");
-    for (const id of ["qb:a", "team:one", "coach:a", "qb-one", "coach-one"]) {
+    for (const id of [
+      "appearance:qb:a:one",
+      "team:one",
+      "appearance:coach:a:one",
+      "qb-one",
+      "coach-one",
+    ]) {
       expect(core.getElementById(id).hasClass("is-highlighted")).toBe(true);
     }
-    for (const id of ["qb:b", "team:two", "coach:b", "qb-two", "coach-two"]) {
+    for (const id of [
+      "appearance:qb:b:two",
+      "team:two",
+      "appearance:coach:b:two",
+      "qb-two",
+      "coach-two",
+    ]) {
       expect(core.getElementById(id).hasClass("is-faded")).toBe(true);
     }
     core.destroy();
@@ -60,10 +116,22 @@ describe("applyGraphSelection", () => {
   it("expands a selected coach through its team-season to every QB in that branch", () => {
     const core = branchCore();
     applyGraphSelection(core, "coach:a");
-    for (const id of ["coach:a", "team:one", "qb:a", "coach-one", "qb-one"]) {
+    for (const id of [
+      "appearance:coach:a:one",
+      "team:one",
+      "appearance:qb:a:one",
+      "coach-one",
+      "qb-one",
+    ]) {
       expect(core.getElementById(id).hasClass("is-highlighted")).toBe(true);
     }
-    for (const id of ["coach:b", "team:two", "qb:b", "coach-two", "qb-two"]) {
+    for (const id of [
+      "appearance:coach:b:two",
+      "team:two",
+      "appearance:qb:b:two",
+      "coach-two",
+      "qb-two",
+    ]) {
       expect(core.getElementById(id).hasClass("is-faded")).toBe(true);
     }
     core.destroy();

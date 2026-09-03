@@ -5,9 +5,10 @@ Status: checkpoint-ten research foundation; exploratory, non-causal, and not pro
 This document preserves the sequence of experiments that motivated a possible Coach Effect
 framework. Numbers labeled **historically documented** came from the completed exploratory run
 described in the checkpoint specification. They are not silently recast as current production
-results. The current repository can reproduce the formulas and methods, but some exact results
-cannot yet be rerun because the original comprehensive weekly play-caller map and saved Phase
-2–4 modeling tables are absent. See [Reproduction status](#reproduction-status).
+results. The current repository can reproduce the formulas, the historical eligibility count,
+and a limited expanding-window PCAE run. Most historical attribution still cannot be rerun
+because the original comprehensive weekly play-caller map and saved Phase 2–4 modeling tables
+are absent. See [Reproduction status](#reproduction-status).
 
 ## Phase 1 — QB development / PAE
 
@@ -250,14 +251,16 @@ unqualified elite label.
 | Phase 1 transition methods | Recreated | SQL/Python are preserved; the original saved transition table is absent. |
 | Exact Kubiak/Schottenheimer examples | Historically documented | Original transition result rows are not committed. |
 | 2022–2025 PBP source | Available locally | Official cached Parquet exists; generated outputs remain ignored. |
-| `133,636` initial plays | Historically documented, not yet reconciled | A simple current run/pass/REG filter gives 134,138; the original 502-play eligibility exclusion was not saved. |
-| `32,813` attributed 2025 plays | Historically documented, not reproducible yet | Current verified manual play-caller coverage is intentionally incomplete. |
+| `133,636` initial plays | Exactly reproduced and explained | The 2022–2025 regular-season run/pass sample has 134,138 rows; all 502 excluded rows are two-point conversions. `pcae-play-eligibility-v2` therefore yields 133,636. |
+| `32,813` 2025 plays | Eligibility reproduced; attribution not reproduced | The same rule yields exactly 32,813 eligible 2025 plays. Current verified weekly caller coverage attributes zero, so the historical label “attributed” depended on the absent comprehensive caller map. |
+| Historical PCAE | Limited current result | Expanding prior-season models and verified weekly attribution produce research rows for 2012, 2015, 2016, and 2020 only. All other analysis seasons remain unattributed. |
 | Phase 2 metrics, PCAE examples, repeatability | Historically documented | Exact weekly caller map and saved model outputs are absent. |
 | Phase 3 32-team environment results | Historically documented | Exact corrected 32-team input table is absent. |
 | Earlier `coach_qb_equation_v0` environment test | Separate experiment | It used 582 QB-team-season rows and a different target/grain; its negative held-out R² must not be conflated with this 32-team PCAE test. |
 | Phase 4 paired correlations | Historically documented | Exact paired 2025 coach-level table is absent. |
 
-No number was substituted to make the current repository appear to reproduce an absent artifact.
+No number was substituted to force reconciliation. The excluded records were identified from
+their nflverse `two_point_attempt` field before the historical total was compared.
 
 ## Production gate
 

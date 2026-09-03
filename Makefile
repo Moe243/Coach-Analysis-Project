@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact db-migrate db-load api frontend-install frontend-dev frontend-test frontend-e2e frontend-check frontend-build
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact checkpoint-eleven db-migrate db-load api frontend-install frontend-dev frontend-test frontend-e2e frontend-check frontend-build
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -55,6 +55,9 @@ expected-performance:
 
 coach-impact:
 	PYTHONPATH=src $(PYTHON) -m nfl_coaching_impact.cli coach-impact --project-root "$(PROJECT_ROOT)"
+
+checkpoint-eleven:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_eleven.py
 
 db-migrate:
 	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 2)

@@ -17,6 +17,13 @@ PLAY_CALL_TEST_SEASON = 2025
 PLAY_CALL_ADVANTAGE_THRESHOLDS = (0.05, 0.10, 0.20)
 RANDOM_SEED = 20260902
 
+# Checkpoint Eleven keeps the Checkpoint Ten equations fixed while making the
+# historical eligibility and temporal-training contracts explicit.
+HISTORICAL_PCAE_PLAY_ELIGIBILITY_VERSION = "pcae-play-eligibility-v2"
+HISTORICAL_PCAE_MODEL_VERSION = "pcae-expanding-prior-seasons-v1"
+HISTORICAL_PCAE_ANALYSIS_SEASONS = tuple(range(2010, 2026))
+HISTORICAL_PCAE_WARMUP_SEASONS = tuple(range(1999, 2010))
+
 PLAY_CALL_FEATURES = (
     "down",
     "ydstogo",

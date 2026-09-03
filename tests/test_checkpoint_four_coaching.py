@@ -46,9 +46,9 @@ class CheckpointFourCoachingTest(unittest.TestCase):
     def test_committed_dataset_passes_all_contracts(self) -> None:
         result = validate_coaching_data(ROOT)
         self.assertEqual(result.covered_team_seasons, 512)
-        self.assertEqual(result.assignments, 1343)
+        self.assertEqual(result.assignments, 1374)
         self.assertGreaterEqual(result.citations, result.assignments)
-        self.assertEqual(result.role_counts["play_caller"], 11)
+        self.assertEqual(result.role_counts["play_caller"], 42)
         self.assertGreater(result.role_counts["head_coach"], 512)
         self.assertGreater(result.open_reviews, 512)
 
@@ -244,7 +244,7 @@ class CheckpointFourCoachingTest(unittest.TestCase):
 
     def test_sourced_interim_head_coach_passes(self) -> None:
         result = validate_coaching_data(ROOT)
-        self.assertEqual(result.assignments, 1343)
+        self.assertEqual(result.assignments, 1374)
         assignments = self._read("coaching_assignments.csv")
         self.assertEqual(
             next(
@@ -300,11 +300,11 @@ class CheckpointFourCoachingTest(unittest.TestCase):
                     [row for row in rows if row["evidence_id"] != "2010-jason-garrett-interim"],
                 ),
             )
-            self.assertEqual(validate_coaching_data(root).assignments, 1343)
+            self.assertEqual(validate_coaching_data(root).assignments, 1374)
 
     def test_loading_path_preserves_each_interval_basis(self) -> None:
         connection = _RecordingConnection()
-        self.assertEqual(load_coaching_data(connection, ROOT), 1343)
+        self.assertEqual(load_coaching_data(connection, ROOT), 1374)
         loaded = [
             parameters
             for parameters in connection.assignment_parameters

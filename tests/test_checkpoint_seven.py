@@ -738,6 +738,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
             ("qb_journey", {"player_id": player_id}),
             ("team_history", {"team_id": team_id}),
             ("full_network", {"team_id": team_id}),
+            ("full_network", {}),
         )
         for mode, anchor in requests:
             with self.subTest(mode=mode):
@@ -762,13 +763,6 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
             {"mode": "coach_journey"},
             {"mode": "qb_journey"},
             {"mode": "team_history"},
-            {"mode": "full_network", "start_season": 2020, "end_season": 2024},
-            {
-                "mode": "full_network",
-                "team_id": "missing",
-                "start_season": 2019,
-                "end_season": 2024,
-            },
             {
                 "mode": "team_history",
                 "team_id": "missing",
@@ -801,6 +795,72 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertEqual(empty.status_code, 200)
         self.assertEqual(empty.json()["nodes"], [])
         self.assertEqual(empty.json()["relationships"], [])
+
+    def test_full_network_returns_complete_supported_range_without_truncation(self) -> None:
+        with psycopg.connect(self.url) as connection:
+            assignment_keys = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT assignment_key FROM api_coaching_assignments "
+                    "WHERE season BETWEEN 2010 AND 2025"
+                ).fetchall()
+            }
+            qb_keys = {
+                (row[0], row[1], row[2])
+                for row in connection.execute(
+                    "SELECT player_id,team_id,season FROM api_qb_statistics "
+                    "WHERE season BETWEEN 2010 AND 2025"
+                ).fetchall()
+            }
+            coach_ids = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT DISTINCT coach_id FROM api_coaching_assignments "
+                    "WHERE season BETWEEN 2010 AND 2025"
+                ).fetchall()
+            }
+            player_ids = {player_id for player_id, _, _ in qb_keys}
+            team_seasons = {
+                (row[0], row[1])
+                for row in connection.execute(
+                    "SELECT team_id,season FROM api_coaching_assignments "
+                    "WHERE season BETWEEN 2010 AND 2025 UNION "
+                    "SELECT team_id,season FROM api_qb_statistics "
+                    "WHERE season BETWEEN 2010 AND 2025"
+                ).fetchall()
+            }
+        response = self.client.get(
+            "/relationships/explorer",
+            params={
+                "mode": "full_network",
+                "start_season": 2010,
+                "end_season": 2025,
+                "include_provisional": True,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["query"]["mode"], "full_network")
+        self.assertEqual(body["query"]["start_season"], 2010)
+        self.assertEqual(body["query"]["end_season"], 2025)
+        self.assertEqual(body["node_count"], len(body["nodes"]))
+        self.assertEqual(body["relationship_count"], len(body["relationships"]))
+        self.assertEqual(body["max_nodes"], 2_000)
+        self.assertEqual(body["max_relationships"], 4_000)
+        returned_assignments = {
+            row["assignment_key"]
+            for row in body["relationships"]
+            if row["relationship_type"] == "coach_assignment"
+        }
+        returned_qbs = {
+            (row["player_id"], row["team_id"], row["season"])
+            for row in body["relationships"]
+            if row["relationship_type"] == "qb_team_season"
+        }
+        self.assertEqual(returned_assignments, assignment_keys)
+        self.assertEqual(returned_qbs, qb_keys)
+        self.assertEqual(body["relationship_count"], len(assignment_keys) + len(qb_keys))
+        self.assertEqual(body["node_count"], len(coach_ids) + len(player_ids) + len(team_seasons))
 
     def test_relationship_team_anchors_preserve_qbs_independent_of_coach_filters(
         self,

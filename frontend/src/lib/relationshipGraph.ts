@@ -1,8 +1,8 @@
 import type { ElementDefinition, Position } from "cytoscape";
-import { graphlib, layout as runDagreLayout } from "@dagrejs/dagre";
 import type {
   CoachAssignmentRelationship,
   CoachRole,
+  QbTeamSeasonRelationship,
   Relationship,
   RelationshipExplorerResponse,
   RelationshipMode,
@@ -15,6 +15,8 @@ export const coachRoles: CoachRole[] = [
   "play_caller",
   "quarterbacks_coach",
 ];
+
+export const RELATIONSHIP_GRAPH_VERSION = "relationship-graph-v2";
 
 export interface ExplorerFilters {
   roles: ReadonlySet<CoachRole>;
@@ -36,6 +38,20 @@ export interface RelationshipGraphModel {
   relationships: Relationship[];
   relationshipById: Map<string, Relationship>;
   relationshipsByNode: Map<string, Relationship[]>;
+  appearanceCount: number;
+  continuityCount: number;
+  graphVersion: string;
+}
+
+interface Appearance {
+  id: string;
+  canonicalId: string;
+  kind: "coach" | "quarterback" | "team_season";
+  label: string;
+  season: number;
+  teamId: string;
+  role?: CoachRole;
+  startWeek?: number;
 }
 
 const roleOrder = new Map(coachRoles.map((role, index) => [role, index]));
@@ -70,94 +86,6 @@ function keepRelationship(
   return true;
 }
 
-function chronologicalPositions(
-  nodes: RelationshipNode[],
-  relationships: Relationship[],
-  mode: Exclude<RelationshipMode, "full_network">,
-): Record<string, Position> {
-  const positions: Record<string, Position> = {};
-  const teamSeasons = nodes
-    .filter((node) => node.node_type === "team_season")
-    .sort(
-      (left, right) =>
-        left.season - right.season ||
-        left.team_id.localeCompare(right.team_id) ||
-        left.node_id.localeCompare(right.node_id),
-    );
-  const seasons = [...new Set(teamSeasons.map((node) => node.season))];
-  const seasonIndex = new Map(seasons.map((season, index) => [season, index]));
-  const seasonCounts = new Map<number, number>();
-  teamSeasons.forEach((node) => {
-    const index = seasonCounts.get(node.season) ?? 0;
-    seasonCounts.set(node.season, index + 1);
-    positions[node.node_id] = {
-      x: 300 + (seasonIndex.get(node.season) ?? 0) * 260,
-      y: 220 + index * 130,
-    };
-  });
-
-  const coachNodes = nodes
-    .filter((node) => node.node_type === "coach")
-    .sort((left, right) => left.node_id.localeCompare(right.node_id));
-  const qbNodes = nodes
-    .filter((node) => node.node_type === "quarterback")
-    .sort((left, right) => left.node_id.localeCompare(right.node_id));
-  const maxX = Math.max(300, ...Object.values(positions).map(({ x }) => x));
-
-  coachNodes.forEach((node, index) => {
-    const linked = relationships.filter(
-      (relationship) =>
-        relationship.relationship_type === "coach_assignment" &&
-        relationship.source_node_id === node.node_id,
-    ) as CoachAssignmentRelationship[];
-    const earliestRole = linked
-      .map((relationship) => roleOrder.get(relationship.role) ?? 9)
-      .sort((left, right) => left - right)[0];
-    positions[node.node_id] =
-      mode === "coach_journey" && index === 0
-        ? { x: 70, y: 220 }
-        : {
-            x: maxX + 250,
-            y: 70 + (earliestRole ?? 9) * 70 + index * 18,
-          };
-  });
-  qbNodes.forEach((node, index) => {
-    positions[node.node_id] =
-      mode === "qb_journey" && index === 0
-        ? { x: 70, y: 360 }
-        : { x: maxX + 250, y: 390 + index * 58 };
-  });
-  return positions;
-}
-
-function fullNetworkPositions(
-  nodes: RelationshipNode[],
-): Record<string, Position> {
-  const positions: Record<string, Position> = {};
-  const grouped: Record<RelationshipNode["node_type"], RelationshipNode[]> = {
-    coach: [],
-    quarterback: [],
-    team_season: [],
-  };
-  nodes.forEach((node) => grouped[node.node_type].push(node));
-  (Object.keys(grouped) as RelationshipNode["node_type"][]).forEach((kind) =>
-    grouped[kind].sort((left, right) =>
-      left.node_id.localeCompare(right.node_id),
-    ),
-  );
-  const columns: Record<RelationshipNode["node_type"], number> = {
-    coach: 90,
-    team_season: 430,
-    quarterback: 770,
-  };
-  (Object.keys(grouped) as RelationshipNode["node_type"][]).forEach((kind) => {
-    grouped[kind].forEach((node, index) => {
-      positions[node.node_id] = { x: columns[kind], y: 90 + index * 82 };
-    });
-  });
-  return positions;
-}
-
 function nodeLabel(node: RelationshipNode): string {
   return node.node_type === "coach"
     ? node.canonical_name
@@ -166,195 +94,197 @@ function nodeLabel(node: RelationshipNode): string {
       : `${node.team_abbr} ${node.season}`;
 }
 
-function teamHistoryDagre(
+function coachAppearanceId(relationship: CoachAssignmentRelationship): string {
+  return `appearance:coach:${relationship.coach_id}:${relationship.assignment_key}`;
+}
+
+function qbAppearanceId(relationship: QbTeamSeasonRelationship): string {
+  return `appearance:qb:${relationship.player_id}:${relationship.team_id}:${relationship.season}`;
+}
+
+function buildAppearances(
   nodes: RelationshipNode[],
   relationships: Relationship[],
-): { elements: ElementDefinition[]; positions: Record<string, Position> } {
-  const teamSeasons = nodes
+): Appearance[] {
+  const byId = new Map(nodes.map((node) => [node.node_id, node]));
+  const values: Appearance[] = [];
+  nodes
     .filter((node) => node.node_type === "team_season")
-    .sort(
-      (left, right) =>
-        left.season - right.season ||
-        left.team_id.localeCompare(right.team_id) ||
-        left.node_id.localeCompare(right.node_id),
-    );
-  const firstTeam = teamSeasons[0];
-  const teamRootId = firstTeam ? `team:${firstTeam.team_id}` : "team:history";
-  const dagre = new graphlib.Graph({ multigraph: true })
-    .setGraph({
-      rankdir: "TB",
-      ranker: "network-simplex",
-      nodesep: 76,
-      edgesep: 28,
-      ranksep: 105,
-      marginx: 40,
-      marginy: 40,
-    })
-    .setDefaultEdgeLabel(() => ({}));
-  dagre.setNode(teamRootId, { width: 150, height: 42 });
-  nodes.forEach((node) =>
-    dagre.setNode(node.node_id, {
-      width: node.node_type === "team_season" ? 82 : 118,
-      height: node.node_type === "team_season" ? 44 : 38,
-    }),
-  );
-
-  const headCoachIds = new Set<string>();
-  relationships.forEach((relationship) => {
-    if (
-      relationship.relationship_type === "coach_assignment" &&
-      relationship.role === "head_coach"
-    ) {
-      headCoachIds.add(relationship.source_node_id);
-    }
-  });
-  relationships.forEach((relationship) => {
-    if (relationship.relationship_type === "coach_assignment") {
-      // A canonical coach can hold head-coach and subordinate roles across the
-      // requested history. Keep that identity on one layer so reciprocal
-      // coach<->season edges cannot turn the Dagre input into a cycle.
-      const isHeadCoach = headCoachIds.has(relationship.source_node_id);
-      dagre.setEdge(
-        isHeadCoach ? relationship.source_node_id : relationship.target_node_id,
-        isHeadCoach ? relationship.target_node_id : relationship.source_node_id,
-        { minlen: 1, weight: isHeadCoach ? 8 : 4 },
-        relationship.relationship_id,
-      );
-    } else {
-      dagre.setEdge(
-        relationship.target_node_id,
-        relationship.source_node_id,
-        { minlen: 2, weight: 2 },
-        relationship.relationship_id,
-      );
-    }
-  });
-  [...headCoachIds]
-    .sort()
-    .forEach((coachId) =>
-      dagre.setEdge(
-        teamRootId,
-        coachId,
-        { minlen: 1, weight: 10 },
-        `root:${coachId}`,
-      ),
-    );
-  teamSeasons.forEach((teamSeason) => {
-    const hasHeadCoach = relationships.some(
-      (relationship) =>
-        relationship.relationship_type === "coach_assignment" &&
-        relationship.role === "head_coach" &&
-        relationship.target_node_id === teamSeason.node_id,
-    );
-    if (!hasHeadCoach) {
-      dagre.setEdge(
-        teamRootId,
-        teamSeason.node_id,
-        { minlen: 2, weight: 1 },
-        `root:${teamSeason.node_id}`,
-      );
-    }
-  });
-  let positions: Record<string, Position>;
-  try {
-    runDagreLayout(dagre);
-    positions = Object.fromEntries(
-      dagre.nodes().map((id) => {
-        const node = dagre.node(id) as { x: number; y: number };
-        return [id, { x: node.x, y: node.y }];
-      }),
-    );
-  } catch {
-    // Dagre can reject dense canonical multigraphs when one person owns
-    // parallel or cross-season role edges. Preserve the canonical graph and
-    // fall back to stable top-to-bottom layers instead of crashing the route.
-    const layer = (ids: string[], y: number, spacing: number) =>
-      ids.forEach((id, index) => {
-        positions[id] = { x: 100 + index * spacing, y };
-      });
-    positions = { [teamRootId]: { x: 100, y: 60 } };
-    layer([...headCoachIds].sort(), 190, 170);
-    layer(
-      teamSeasons.map((node) => node.node_id),
-      360,
-      150,
-    );
-    layer(
-      nodes
-        .filter(
-          (node) =>
-            node.node_type === "coach" && !headCoachIds.has(node.node_id),
-        )
-        .map((node) => node.node_id)
-        .sort(),
-      530,
-      150,
-    );
-    layer(
-      nodes
-        .filter((node) => node.node_type === "quarterback")
-        .map((node) => node.node_id)
-        .sort(),
-      700,
-      135,
-    );
-  }
-  const elements: ElementDefinition[] = [
-    {
-      data: {
-        id: teamRootId,
-        label: firstTeam?.team_name ?? "Team",
-        kind: "team",
-        selectable: false,
-      },
-      position: positions[teamRootId],
-    },
-    ...nodes.map((node) => ({
-      data: {
+    .forEach((node) =>
+      values.push({
         id: node.node_id,
         canonicalId: node.node_id,
+        kind: "team_season",
         label: nodeLabel(node),
-        kind: node.node_type,
-        season: node.node_type === "team_season" ? node.season : undefined,
-      },
-      position: positions[node.node_id],
-    })),
-    ...relationships.map((relationship) => {
-      const headCoach =
-        relationship.relationship_type === "coach_assignment" &&
-        headCoachIds.has(relationship.source_node_id);
-      return {
-        data: {
-          id: `relationship:${relationship.relationship_id}`,
-          source: headCoach
-            ? relationship.source_node_id
-            : relationship.target_node_id,
-          target: headCoach
-            ? relationship.target_node_id
-            : relationship.source_node_id,
-          kind: relationship.relationship_type,
-          layout: "dagre",
-          verification:
-            relationship.relationship_type === "coach_assignment"
-              ? relationship.verification_status
-              : "analytical",
-          provisional:
-            relationship.relationship_type === "coach_assignment" &&
-            relationship.is_provisional,
-        },
+        season: node.season,
+        teamId: node.team_id,
+      }),
+    );
+  relationships.forEach((relationship) => {
+    const source = byId.get(relationship.source_node_id);
+    if (!source) return;
+    if (relationship.relationship_type === "coach_assignment") {
+      values.push({
+        id: coachAppearanceId(relationship),
+        canonicalId: relationship.source_node_id,
+        kind: "coach",
+        label: `${nodeLabel(source)} · ${relationship.role.replaceAll("_", " ")}`,
+        season: relationship.season,
+        teamId: relationship.team_id,
+        role: relationship.role,
+        startWeek: relationship.start_week,
+      });
+    } else {
+      values.push({
+        id: qbAppearanceId(relationship),
+        canonicalId: relationship.source_node_id,
+        kind: "quarterback",
+        label: nodeLabel(source),
+        season: relationship.season,
+        teamId: relationship.team_id,
+      });
+    }
+  });
+  return [...new Map(values.map((value) => [value.id, value])).values()].sort(
+    (left, right) =>
+      left.season - right.season ||
+      left.teamId.localeCompare(right.teamId) ||
+      (roleOrder.get(left.role ?? "head_coach") ?? -1) -
+        (roleOrder.get(right.role ?? "head_coach") ?? -1) ||
+      (left.startWeek ?? 0) - (right.startWeek ?? 0) ||
+      left.id.localeCompare(right.id),
+  );
+}
+
+function chronologicalPositions(
+  values: Appearance[],
+  mode: Exclude<RelationshipMode, "full_network">,
+): Record<string, Position> {
+  const positions: Record<string, Position> = {};
+  const seasons = [...new Set(values.map((value) => value.season))].sort(
+    (left, right) => left - right,
+  );
+  const seasonIndex = new Map(seasons.map((season, index) => [season, index]));
+  const groups = new Map<string, Appearance[]>();
+  values.forEach((value) => {
+    const key = `${value.season}:${value.teamId}:${value.kind}:${value.role ?? ""}`;
+    groups.set(key, [...(groups.get(key) ?? []), value]);
+  });
+  values.forEach((value) => {
+    const y = 120 + (seasonIndex.get(value.season) ?? 0) * 390;
+    const peers = groups.get(
+      `${value.season}:${value.teamId}:${value.kind}:${value.role ?? ""}`,
+    )!;
+    const offset = peers.findIndex((peer) => peer.id === value.id) * 42;
+    if (value.kind === "team_season") {
+      positions[value.id] = { x: mode === "team_history" ? 480 : 560, y };
+    } else if (mode === "qb_journey") {
+      positions[value.id] =
+        value.kind === "quarterback"
+          ? { x: 230, y }
+          : { x: 790 + (roleOrder.get(value.role!) ?? 0) * 155, y: y + offset };
+    } else if (mode === "coach_journey") {
+      positions[value.id] =
+        value.kind === "coach"
+          ? { x: 230, y: y + offset }
+          : { x: 840 + offset * 2, y };
+    } else if (value.kind === "quarterback") {
+      positions[value.id] = { x: 980 + offset * 2, y };
+    } else {
+      const xByRole = [140, 300, 660, 820];
+      positions[value.id] = {
+        x: xByRole[roleOrder.get(value.role!) ?? 0],
+        y: y + offset,
       };
-    }),
-    ...[...headCoachIds].sort().map((coachId) => ({
+    }
+  });
+  return positions;
+}
+
+function fullNetworkPositions(values: Appearance[]): Record<string, Position> {
+  const positions: Record<string, Position> = {};
+  const seasons = [...new Set(values.map((value) => value.season))].sort(
+    (left, right) => left - right,
+  );
+  const teams = [...new Set(values.map((value) => value.teamId))].sort();
+  const seasonIndex = new Map(seasons.map((season, index) => [season, index]));
+  const teamIndex = new Map(teams.map((team, index) => [team, index]));
+  const peerIndex = new Map<string, number>();
+  values.forEach((value) => {
+    const x = 360 + (seasonIndex.get(value.season) ?? 0) * 760;
+    const baseY = 180 + (teamIndex.get(value.teamId) ?? 0) * 250;
+    const key = `${value.season}:${value.teamId}:${value.kind}:${value.role ?? ""}`;
+    const index = peerIndex.get(key) ?? 0;
+    peerIndex.set(key, index + 1);
+    if (value.kind === "team_season") positions[value.id] = { x, y: baseY };
+    else if (value.kind === "quarterback") {
+      positions[value.id] = { x: x + 210, y: baseY + index * 38 };
+    } else {
+      positions[value.id] = {
+        x: x - 240 + (roleOrder.get(value.role!) ?? 0) * 52,
+        y: baseY + index * 38,
+      };
+    }
+  });
+  return positions;
+}
+
+function continuityElements(values: Appearance[]): ElementDefinition[] {
+  const byIdentity = new Map<string, Appearance[]>();
+  values
+    .filter((value) => value.kind !== "team_season")
+    .forEach((value) =>
+      byIdentity.set(value.canonicalId, [
+        ...(byIdentity.get(value.canonicalId) ?? []),
+        value,
+      ]),
+    );
+  const result: ElementDefinition[] = [];
+  [...byIdentity.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .forEach(([canonicalId, identityValues]) => {
+      identityValues.sort(
+        (left, right) =>
+          left.season - right.season ||
+          left.teamId.localeCompare(right.teamId) ||
+          (left.startWeek ?? 0) - (right.startWeek ?? 0) ||
+          left.id.localeCompare(right.id),
+      );
+      identityValues.slice(1).forEach((value, index) => {
+        const previous = identityValues[index];
+        result.push({
+          data: {
+            id: `continuity:${canonicalId}:${index}:${previous.id}:${value.id}`,
+            source: previous.id,
+            target: value.id,
+            kind: "identity_continuity",
+            relationshipType: "visual_continuity",
+            canonicalId,
+            label: "Identity continuity",
+          },
+        });
+      });
+    });
+  return result;
+}
+
+function factualElements(relationships: Relationship[]): ElementDefinition[] {
+  return relationships.map((relationship) => {
+    const coach = relationship.relationship_type === "coach_assignment";
+    return {
       data: {
-        id: `hierarchy:${teamRootId}:${coachId}`,
-        source: teamRootId,
-        target: coachId,
-        kind: "team_head_coach",
-        layout: "dagre",
+        id: `relationship:${relationship.relationship_id}`,
+        source: coach
+          ? coachAppearanceId(relationship)
+          : qbAppearanceId(relationship),
+        target: relationship.target_node_id,
+        kind: relationship.relationship_type,
+        relationshipType: "factual",
+        verification: coach ? relationship.verification_status : "analytical",
+        provisional: coach && relationship.is_provisional,
       },
-    })),
-  ];
-  return { elements, positions };
+    };
+  });
 }
 
 export function buildRelationshipGraph(
@@ -362,6 +292,7 @@ export function buildRelationshipGraph(
   filters: ExplorerFilters,
   compact = false,
 ): RelationshipGraphModel {
+  void compact;
   const relationshipById = new Map<string, Relationship>();
   response.relationships.forEach((relationship) => {
     if (!relationshipById.has(relationship.relationship_id)) {
@@ -396,59 +327,58 @@ export function buildRelationshipGraph(
       },
     );
   });
-  const dagre =
-    response.query.mode === "team_history"
-      ? teamHistoryDagre(nodes, relationships)
-      : null;
-  let positions = dagre
-    ? dagre.positions
-    : response.query.mode === "full_network"
-      ? fullNetworkPositions(nodes)
-      : chronologicalPositions(nodes, relationships, response.query.mode);
-  if (compact && response.query.mode !== "team_history") {
-    positions = Object.fromEntries(
-      Object.entries(positions).map(([id, position]) => [
-        id,
-        { x: position.y, y: position.x },
-      ]),
-    );
-  }
-  const elements: ElementDefinition[] = dagre
-    ? dagre.elements
-    : [
-        ...nodes.map((node) => ({
-          data: {
-            id: node.node_id,
-            canonicalId: node.node_id,
-            label: nodeLabel(node),
-            kind: node.node_type,
-            season: node.node_type === "team_season" ? node.season : undefined,
-          },
-          position: positions[node.node_id],
-        })),
-        ...relationships.map((relationship) => ({
-          data: {
-            id: `relationship:${relationship.relationship_id}`,
-            source: relationship.source_node_id,
-            target: relationship.target_node_id,
-            kind: relationship.relationship_type,
-            verification:
-              relationship.relationship_type === "coach_assignment"
-                ? relationship.verification_status
-                : "analytical",
-            provisional:
-              relationship.relationship_type === "coach_assignment" &&
-              relationship.is_provisional,
-          },
-        })),
-      ];
+  const graphAppearances = buildAppearances(nodes, relationships);
+  const positions =
+    response.query.mode === "full_network"
+      ? fullNetworkPositions(graphAppearances)
+      : chronologicalPositions(graphAppearances, response.query.mode);
+  const continuity = continuityElements(graphAppearances);
+  const yearElements: ElementDefinition[] =
+    response.query.mode === "full_network"
+      ? [...new Set(graphAppearances.map((value) => value.season))]
+          .sort((left, right) => left - right)
+          .map((season, index) => ({
+            data: {
+              id: `year:${season}`,
+              label: String(season),
+              kind: "year",
+              selectable: false,
+            },
+            position: { x: 360 + index * 760, y: 60 },
+          }))
+      : [];
+  const nodeElements: ElementDefinition[] = graphAppearances.map(
+    (appearance) => ({
+      data: {
+        id: appearance.id,
+        canonicalId: appearance.canonicalId,
+        label: appearance.label,
+        kind: appearance.kind,
+        season: appearance.season,
+        teamId: appearance.teamId,
+        role: appearance.role,
+        appearance: appearance.kind !== "team_season",
+      },
+      position: positions[appearance.id],
+    }),
+  );
   return {
-    elements,
+    elements: [
+      ...yearElements,
+      ...nodeElements,
+      ...factualElements(relationships),
+      ...continuity,
+    ],
     positions,
     nodes,
     relationships,
     relationshipById,
     relationshipsByNode,
+    appearanceCount: graphAppearances.filter(
+      (appearance) => appearance.kind !== "team_season",
+    ).length,
+    continuityCount: continuity.length,
+    graphVersion: RELATIONSHIP_GRAPH_VERSION,
   };
 }
 

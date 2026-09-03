@@ -46,11 +46,12 @@ const modeDescriptions: Record<RelationshipMode, string> = {
   qb_journey:
     "Follow one canonical quarterback across every visible QB-team-season record.",
   team_history:
-    "Read a team's coaching assignments and QB facts in chronological season lanes.",
+    "Read a team's coaching assignments and QB facts on a fixed chronological season spine.",
   full_network:
-    "Explore a bounded coach, quarterback, or team neighborhood without loading league history.",
+    "Explore the complete supported history in deterministic year bands, or focus on one anchor.",
 };
 const validModes = new Set(Object.keys(modeLabels));
+const validAnchorTypes = new Set(["all", "coach", "qb", "team"]);
 const validVerifications = new Set<VerificationStatus>([
   "unverified",
   "provisional",
@@ -261,17 +262,19 @@ export function NetworkPage() {
   ) as RelationshipMode;
   const displayParameter = params.get("display");
   const display =
-    displayParameter === "timeline" || displayParameter === "network"
-      ? displayParameter
-      : mode === "full_network"
-        ? "network"
+    mode === "full_network"
+      ? "network"
+      : displayParameter === "timeline" || displayParameter === "network"
+        ? displayParameter
         : "timeline";
-  const startSeason = Number(params.get("start_season") ?? 2020);
+  const startSeason = Number(
+    params.get("start_season") ?? (mode === "full_network" ? 2010 : 2020),
+  );
   const endSeason = Number(params.get("end_season") ?? 2025);
   const coachId = params.get("coach_id") ?? "";
   const playerId = params.get("player_id") ?? "";
   const teamId = params.get("team_id") ?? "";
-  const anchorType = params.get("anchor") ?? "team";
+  const anchorType = params.get("anchor") ?? "all";
   const selected = params.get("selected");
   const focused = params.get("focus");
   const verificationValue = params.get("verification") ?? "";
@@ -386,11 +389,13 @@ export function NetworkPage() {
         ? playerId
         : mode === "team_history"
           ? teamId
-          : anchorType === "coach"
-            ? coachId
-            : anchorType === "qb"
-              ? playerId
-              : teamId;
+          : anchorType === "all"
+            ? "all"
+            : anchorType === "coach"
+              ? coachId
+              : anchorType === "qb"
+                ? playerId
+                : teamId;
   const invalidUrl =
     !validModes.has(rawMode) ||
     !Number.isInteger(startSeason) ||
@@ -398,7 +403,7 @@ export function NetworkPage() {
     startSeason < 2010 ||
     endSeason > 2025 ||
     startSeason > endSeason ||
-    (mode === "full_network" && endSeason - startSeason + 1 > 5) ||
+    (mode === "full_network" && !validAnchorTypes.has(anchorType)) ||
     (verificationValue !== "" && !verification);
   const ready = Boolean(anchor) && !invalidUrl;
 
@@ -617,8 +622,15 @@ export function NetworkPage() {
             <span>Start from</span>
             <select
               value={anchorType}
-              onChange={(event) => setUrl({ anchor: event.target.value })}
+              onChange={(event) =>
+                setUrl({
+                  anchor: event.target.value,
+                  selected: null,
+                  focus: null,
+                })
+              }
             >
+              <option value="all">All supported</option>
               <option value="coach">Coach</option>
               <option value="qb">Quarterback</option>
               <option value="team">Team</option>
@@ -870,24 +882,32 @@ export function NetworkPage() {
           <strong>{modeLabels[mode]}</strong>
           <p>{modeDescriptions[mode]}</p>
         </div>
-        <div className="view-toggle" aria-label="Relationship display">
-          <button
-            type="button"
-            className={display === "timeline" ? "is-active" : undefined}
-            aria-pressed={display === "timeline"}
-            onClick={() => setUrl({ display: "timeline" })}
-          >
-            Timeline
-          </button>
-          <button
-            type="button"
-            className={display === "network" ? "is-active" : undefined}
-            aria-pressed={display === "network"}
-            onClick={() => setUrl({ display: "network" })}
-          >
-            Network
-          </button>
-        </div>
+        {mode === "full_network" ? (
+          <div className="view-toggle" aria-label="Relationship display">
+            <button type="button" className="is-active" aria-pressed="true">
+              Network
+            </button>
+          </div>
+        ) : (
+          <div className="view-toggle" aria-label="Relationship display">
+            <button
+              type="button"
+              className={display === "timeline" ? "is-active" : undefined}
+              aria-pressed={display === "timeline"}
+              onClick={() => setUrl({ display: "timeline" })}
+            >
+              Timeline
+            </button>
+            <button
+              type="button"
+              className={display === "network" ? "is-active" : undefined}
+              aria-pressed={display === "network"}
+              onClick={() => setUrl({ display: "network" })}
+            >
+              Tree
+            </button>
+          </div>
+        )}
         <div className="explorer-actions" aria-label="Explorer navigation">
           <button
             className="button button-secondary"
@@ -913,8 +933,7 @@ export function NetworkPage() {
 
       {invalidUrl ? (
         <EmptyState title="Invalid explorer URL">
-          Use seasons from 2010–2025, keep the start before the end, and limit
-          Full Network to five seasons.
+          Use seasons from 2010–2025 and keep the start before the end.
         </EmptyState>
       ) : lookupError || (ready && explorer.isLoading) ? (
         lookupError ? (
@@ -963,8 +982,9 @@ export function NetworkPage() {
               <div className="graph-toolbar">
                 <p>
                   <strong>{graph.nodes.length}</strong> canonical entities ·{" "}
-                  <strong>{graph.relationships.length}</strong> relationships ·{" "}
-                  {startSeason}–{endSeason}
+                  <strong>{graph.appearanceCount}</strong> chronological
+                  appearances · <strong>{graph.relationships.length}</strong>{" "}
+                  relationships · {startSeason}–{endSeason}
                 </p>
                 {display === "network" && (
                   <div>
@@ -1025,6 +1045,9 @@ export function NetworkPage() {
                 </span>
                 <span>
                   <i className="legend-provisional" /> Provisional assignment
+                </span>
+                <span>
+                  <i className="legend-continuity" /> Identity continuity
                 </span>
               </div>
             </div>

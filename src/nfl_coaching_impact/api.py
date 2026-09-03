@@ -261,7 +261,8 @@ Limit = Annotated[int, Query(ge=1, le=200)]
 Offset = Annotated[int, Query(ge=0)]
 MAX_RELATIONSHIP_NODES = 1_000
 MAX_RELATIONSHIPS = 2_000
-MAX_FULL_NETWORK_SEASONS = 5
+MAX_FULL_NETWORK_NODES = 2_000
+MAX_FULL_NETWORK_RELATIONSHIPS = 4_000
 
 
 def _active_versions(connection: Any) -> Versions:
@@ -643,6 +644,7 @@ def _relationship_qb_rows(
     team_seasons: set[tuple[str, int]],
     *,
     player_id: str | None,
+    relationship_limit: int = MAX_RELATIONSHIPS,
 ) -> list[dict[str, Any]]:
     if not team_seasons:
         return []
@@ -674,7 +676,7 @@ def _relationship_qb_rows(
     params: list[Any] = [value for item in ordered_scope for value in item]
     if player_id:
         params.append(player_id)
-    params.append(MAX_RELATIONSHIPS + 1)
+    params.append(relationship_limit + 1)
     return connection.execute(query, params).fetchall()
 
 
@@ -700,17 +702,14 @@ def relationship_explorer(
         raise HTTPException(status_code=422, detail="qb_journey requires player_id")
     if mode == RelationshipMode.TEAM_HISTORY and not team_id:
         raise HTTPException(status_code=422, detail="team_history requires team_id")
-    if mode == RelationshipMode.FULL_NETWORK:
-        if not any((coach_id, player_id, team_id)):
-            raise HTTPException(
-                status_code=422,
-                detail="full_network requires coach_id, player_id, or team_id",
-            )
-        if end_season - start_season + 1 > MAX_FULL_NETWORK_SEASONS:
-            raise HTTPException(
-                status_code=422,
-                detail=f"full_network is limited to {MAX_FULL_NETWORK_SEASONS} seasons",
-            )
+    relationship_limit = (
+        MAX_FULL_NETWORK_RELATIONSHIPS
+        if mode == RelationshipMode.FULL_NETWORK
+        else MAX_RELATIONSHIPS
+    )
+    node_limit = (
+        MAX_FULL_NETWORK_NODES if mode == RelationshipMode.FULL_NETWORK else MAX_RELATIONSHIP_NODES
+    )
     if verification_status == VerificationStatus.PROVISIONAL and not include_provisional:
         raise HTTPException(
             status_code=422,
@@ -747,16 +746,17 @@ def relationship_explorer(
             + " AND ".join(clauses)
             + " ORDER BY a.season, a.team_id, a.role, a.start_week, a.end_week, "
             "a.assignment_key LIMIT %s",
-            [*params, MAX_RELATIONSHIPS + 1],
+            [*params, relationship_limit + 1],
         ).fetchall()
-        if len(assignment_rows) > MAX_RELATIONSHIPS:
+        if len(assignment_rows) > relationship_limit:
             raise HTTPException(
                 status_code=413, detail="Relationship scope is too large; narrow it"
             )
 
         team_seasons = {(row["team_id"], row["season"]) for row in assignment_rows}
         preserve_team_qbs = bool(
-            team_id and mode in {RelationshipMode.TEAM_HISTORY, RelationshipMode.FULL_NETWORK}
+            (team_id and mode in {RelationshipMode.TEAM_HISTORY, RelationshipMode.FULL_NETWORK})
+            or (mode == RelationshipMode.FULL_NETWORK and not coach_id and not player_id)
         )
         if player_id or preserve_team_qbs:
             anchor_clauses = ["season BETWEEN %s AND %s"]
@@ -771,9 +771,9 @@ def relationship_explorer(
                 "SELECT DISTINCT team_id, season FROM api_qb_statistics WHERE "
                 + " AND ".join(anchor_clauses)
                 + " ORDER BY season, team_id LIMIT %s",
-                [*anchor_params, MAX_RELATIONSHIPS + 1],
+                [*anchor_params, relationship_limit + 1],
             ).fetchall()
-            if len(anchor_rows) > MAX_RELATIONSHIPS:
+            if len(anchor_rows) > relationship_limit:
                 raise HTTPException(
                     status_code=413, detail="Relationship scope is too large; narrow it"
                 )
@@ -783,8 +783,9 @@ def relationship_explorer(
             connection,
             team_seasons,
             player_id=player_id,
+            relationship_limit=relationship_limit,
         )
-        if len(qb_rows) > MAX_RELATIONSHIPS:
+        if len(qb_rows) > relationship_limit:
             raise HTTPException(
                 status_code=413, detail="Relationship scope is too large; narrow it"
             )
@@ -913,7 +914,7 @@ def relationship_explorer(
 
     nodes = sorted(node_by_id.values(), key=lambda item: (item.node_type, item.node_id))
     relationships.sort(key=lambda item: (item.relationship_type, item.relationship_id))
-    if len(nodes) > MAX_RELATIONSHIP_NODES or len(relationships) > MAX_RELATIONSHIPS:
+    if len(nodes) > node_limit or len(relationships) > relationship_limit:
         raise HTTPException(status_code=413, detail="Relationship scope is too large; narrow it")
 
     return RelationshipExplorerResponse(
@@ -944,8 +945,8 @@ def relationship_explorer(
         relationships=relationships,
         node_count=len(nodes),
         relationship_count=len(relationships),
-        max_nodes=MAX_RELATIONSHIP_NODES,
-        max_relationships=MAX_RELATIONSHIPS,
+        max_nodes=node_limit,
+        max_relationships=relationship_limit,
     )
 
 

@@ -72,6 +72,19 @@ export function NetworkGraph({
             },
           },
           {
+            selector: 'node[kind="year"]',
+            style: {
+              shape: "round-rectangle",
+              width: 76,
+              height: 32,
+              "background-color": "#17233a",
+              "border-width": 2,
+              "border-color": "#6ee7b7",
+              "text-valign": "center",
+              "text-margin-y": 0,
+            },
+          },
+          {
             selector: "edge",
             style: {
               width: 1.4,
@@ -93,6 +106,16 @@ export function NetworkGraph({
           {
             selector: 'edge[provisional="true"]',
             style: { "line-style": "dashed", "line-color": "#e89068" },
+          },
+          {
+            selector: 'edge[kind="identity_continuity"]',
+            style: {
+              "line-style": "dotted",
+              "line-color": "#d8b65c",
+              "target-arrow-shape": "none",
+              width: 2,
+              opacity: 0.8,
+            },
           },
           {
             selector: 'node[kind="team"]',

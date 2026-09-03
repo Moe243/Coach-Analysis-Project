@@ -8,8 +8,9 @@ exists.
 The research reuses immutable checkpoint-three football facts, checkpoint-five out-of-sample
 expected QB performance/PAE, nflverse play-by-play, and manually sourced coaching assignments.
 Research modules live under `research/coach_effect/`; generated research outputs live only under
-the ignored `research/coach_effect/outputs/`. Nothing in this checkpoint changes production
-models, database schema, serving views, API responses, frontend behavior, deployment, or existing
+the ignored `research/coach_effect/outputs/`. Checkpoint Eleven adds historical eligibility and
+PCAE research plus frontend-only Relationship Explorer appearance layouts. It does not change
+the production Coach Effect model, database schema, serving publication, deployment, or existing
 checkpoint outputs.
 
 Every runnable experiment must record input paths and hashes, configuration, seasons, feature
@@ -59,6 +60,17 @@ Shared callers receive fractional attribution that sums to one for a play. Assig
 `assignment_key`; team, season, week, coach, role, verification, confidence, shared status,
 interval basis, and citation must agree. OC title is not play-caller evidence. Season-designation
 intervals are insufficient for weekly attribution.
+
+Checkpoint Eleven's historical extension keeps the same model family and features but uses an
+expanding temporal split: target season `S` is fit only on 1999 through `S-1`. The versioned
+`pcae-play-eligibility-v2` rule requires a regular-season nflverse `pass`/`run` classification,
+non-null unique play keys, team/week/down, and finite EPA, and excludes two-point conversions.
+This exactly explains the earlier 502-play difference: 134,138 candidates minus 502 conversions
+equals 133,636 eligible 2022–2025 plays. Attribution is stricter than the earlier exploratory run:
+only verified, cited, weekly intervals are accepted, and shared/ambiguous plays are suppressed.
+The content identity includes every manual CSV and PBP input, relevant source hashes, model
+specification, seed, and NumPy/Polars/SciPy/scikit-learn versions. Input hashes are revalidated
+immediately before atomic publication so a mid-build edit fails closed.
 
 Repeatability compares the same verified play callers across seasons. One-season reliability is
 estimated from repeated-caller between- and within-coach variance; a two-season-average estimate

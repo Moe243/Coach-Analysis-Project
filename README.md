@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-All nine checkpoints are complete. The responsive application and bounded Relationship Explorer are deployed on Render against the approved PostgreSQL publication on Neon. Coach Journey, QB Journey, Team History, and bounded Full Network preserve canonical identities, assignment intervals, QB-team-season PAE grain, missingness, evidence states, and suppression language. The graph and keyboard-accessible relationship explorer share the same response objects; neither turns same-team-season context into exact weekly overlap or causal coach attribution.
+All nine release checkpoints are complete. Checkpoint Eleven is an uncommitted, local research and interface extension: it adds a complete coaching-status matrix, leakage-safe historical PCAE where weekly caller evidence permits, and chronological appearance-based Relationship Explorer layouts. The deployed Render/Neon release is unchanged. Neither the local nor deployed interface turns same-team-season context into exact weekly overlap or causal coach attribution.
 
 - [Live application](https://nfl-coaching-impact-engine.onrender.com)
 - [Live API](https://nfl-coaching-impact-api.onrender.com)
@@ -67,9 +67,9 @@ DATABASE_URL=postgresql://user:password@localhost:5432/nfl_coaching make api
 
 OpenAPI is available at `/docs`. Routes include health/version, QB and PAE, team-season statistics, coaches and exploratory impact, teams, assignments, coaching completeness, inherited environment context, network data, citations, review summaries, and `GET /relationships/explorer`. List responses contain `items`, `total`, `limit`, and `offset`; every ordering ends in a stable business key. Invalid role/status filters return 422, missing details return 404, and no-match lists return an empty page. Network edges retain both assignments' verification, confidence, shared/provisional, interval, and overlap metadata. Coach-impact responses retain identification and suppression labels and are not definitive rankings.
 
-The local Stage 1 serving candidate implements schema `checkpoint-7.4`, loader `serving-loader-v6`, and API contract `api-v1.4`, returning a deterministic, bounded `Coach -> Team-Season <- QB` subgraph. The loader consumes the versioned canonical-position QB publication rather than loading trick-play passers from immutable historical checkpoints. Coach-assignment relationships remain one `assignment_key`; QB relationships remain one `(player_id, team_id, season)` and receive PAE only through that complete key. Team-history and team-anchored full-network requests seed canonical-position QB facts independently from `api_qb_statistics`, so role, verification, and provisional filters affect coach edges without deleting valid QB-team-season facts. Coach/QB/team-history modes require the corresponding anchor. Full-network mode requires an anchor and at most five seasons, and every response is capped at 1,000 nodes and 2,000 relationships. The response explicitly labels coach-QB context as same-team-season context, not exact weekly exposure or causation.
+The local serving candidate implements schema `checkpoint-7.4`, loader `serving-loader-v6`, and API contract `api-v1.4`, returning deterministic `Coach -> Team-Season <- QB` facts. Coach-assignment relationships remain one `assignment_key`; QB relationships remain one `(player_id, team_id, season)` and receive PAE only through that complete key. Team-history and team-anchored Full Network requests seed canonical-position QB facts independently from `api_qb_statistics`, so role, verification, and provisional filters affect coach edges without deleting valid QB-team-season facts. Coach/QB/team-history modes require the corresponding anchor. Full Network can request the complete 2010–2025 scope without an anchor; ordinary modes retain 1,000-node/2,000-relationship caps and Full Network uses measured 2,000-node/4,000-relationship caps. No response is silently truncated. The response labels coach-QB context as same-team-season context, not exact weekly exposure or causation.
 
-The `/network` Relationship Explorer stores supported mode, Timeline/Network display, canonical anchor, year range, role/evidence/QB filters, selected entity, and focused entity in the URL. Timeline is the default for journeys and Team History; Full Network defaults to the canonical graph. Timeline orders team-seasons chronologically while preserving every assignment and QB-team-season relationship; the bounded Network display retains canonical nodes and stable type columns. Select highlights the direct neighborhood, Focus opens a bounded canonical journey/history, Reset clears view filters while retaining the current scope, and Back restores the prior meaningful focus. HTTP 413 is shown as a complete failure with narrowing guidance; partial graphs are never presented.
+The `/network` Relationship Explorer stores supported mode, Timeline/Tree/Network display, canonical anchor, year range, role/evidence/QB filters, selected entity, and focused entity in the URL. Journey and history trees use season-specific coach/QB appearance nodes around a fixed chronological vertical season spine; Full Network uses deterministic year bands. Appearances retain canonical IDs, and dotted continuity edges are explicitly visual/navigation aids rather than assignment facts. Selecting any appearance synchronizes and highlights every visible appearance of that identity plus its team-season branches. Focus, Reset, and Back retain their prior URL semantics. HTTP 413 remains a complete failure with narrowing guidance; partial graphs are never presented.
 
 The public API is intentionally read-only and unauthenticated. Production CORS is restricted to the exact deployed frontend origin. Every query transaction is read-only, and credentials, filesystem paths, and mutable execution logs are never returned.
 
@@ -216,6 +216,7 @@ Original code and documentation are available under the [MIT License](LICENSE). 
 - [Checkpoint seven report](docs/CHECKPOINT_7_REPORT.md)
 - [Checkpoint eight report](docs/CHECKPOINT_8_REPORT.md)
 - [Checkpoint nine report](docs/CHECKPOINT_9_REPORT.md)
+- [Checkpoint Eleven local research report](docs/CHECKPOINT_11_REPORT.md)
 
 ## Interpretation standard
 
@@ -225,3 +226,9 @@ Checkpoint ten preserves an unweighted, research-only Coach Effect framework wit
 the deployed model or application. Production implementation is blocked until OC, QB-coach, and
 play-caller assignments are comprehensively verified; play callers require explicit evidence and
 weekly/in-season intervals where applicable.
+
+Checkpoint Eleven keeps those formulas and the production gate unchanged. Run its ignored,
+content-addressed research output with `make PYTHON=.venv/bin/python checkpoint-eleven`. The
+reproducible eligibility contract excludes two-point conversions from regular-season run/pass
+plays and exactly reconciles 134,138 to 133,636 plays for 2022–2025. Historical PCAE is emitted
+only for verified non-shared weekly caller intervals and is not a ranking or production score.

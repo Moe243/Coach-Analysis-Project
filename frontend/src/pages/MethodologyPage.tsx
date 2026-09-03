@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertCircle,
   ArrowRight,
-  CheckCircle2,
-  Database,
-  Sigma,
+  GitCompareArrows,
+  Layers3,
+  Repeat2,
+  Target,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
@@ -20,69 +20,116 @@ export function MethodologyPage() {
     <section className="page methodology-page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">Interpretation guide</p>
-          <h1>Read the signal, keep the uncertainty</h1>
+          <p className="eyebrow">How Coach Effect works</p>
+          <h1>Does performance follow the coach?</h1>
           <p>
-            This interface makes the project’s timing, evidence, and suppression
-            rules visible. It does not turn observational football data into
-            causal proof.
+            Coach Effect asks whether a coaching signal travels across seasons,
+            quarterbacks, teams, and changing football situations—not simply
+            whether one offense had a good year.
           </p>
         </div>
       </div>
       <div className="method-grid">
         <article>
-          <Sigma aria-hidden="true" />
+          <Target aria-hidden="true" />
           <span>01</span>
-          <h2>Start with PAE</h2>
+          <h2>Measure performance against expectation</h2>
           <p>
-            Performance Above Expectation is actual EPA per eligible quarterback
-            dropback minus a prediction built strictly before that season.
+            Quarterback performance is compared with what could reasonably have
+            been expected entering the season. This separates raw production
+            from performance beyond the preseason expectation.
           </p>
           <strong>
-            Positive means above the model expectation—not automatically “good
-            coaching.”
+            A talented quarterback can play well without exceeding an already
+            high expectation.
           </strong>
         </article>
         <article>
-          <Database aria-hidden="true" />
+          <GitCompareArrows aria-hidden="true" />
           <span>02</span>
-          <h2>Check the sample</h2>
+          <h2>Evaluate play-calling decisions</h2>
           <p>
-            Quarterbacks qualify at 200 dropbacks. Smaller samples remain
-            visible with an ineligible label and lower reliability.
+            Play calling is evaluated from the game situation and the expected
+            value of the available choices. One fortunate bounce or missed
+            tackle does not by itself make a decision good or bad.
           </p>
           <strong>
-            Eligibility changes interpretation, never the underlying arithmetic.
+            Decision quality is separated from the actual outcome of one play.
           </strong>
         </article>
         <article>
-          <CheckCircle2 aria-hidden="true" />
+          <Layers3 aria-hidden="true" />
           <span>03</span>
-          <h2>Read evidence status</h2>
+          <h2>Account for the environment</h2>
           <p>
-            Verified assignments have citations. Provisional rows preserve
-            season designations or unresolved boundaries without pretending they
-            are settled facts.
+            QB expectations, prior team performance, offensive supporting
+            talent, opponent difficulty, and other context are considered so a
+            coach is not simply credited for what he inherited.
           </p>
           <strong>
-            Shared, interim, confidence, and interval fields remain visible.
+            Context helps distinguish a coaching pattern from roster and
+            schedule advantages.
           </strong>
         </article>
-        <article>
-          <AlertCircle aria-hidden="true" />
+        <article className="method-card-featured">
+          <Repeat2 aria-hidden="true" />
           <span>04</span>
-          <h2>Do not rank coaches</h2>
+          <h2>Look for what follows the coach</h2>
           <p>
-            Checkpoint six could not independently separate coach assignments
-            from team environment. All coach effects remain exploratory and
-            suppressed.
+            The strongest evidence repeats across seasons, quarterbacks, teams,
+            and changing situations. Broader, repeated evidence increases
+            confidence; small or inconsistent samples are treated cautiously.
           </p>
           <strong>
-            Conditional bootstrap intervals are not unconditional confidence
-            intervals.
+            The central question remains: Does performance follow the coach?
           </strong>
         </article>
       </div>
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Interpretation guide</p>
+            <h2>How to read Coach Effect</h2>
+          </div>
+        </div>
+        <dl className="coach-effect-guide">
+          <div>
+            <dt>Positive Coach Effect</dt>
+            <dd>
+              The observed coaching signal is associated with performance above
+              expectation across the available evidence.
+            </dd>
+          </div>
+          <div>
+            <dt>Near Average</dt>
+            <dd>
+              The evidence sits near the league baseline. That does not prove
+              the coach had no impact.
+            </dd>
+          </div>
+          <div>
+            <dt>Negative Coach Effect</dt>
+            <dd>
+              The observed signal is associated with performance below
+              expectation and must still be read alongside team circumstances.
+            </dd>
+          </div>
+          <div>
+            <dt>Confidence</dt>
+            <dd>
+              Confidence grows when the pattern repeats across more seasons,
+              quarterbacks, teams, and situations. Small or inconsistent samples
+              receive more caution.
+            </dd>
+          </div>
+        </dl>
+        <p className="long-copy coach-effect-caution">
+          Coach Effect is an evidence-based observational coaching signal. It
+          should not be interpreted as proof that a coach caused a particular
+          result. Current coach estimates remain exploratory and retain their
+          evidence and suppression labels.
+        </p>
+      </section>
       <section className="section-block">
         <div className="section-heading">
           <div>

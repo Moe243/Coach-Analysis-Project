@@ -360,12 +360,13 @@ class CheckpointTenResearchTests(unittest.TestCase):
         self.assertIn("confidence/uncertainty rules", combined)
         self.assertIn("suppression/evidence thresholds", combined)
 
-    def test_historical_numbers_are_labeled_not_claimed_as_reproduced(self) -> None:
+    def test_historical_numbers_have_explicit_reproduction_status(self) -> None:
         narrative = (PROJECT_ROOT / "docs" / "COACH_EFFECT_RESEARCH.md").read_text(encoding="utf-8")
         for value in ("133,636", "32,813", "0.5717", "0.4491", "0.5926"):
             self.assertIn(value, narrative)
-        self.assertIn("Historically documented, not reproducible yet", narrative)
-        self.assertIn("simple current run/pass/REG filter gives 134,138", narrative)
+        self.assertIn("Exactly reproduced and explained", narrative)
+        self.assertIn("Eligibility reproduced; attribution not reproduced", narrative)
+        self.assertIn("134,138 rows; all 502 excluded rows are two-point conversions", narrative)
 
 
 if __name__ == "__main__":
