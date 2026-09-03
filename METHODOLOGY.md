@@ -185,3 +185,16 @@ Every visible coaching relationship preserves the source assignment's verificati
 The relationship contract models two independently sourced facts: a coach assignment interval connects a canonical coach to a team-season, and an authoritative QB-team-season record connects a canonical QB to that same team-season. Team-anchored scopes seed QB facts directly from `api_qb_statistics`; coaching role, verification, and provisional filters cannot erase those independent records. PAE is joined only on `(load_id, player_id, team_id, season)`, so multi-team seasons cannot inherit another team's value. The resulting two-edge path means only: “QB participated for this team-season while this coaching assignment existed within the same season.” It does not establish weekly overlap, mentorship, influence, or causation. Exact weekly overlap would require a separate validated join to QB-game weeks or exposure lineage and is not asserted by this endpoint.
 
 The frontend transforms one server response into both the visual graph and the accessible relationship cards. Client-side role, interim, and shared filters affect coach-assignment relationships only; QB eligibility, dropback, and PAE filters affect QB-team-season facts only. Selection highlights direct graph adjacency. Focus replaces the current scope with the selected canonical coach/QB journey or one-season team history, while an explicit in-memory focus stack supports Back; Reset clears presentation filters without widening the server anchor. None of these interactions changes the source relationship grain.
+
+## Checkpoint-ten Coach Effect research
+
+Checkpoint ten adds no production model or score. It preserves the four-phase exploratory
+sequence, formula contracts, corrected/rejected approaches, reproduction gaps, and release gate
+in the [Coach Effect research narrative](docs/COACH_EFFECT_RESEARCH.md),
+[research methodology](docs/COACH_EFFECT_METHODOLOGY.md), and
+[research model card](docs/COACH_EFFECT_MODEL_CARD.md). Generated research artifacts are isolated
+under the ignored `research/coach_effect/outputs/` directory.
+
+Production Coach Effect implementation remains blocked until OC, QB-coach, and play-caller
+assignments are comprehensively verified. A play-caller assignment requires explicit evidence
+and weekly or in-season intervals where applicable; a staff title is not sufficient.

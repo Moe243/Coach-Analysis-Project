@@ -7,6 +7,7 @@ __pycache__/
 .cache/
 data/raw/
 data/processed/
+research/coach_effect/outputs/
 *.parquet
 .DS_Store
 frontend/node_modules/

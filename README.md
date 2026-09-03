@@ -203,6 +203,9 @@ Original code and documentation are available under the [MIT License](LICENSE). 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Data sources](DATA_SOURCES.md)
 - [Methodology](METHODOLOGY.md)
+- [Coach Effect research narrative](docs/COACH_EFFECT_RESEARCH.md)
+- [Coach Effect research methodology](docs/COACH_EFFECT_METHODOLOGY.md)
+- [Coach Effect research model card](docs/COACH_EFFECT_MODEL_CARD.md)
 - [Limitations](LIMITATIONS.md)
 - [Model card](MODEL_CARD.md)
 - [Data dictionary](DATA_DICTIONARY.md)
@@ -217,3 +220,8 @@ Original code and documentation are available under the [MIT License](LICENSE). 
 ## Interpretation standard
 
 Coach estimates will be described as adjusted associations. They can be affected by hiring and firing decisions, coach-quarterback matching, roster construction, overlapping staff responsibilities, injuries, schedule, measurement error, and small samples. The application will show uncertainty and supporting evidence rather than a single context-free leaderboard.
+
+Checkpoint ten preserves an unweighted, research-only Coach Effect framework without changing
+the deployed model or application. Production implementation is blocked until OC, QB-coach, and
+play-caller assignments are comprehensively verified; play callers require explicit evidence and
+weekly/in-season intervals where applicable.
