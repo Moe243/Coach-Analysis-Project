@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-All nine release checkpoints are complete. Checkpoint Eleven is an uncommitted, local research and interface extension: it adds a complete coaching-status matrix, leakage-safe historical PCAE where weekly caller evidence permits, and chronological appearance-based Relationship Explorer layouts. The deployed Render/Neon release is unchanged. Neither the local nor deployed interface turns same-team-season context into exact weekly overlap or causal coach attribution.
+All nine release checkpoints are complete. Checkpoint Eleven-B is an uncommitted, research-only evidence extension: its separate evidence overlay verifies formal OC/QB-coach titles where supported without rewriting frozen serving assignments, adds complete weekly play-caller maps for 2023–2025, and rebuilds leakage-safe historical PCAE readiness. The deployed Render/Neon release and Checkpoint Eleven Relationship Explorer are unchanged. Neither the local nor deployed interface turns same-team-season context into exact weekly overlap or causal coach attribution.
 
 - [Live application](https://nfl-coaching-impact-engine.onrender.com)
 - [Live API](https://nfl-coaching-impact-api.onrender.com)
@@ -217,6 +217,7 @@ Original code and documentation are available under the [MIT License](LICENSE). 
 - [Checkpoint eight report](docs/CHECKPOINT_8_REPORT.md)
 - [Checkpoint nine report](docs/CHECKPOINT_9_REPORT.md)
 - [Checkpoint Eleven local research report](docs/CHECKPOINT_11_REPORT.md)
+- [Checkpoint Eleven-B coaching evidence report](docs/CHECKPOINT_11B_REPORT.md)
 
 ## Interpretation standard
 
@@ -232,3 +233,7 @@ content-addressed research output with `make PYTHON=.venv/bin/python checkpoint-
 reproducible eligibility contract excludes two-point conversions from regular-season run/pass
 plays and exactly reconciles 134,138 to 133,636 plays for 2022–2025. Historical PCAE is emitted
 only for verified non-shared weekly caller intervals and is not a ranking or production score.
+
+Checkpoint Eleven-B runs with `make PYTHON=.venv/bin/python checkpoint-eleven-b`. Its ignored
+outputs preserve all unresolved evidence, add PAE joinability and repeatability-readiness audits,
+and do not change the deployed database, API, frontend, formulas, weights, or rankings.

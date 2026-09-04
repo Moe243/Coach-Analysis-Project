@@ -26,3 +26,9 @@ See [the research narrative](../../docs/COACH_EFFECT_RESEARCH.md),
 Production Coach Effect implementation is blocked until offensive coordinator, quarterbacks
 coach, and play-caller assignments are comprehensively verified. Play-caller records require
 explicit evidence and weekly or in-season intervals wherever duties changed or were shared.
+
+Checkpoint Eleven-B is run with
+`make PYTHON=.venv/bin/python checkpoint-eleven-b`. It writes only ignored,
+content-addressed evidence/PCAE diagnostics under `outputs/checkpoint_11b/`, including the
+unresolved-caller queue, season attribution, PAE joinability, and repeatability readiness. It does
+not estimate Coach Effect weights or publish rankings.

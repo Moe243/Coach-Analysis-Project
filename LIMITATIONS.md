@@ -32,7 +32,7 @@ Teams select coaches for particular quarterbacks and quarterbacks for particular
 
 ## Coaching data quality
 
-No audited public API supplies complete role histories, play-callers, shared duties, and midseason intervals for 2010-2025. Checkpoint four verifies 540 observed head-coach stints, 15 OC intervals, one QB-coach interval, and ten explicitly sourced play-caller intervals; one additional play-caller interval remains provisional. The other 776 preseason OC/QB rows remain provisional because `season_designation` establishes an appointment but not uninterrupted weekly tenure. The 1,527 open reviews include 512 play-caller items, seven partial-interval items, one shared-duty verification item, 239 missing formal roles, and every provisional designation requiring interval evidence. A formal OC title is never treated as proof of play-calling duty, and a midseason replacement is never labeled interim without either content-checked temporary language or a season-ending stint followed by a different verified next-season appointment. Structural proof cannot validate a retained interim coach, so those cases retain direct official evidence checks. Houston's exact post-Week-4 2020 play-calling allocation remains unresolved. The dated-change audit is intentionally conservative rather than a claim of exhaustive public coverage. Older official books available only from preservation mirrors receive medium confidence, and disappearing or client-rendered pages may require archived or digest-matched replacements.
+No audited public API supplies complete role histories, play-callers, shared duties, and midseason intervals for 2010–2025. Checkpoint Eleven-B verifies 404 OC and 383 QB-coach team-season titles, but 108 OC and 129 QB-coach cells remain missing; most verified title rows still carry `season_designation` and an open weekly-continuity review. Play-caller coverage is 96 verified full seasons, seven partial verified seasons, 96 provisional seasons, and 313 manual-review seasons. A formal title is never treated as proof of play-calling duty. A midseason replacement is not labeled interim without content-checked temporary language or the narrowly defined head-coach structural proof. Houston's exact post-Week-4 2020 allocation remains unresolved. Older official books available only from preservation mirrors retain medium confidence, and disappearing or client-rendered pages may require archived or digest-matched replacements.
 
 ## Preseason expectation limitations
 
@@ -79,12 +79,13 @@ The deployed analytical interface inherits all data completeness and identificat
 
 The Relationship Explorer supports chronological Coach Journey, QB Journey, and Team History views plus an optional-anchor all-years Full Network. The complete network is intentionally dense even with fixed year bands; zoom, pan, filtering, focus, and the authoritative metadata-complete relationship list remain important. Rendering repeats season-specific visual appearances for canonical people, which increases client element count but does not duplicate API facts. Small screens prioritize record cards and horizontal-free page layout over showing every graph label simultaneously. Broad cross-browser/device-lab and automated visual-regression coverage remain future improvements.
 
-Checkpoint Eleven does not complete weekly play-caller history. All 512 play-caller team-season
-cells retain an open review item; only seven cells have a verified partial interval, 32 have
-source-supported provisional season designations, and 473 remain manual review. Consequently,
-historical PCAE is available only for verified, unambiguous intervals in 2012, 2015, 2016, and
-2020. Zero attribution in another season means unavailable caller evidence, not zero coaching
-value. The 2025 count of 32,813 is reproduced as play eligibility but not as verified attribution.
+Checkpoint Eleven-B still does not complete weekly play-caller history: 416 of 512 cells remain
+unresolved, including seven partial verified, 96 provisional, and 313 manual-review cells. The
+2023–2025 seasons now have complete verified weekly maps, while older coverage remains sparse.
+Zero attribution in an older season means unavailable caller evidence, not zero coaching value.
+Shared Houston Week 4 stays unattributed (62 eligible plays) because individual-play ownership is
+not supported. The evidence breadth is suitable for continued research but not yet for final
+Coach Effect weights, causal claims, or a production ranking.
 
 Stage 1 QB-facing lists and production-bound QB facts use the canonical player position recorded in the historical player dimension. Hybrid-role players classified upstream at another position are intentionally absent even if they logged isolated quarterback plays; immutable checkpoint facts and raw PBP are retained for reproducibility. Canonical position is a single identity-level classification and can therefore exclude players whose historical role once differed. Missing positions are audited rather than inferred. Supplemental box-score fields may be null when weekly player-stat inputs are unavailable. PBP-derived team passing yards are net play yards, including the source's sack-loss behavior, and are not guaranteed to match every official box-score convention. Team ranks are descriptive target-season context and must not be used as preseason model features.
 

@@ -46,6 +46,14 @@ book_urls = {row["source_url"] for row in rows}
 for index, url in enumerate(sorted(citation_urls - book_urls), start=1):
     check_url(url, f"assignment source {index}/{len(citation_urls - book_urls)}")
 
+overlay_path = ROOT / "data" / "manual" / "coaching_evidence_11b.csv"
+with overlay_path.open(newline="", encoding="utf-8") as handle:
+    overlay_rows = list(csv.DictReader(handle))
+overlay_urls = {row["source_url"] for row in overlay_rows}
+additional_overlay_urls = sorted(overlay_urls - citation_urls - book_urls)
+for index, url in enumerate(additional_overlay_urls, start=1):
+    check_url(url, f"Eleven-B source {index}/{len(additional_overlay_urls)}")
+
 evidence_path = ROOT / "data" / "manual" / "coaching_source_content_checks.csv"
 with evidence_path.open(newline="", encoding="utf-8") as handle:
     evidence_rows = list(csv.DictReader(handle))
@@ -59,3 +67,15 @@ for row in evidence_rows:
         content_by_url[row["source_url"]] = content
     validate_source_content(content, row["required_terms"], row["evidence_id"])
     print(f"content {row['evidence_id']}: ok")
+
+for row in overlay_rows:
+    if not row["required_terms"].strip():
+        continue
+    content = content_by_url.get(row["source_url"])
+    if content is None:
+        request = urllib.request.Request(row["source_url"], headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(request, context=context, timeout=30) as response:
+            content = response.read().decode("utf-8", errors="replace")
+        content_by_url[row["source_url"]] = content
+    validate_source_content(content, row["required_terms"], row["assignment_key"])
+    print(f"Eleven-B content {row['assignment_key']}: ok")

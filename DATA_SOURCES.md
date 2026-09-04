@@ -73,8 +73,19 @@ Head-coach stints use the `home_coach` and `away_coach` fields in the already va
 
 Books reached through an NFL or official club domain receive high source confidence. Older official publications available only through a preserved mirror receive medium confidence even though the document itself is an NFL Record & Fact Book. Confidence describes evidence strength, not estimated coaching impact.
 
-Checkpoint Eleven adds the cited 2020 all-team play-caller table as explicit designation evidence
-for 31 non-Houston teams. Because it is secondary and preseason rather than weekly retrospective
-evidence, every row remains provisional with a `season_designation` interval and an open review.
-Houston keeps the separate NFL/team-sourced weekly split. No OC, head-coach, or QB-coach title is
-converted into play-calling duty by inference.
+Checkpoint Eleven-B evaluates every 2010–2025 OC, QB-coach, and play-caller cell against the
+existing source registry and explicit review queue. Its research-only
+`coaching_evidence_11b.csv` overlay verifies formal OC/QB-coach titles in NFL Record & Fact Books
+without rewriting the frozen serving assignments. `season_designation` and an open interval
+review preserve the fact that uninterrupted weekly service was not independently proved.
+NFL/club-hosted books retain high confidence; preserved official books retain medium confidence.
+
+Play-caller evidence remains a separate fact. The cited 2020 4for4 table and 2021 FantasyData
+table remain provisional season designations, as does the ESPN 2022 staff/play-caller table,
+because a preseason/current listing cannot by itself rule out later changes. ESPN all-team
+play-caller audits establish opening assignments for 2023–2025 and are paired with dated NFL or
+official club reports for every discovered in-season boundary. Jacksonville's official 2023
+article independently resolves Press Taylor as its full-time caller. ESPN's 2017 midseason audit
+supplies candidates only; those cells remain in manual review because opening and closing weeks
+are not established. No OC, head-coach, or QB-coach title is converted into play-calling duty by
+inference.

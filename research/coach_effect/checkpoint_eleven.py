@@ -104,11 +104,17 @@ def _verify_source_hashes(project_root: Path, expected: dict[str, str]) -> None:
         raise ValueError(f"checkpoint-eleven inputs changed during build: {sorted(changed)}")
 
 
-def build_coaching_coverage(project_root: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
+def build_coaching_coverage(
+    project_root: Path, assignment_rows: list[dict[str, str]] | None = None
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Return the complete 2,048-cell role matrix and unresolved caller queue."""
 
     manual = project_root / "data" / "manual"
-    assignments = _read_csv(manual / "coaching_assignments.csv")
+    assignments = (
+        assignment_rows
+        if assignment_rows is not None
+        else _read_csv(manual / "coaching_assignments.csv")
+    )
     reviews = _read_csv(manual / "coaching_review_queue.csv")
     citations = _read_csv(manual / "coach_assignment_sources.csv")
     citations_by_key: dict[str, list[dict[str, str]]] = defaultdict(list)

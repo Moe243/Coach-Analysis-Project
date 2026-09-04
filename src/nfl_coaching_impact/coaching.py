@@ -317,7 +317,8 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
         boolean_fields = ("is_interim", "is_shared", "is_retained")
         if any(row[field] not in {"true", "false"} for field in boolean_fields):
             raise CoachingDataError(f"invalid boolean flag for {row['assignment_key']}")
-        if not 1 <= start <= end <= 25:
+        final_regular_season_week = 18 if season >= 2021 else 17
+        if not 1 <= start <= end <= final_regular_season_week:
             raise CoachingDataError(f"invalid week interval for {row['assignment_key']}")
         if row["coach_id"] not in coach_ids or not row["coach_canonical_name"].strip():
             raise CoachingDataError(f"unresolved coach identity for {row['assignment_key']}")
@@ -327,6 +328,29 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
             )
         if row["verification_status"] == "verified" and row["assignment_key"] not in citation_keys:
             raise CoachingDataError(f"verified assignment lacks citation: {row['assignment_key']}")
+        if row["verification_status"] == "verified" and role in {
+            "offensive_coordinator",
+            "quarterbacks_coach",
+        }:
+            evidence = " ".join(
+                [
+                    citation["evidence_note"]
+                    for citation in citations
+                    if citation["assignment_key"] == row["assignment_key"]
+                ]
+                + [
+                    check["required_terms"]
+                    for check in content_checks_by_assignment[row["assignment_key"]]
+                ]
+            ).casefold()
+            evidence = " ".join(evidence.replace("-", " ").split())
+            required_role_term = (
+                "offensive coordinator" if role == "offensive_coordinator" else "quarterback"
+            )
+            if required_role_term not in evidence:
+                raise CoachingDataError(
+                    f"verified {role} lacks explicit title evidence: {row['assignment_key']}"
+                )
         if not _valid_url(row["primary_source_url"]):
             raise CoachingDataError(f"assignment lacks primary HTTPS URL: {row['assignment_key']}")
         shared = row["is_shared"] == "true"

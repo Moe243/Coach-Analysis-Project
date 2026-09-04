@@ -80,3 +80,15 @@ Exit criterion: all focused and full validation passes, research outputs are con
 reproducible, every unresolved caller remains visible, complete Full Network size is measured with
 no silent truncation, and the uncommitted diff is ready for review. No deployment or production
 Coach Effect implementation is part of this checkpoint.
+
+## Checkpoint eleven-B — complete coaching evidence verification (local)
+
+Evaluate all 2010–2025 OC, QB-coach, and play-caller cells against explicit source evidence;
+preserve missing, provisional, partial, conflicting, and manual-review outcomes; prioritize and
+complete the 2024–2025 weekly caller maps; and rebuild research-only PCAE coverage, PAE
+joinability, and repeatability-readiness artifacts without estimating Coach Effect weights.
+
+Exit criterion: every role matrix remains exactly 512 cells, verified rows have role-appropriate
+evidence, unresolved callers remain exported, attribution reconciles by season, clean research
+builds are byte-identical, and no production model, ranking, serving, frontend, or deployment
+state changes.
