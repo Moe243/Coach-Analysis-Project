@@ -719,8 +719,29 @@ def relationship_explorer(
     clauses = ["a.season BETWEEN %s AND %s"]
     params: list[Any] = [start_season, end_season]
     if coach_id:
-        clauses.append("a.coach_id = %s")
-        params.append(coach_id)
+        if mode == RelationshipMode.COACH_JOURNEY:
+            anchor_clauses = [
+                "anchor.coach_id = %s",
+                "anchor.team_id = a.team_id",
+                "anchor.season = a.season",
+            ]
+            anchor_params: list[Any] = [coach_id]
+            if role:
+                anchor_clauses.append("anchor.role::text = %s")
+                anchor_params.append(role.value)
+            if verification_status:
+                anchor_clauses.append("anchor.verification_status::text = %s")
+                anchor_params.append(verification_status.value)
+            if not include_provisional:
+                anchor_clauses.append("anchor.verification_status::text <> 'provisional'")
+            clauses.append(
+                "EXISTS (SELECT 1 FROM api_coaching_assignments anchor "
+                "WHERE " + " AND ".join(anchor_clauses) + ")"
+            )
+            params.extend(anchor_params)
+        else:
+            clauses.append("a.coach_id = %s")
+            params.append(coach_id)
     if team_id:
         clauses.append("a.team_id = %s")
         params.append(team_id)

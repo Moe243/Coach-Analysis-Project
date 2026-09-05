@@ -1068,10 +1068,24 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
             for row in coach_body["relationships"]
             if row["relationship_type"] == "coach_assignment"
         ]
-        self.assertEqual([row["coach_id"] for row in coach_nodes], [coach_id])
+        self.assertEqual(
+            sum(row["coach_id"] == coach_id for row in coach_nodes),
+            1,
+        )
+        self.assertGreater(len(coach_nodes), 1)
         self.assertGreater(len({row["season"] for row in assignments}), 1)
         self.assertGreater(len({row["team_id"] for row in assignments}), 1)
         self.assertEqual(len({row["assignment_key"] for row in assignments}), len(assignments))
+        selected_scopes = {
+            (row["team_id"], row["season"]) for row in assignments if row["coach_id"] == coach_id
+        }
+        supporting_assignments = [row for row in assignments if row["coach_id"] != coach_id]
+        self.assertTrue(supporting_assignments)
+        self.assertTrue(
+            all(
+                (row["team_id"], row["season"]) in selected_scopes for row in supporting_assignments
+            )
+        )
 
         qb = self.client.get(
             "/relationships/explorer",

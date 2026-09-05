@@ -30,7 +30,7 @@ export function NetworkGraph({
         container: container.current,
         elements,
         layout: { name: "preset", animate: false, fit: true, padding: 44 },
-        minZoom: 0.25,
+        minZoom: 0.02,
         maxZoom: 2.4,
         style: [
           {
@@ -129,11 +129,22 @@ export function NetworkGraph({
             },
           },
           {
-            selector: 'edge[layout="dagre"]',
+            selector: 'edge[layout="journey"]',
             style: {
-              "curve-style": "taxi",
-              "taxi-direction": "downward",
-              "taxi-turn": 28,
+              "curve-style": "straight",
+              "target-arrow-shape": "none",
+            },
+          },
+          {
+            selector: 'edge[layout="journey"][kind="coach_assignment"]',
+            style: {
+              label: "data(label)",
+              color: "#d9e4f2",
+              "font-size": 8,
+              "text-background-color": "#17233a",
+              "text-background-opacity": 0.86,
+              "text-background-padding": "2px",
+              "text-rotation": "autorotate",
             },
           },
           {

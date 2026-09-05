@@ -159,6 +159,28 @@ test("restores Coach Journey, QB Journey, and Full Network from URL state", asyn
   ).toBeVisible();
 });
 
+test("searches canonical Full Network identities, selects context, and fits all", async ({
+  page,
+}) => {
+  await useDeterministicRelationshipFixture(page);
+  await page.goto(
+    "/network?mode=full_network&anchor=all&start_season=2024&end_season=2025",
+  );
+  const search = page.getByPlaceholder("Search coach or QB");
+  await expect(search).toBeVisible();
+  await search.fill("Test Coach");
+  await page.getByRole("option", { name: /Test Coach/ }).click();
+  await expect(page).toHaveURL(/selected=coach%3Acoach-1/);
+  await expect(page.locator(".selection-panel")).toContainText(
+    "Selected coach",
+  );
+  await expect(page.getByRole("button", { name: "Fit All" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear selection" }).click();
+  await expect(page.locator(".selection-panel")).toContainText(
+    "Select an entity",
+  );
+});
+
 test("supports accessible Select, Focus, Reset, and Back actions", async ({
   page,
 }) => {

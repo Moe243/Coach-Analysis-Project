@@ -1,45 +1,69 @@
 import axe from "axe-core";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import type { ElementDefinition } from "cytoscape";
+import type { Core, ElementDefinition } from "cytoscape";
 import { NetworkPage } from "./NetworkPage";
 import { installApiFixture, page, qbSeason } from "../test/fixtures";
 import { renderRoute } from "../test/render";
+
+const graphHarness = vi.hoisted(() => {
+  const neighborhood = {};
+  return {
+    fit: vi.fn(),
+    zoom: vi.fn(() => 1),
+    neighborhood,
+    nodes: vi.fn(() => ({
+      filter: vi.fn(() => ({
+        empty: () => false,
+        closedNeighborhood: () => neighborhood,
+      })),
+    })),
+  };
+});
 
 vi.mock("../components/NetworkGraph", () => ({
   NetworkGraph: ({
     elements,
     onSelect,
     selected,
+    register,
   }: {
     elements: ElementDefinition[];
     onSelect: (id: string) => void;
     selected: string | null;
-  }) => (
-    <div data-testid="relationship-graph">
-      {elements
-        .filter((element) => !element.data.source)
-        .map((element) => (
-          <button
-            key={String(element.data.id)}
-            type="button"
-            data-selected={
-              selected === (element.data.canonicalId ?? element.data.id)
-                ? "true"
-                : "false"
-            }
-            onClick={() =>
-              onSelect(String(element.data.canonicalId ?? element.data.id))
-            }
-          >
-            Graph {String(element.data.label)}
-          </button>
-        ))}
-    </div>
-  ),
+    register: (core: Core | null) => void;
+  }) => {
+    register(graphHarness as unknown as Core);
+    return (
+      <div data-testid="relationship-graph">
+        {elements
+          .filter((element) => !element.data.source)
+          .map((element) => (
+            <button
+              key={String(element.data.id)}
+              type="button"
+              data-selected={
+                selected === (element.data.canonicalId ?? element.data.id)
+                  ? "true"
+                  : "false"
+              }
+              onClick={() =>
+                onSelect(String(element.data.canonicalId ?? element.data.id))
+              }
+            >
+              Graph {String(element.data.label)}
+            </button>
+          ))}
+      </div>
+    );
+  },
 }));
 
 describe("NetworkPage Relationship Explorer", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    graphHarness.fit.mockClear();
+    graphHarness.nodes.mockClear();
+  });
 
   it("excludes non-QBs from the QB Journey selector", async () => {
     const runningBack = {
@@ -325,7 +349,7 @@ describe("NetworkPage Relationship Explorer", () => {
     ).toHaveAttribute("href", "/qbs/qb-1");
   });
 
-  it("defaults journey and history modes to the chronological timeline", async () => {
+  it("defaults Team History to the chronological timeline", async () => {
     installApiFixture();
     renderRoute(
       <NetworkPage />,
@@ -346,6 +370,22 @@ describe("NetworkPage Relationship Explorer", () => {
       expect.stringContaining("2025"),
       expect.stringContaining("2025"),
     ]);
+  });
+
+  it("locks Journey modes to the fixed hierarchy view", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=qb_journey&player_id=qb-1&start_season=2024&end_season=2025&display=timeline",
+    );
+    expect(await screen.findByTestId("relationship-graph")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hierarchy" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.queryByLabelText("Chronological relationship timeline"),
+    ).not.toBeInTheDocument();
   });
 
   it("offers the deterministic chronological graph as a Tree display", async () => {
@@ -380,6 +420,48 @@ describe("NetworkPage Relationship Explorer", () => {
       "/api/relationships/explorer?mode=full_network&start_season=2010&end_season=2025&include_provisional=true",
     ]);
   });
+
+  it("fits the complete Full Network on demand", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=full_network&anchor=team&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Fit All" }));
+    expect(graphHarness.fit).toHaveBeenCalledWith(undefined, 36);
+  });
+
+  it.each([
+    ["Test Coach", "Selected coach", "/coaches/coach-1"],
+    ["Test Quarterback", "Selected quarterback", "/qbs/qb-1"],
+  ])(
+    "searches the Full Network by canonical identity and selects %s",
+    async (name, detailLabel, profilePath) => {
+      installApiFixture();
+      renderRoute(
+        <NetworkPage />,
+        "/network?mode=full_network&anchor=team&team_id=team_den&start_season=2024&end_season=2025",
+      );
+      const search = await screen.findByPlaceholderText("Search coach or QB");
+      fireEvent.change(search, { target: { value: name } });
+      fireEvent.click(
+        await screen.findByRole("option", { name: new RegExp(name) }),
+      );
+      expect(await screen.findByText(detailLabel)).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /Open .* profile/ }),
+      ).toHaveAttribute("href", profilePath);
+      await waitFor(() =>
+        expect(graphHarness.fit).toHaveBeenCalledWith(
+          graphHarness.neighborhood,
+          84,
+        ),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+      expect(screen.getByText("Select an entity")).toBeInTheDocument();
+      expect(graphHarness.fit).toHaveBeenCalledWith(undefined, 36);
+    },
+  );
 
   it("explains a 413 response and never presents a partial graph", async () => {
     const base = installApiFixture();

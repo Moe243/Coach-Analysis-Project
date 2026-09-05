@@ -5,6 +5,7 @@ import {
   Focus,
   RotateCcw,
   Search,
+  X,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -262,7 +263,7 @@ export function NetworkPage() {
   ) as RelationshipMode;
   const displayParameter = params.get("display");
   const display =
-    mode === "full_network"
+    mode === "full_network" || mode === "coach_journey" || mode === "qb_journey"
       ? "network"
       : displayParameter === "timeline" || displayParameter === "network"
         ? displayParameter
@@ -310,6 +311,7 @@ export function NetworkPage() {
   const sharedOnly = params.get("shared") === "only";
   const coreRef = useRef<Core | null>(null);
   const [history, setHistory] = useState<string[]>([]);
+  const [networkSearch, setNetworkSearch] = useState("");
   const [compact, setCompact] = useState(
     () => typeof window !== "undefined" && window.innerWidth <= 800,
   );
@@ -491,6 +493,30 @@ export function NetworkPage() {
   const selectedRelationships = selected
     ? (graph?.relationshipsByNode.get(selected) ?? [])
     : [];
+  const explorerSearchOptions = useMemo(() => {
+    const query = networkSearch.trim().toLocaleLowerCase();
+    if (!query || !graph) return [];
+    return graph.nodes
+      .filter(
+        (node) =>
+          node.node_type === "coach" || node.node_type === "quarterback",
+      )
+      .map((node) => {
+        const label = nodeLabel(node);
+        const normalized = label.toLocaleLowerCase();
+        const priority =
+          normalized === query ? 0 : normalized.startsWith(query) ? 1 : 2;
+        return { node, label, normalized, priority };
+      })
+      .filter((option) => option.normalized.includes(query))
+      .sort(
+        (left, right) =>
+          left.priority - right.priority ||
+          left.label.localeCompare(right.label) ||
+          left.node.node_id.localeCompare(right.node.node_id),
+      )
+      .slice(0, 8);
+  }, [graph, networkSearch]);
 
   useEffect(() => {
     if (selected && graph && !nodeMap.has(selected)) setUrl({ selected: null });
@@ -502,6 +528,23 @@ export function NetworkPage() {
   const selectNode = useCallback(
     (nodeId: string) => setUrl({ selected: nodeId }),
     [setUrl],
+  );
+  const revealGraphIdentity = useCallback((nodeId: string) => {
+    const core = coreRef.current;
+    if (!core) return;
+    const matches = core.nodes().filter((node) => {
+      const canonicalId = node.data("canonicalId") as string | undefined;
+      return node.id() === nodeId || canonicalId === nodeId;
+    });
+    if (!matches.empty()) core.fit(matches.closedNeighborhood(), 84);
+  }, []);
+  const selectSearchResult = useCallback(
+    (nodeId: string) => {
+      setNetworkSearch("");
+      selectNode(nodeId);
+      window.requestAnimationFrame(() => revealGraphIdentity(nodeId));
+    },
+    [revealGraphIdentity, selectNode],
   );
   const focusNode = useCallback(
     (nodeId: string) => {
@@ -542,6 +585,7 @@ export function NetworkPage() {
     setParams(new URLSearchParams(previous));
   };
   const reset = () => {
+    setNetworkSearch("");
     setUrl({
       selected: null,
       focus: null,
@@ -558,6 +602,11 @@ export function NetworkPage() {
       interim: null,
       shared: null,
     });
+    coreRef.current?.fit(undefined, 36);
+  };
+  const clearNetworkSelection = () => {
+    setNetworkSearch("");
+    setUrl({ selected: null, focus: null });
     coreRef.current?.fit(undefined, 36);
   };
   const updateRole = (role: CoachRole, checked: boolean) => {
@@ -882,10 +931,12 @@ export function NetworkPage() {
           <strong>{modeLabels[mode]}</strong>
           <p>{modeDescriptions[mode]}</p>
         </div>
-        {mode === "full_network" ? (
+        {mode === "full_network" ||
+        mode === "coach_journey" ||
+        mode === "qb_journey" ? (
           <div className="view-toggle" aria-label="Relationship display">
             <button type="button" className="is-active" aria-pressed="true">
-              Network
+              {mode === "full_network" ? "Network" : "Hierarchy"}
             </button>
           </div>
         ) : (
@@ -982,12 +1033,75 @@ export function NetworkPage() {
               <div className="graph-toolbar">
                 <p>
                   <strong>{graph.nodes.length}</strong> canonical entities ·{" "}
-                  <strong>{graph.appearanceCount}</strong> chronological
-                  appearances · <strong>{graph.relationships.length}</strong>{" "}
-                  relationships · {startSeason}–{endSeason}
+                  <strong>{graph.appearanceCount}</strong>{" "}
+                  {mode === "coach_journey" || mode === "qb_journey"
+                    ? "canonical people"
+                    : "chronological appearances"}{" "}
+                  · <strong>{graph.relationships.length}</strong> relationships
+                  · {startSeason}–{endSeason}
                 </p>
                 {display === "network" && (
-                  <div>
+                  <div className="graph-toolbar-actions">
+                    {mode === "full_network" && (
+                      <div className="explorer-network-search">
+                        <label>
+                          <Search aria-hidden="true" />
+                          <span className="sr-only">
+                            Search visible coaches and quarterbacks
+                          </span>
+                          <input
+                            type="search"
+                            value={networkSearch}
+                            placeholder="Search coach or QB"
+                            autoComplete="off"
+                            onChange={(event) =>
+                              setNetworkSearch(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (
+                                event.key === "Enter" &&
+                                explorerSearchOptions[0]
+                              ) {
+                                event.preventDefault();
+                                selectSearchResult(
+                                  explorerSearchOptions[0].node.node_id,
+                                );
+                              }
+                            }}
+                          />
+                        </label>
+                        {networkSearch.trim() && (
+                          <div
+                            className="explorer-search-results"
+                            role="listbox"
+                            aria-label="Explorer search results"
+                          >
+                            {explorerSearchOptions.length ? (
+                              explorerSearchOptions.map(({ node, label }) => (
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={selected === node.node_id}
+                                  key={node.node_id}
+                                  onClick={() =>
+                                    selectSearchResult(node.node_id)
+                                  }
+                                >
+                                  <strong>{label}</strong>
+                                  <span>
+                                    {node.node_type === "coach"
+                                      ? "Coach"
+                                      : "Quarterback"}
+                                  </span>
+                                </button>
+                              ))
+                            ) : (
+                              <p>No visible coach or QB matches.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <button
                       className="icon-button"
                       type="button"
@@ -1013,8 +1127,17 @@ export function NetworkPage() {
                       type="button"
                       onClick={() => coreRef.current?.fit(undefined, 36)}
                     >
-                      Fit graph
+                      Fit All
                     </button>
+                    {mode === "full_network" && selectedNode && (
+                      <button
+                        className="button button-ghost"
+                        type="button"
+                        onClick={clearNetworkSelection}
+                      >
+                        <X aria-hidden="true" /> Clear selection
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1046,10 +1169,19 @@ export function NetworkPage() {
                 <span>
                   <i className="legend-provisional" /> Provisional assignment
                 </span>
-                <span>
-                  <i className="legend-continuity" /> Identity continuity
-                </span>
+                {mode !== "coach_journey" && mode !== "qb_journey" && (
+                  <span>
+                    <i className="legend-continuity" /> Identity continuity
+                  </span>
+                )}
               </div>
+              {display === "network" && (
+                <p className="graph-layout-note">
+                  {mode === "coach_journey" || mode === "qb_journey"
+                    ? "Journey connector lines organize source-backed team-season context. They do not assert direct reporting or exact weekly QB-coach overlap."
+                    : "Assignment and QB-team-season lines represent factual relationships; continuity lines are a visual identity aid."}
+                </p>
+              )}
             </div>
             <aside className="selection-panel" aria-live="polite">
               {selectedNode ? (

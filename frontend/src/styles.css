@@ -1218,6 +1218,75 @@ td > span {
   display: flex;
   gap: 0.35rem;
 }
+.graph-toolbar .graph-toolbar-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.explorer-network-search {
+  position: relative;
+}
+.explorer-network-search label {
+  min-width: min(290px, 42vw);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.65rem;
+  color: #aab6c7;
+  background: #101d31;
+  border: 1px solid #30435d;
+  border-radius: 0.35rem;
+}
+.explorer-network-search label svg {
+  width: 15px;
+}
+.explorer-network-search input {
+  width: 100%;
+  min-height: 38px;
+  color: white;
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+.explorer-search-results {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  display: grid;
+  padding: 0.35rem;
+  background: #101d31;
+  border: 1px solid #405573;
+  border-radius: 0.45rem;
+  box-shadow: var(--shadow);
+}
+.explorer-search-results button {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  color: white;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0.3rem;
+}
+.explorer-search-results button:hover,
+.explorer-search-results button:focus-visible {
+  background: #243a58;
+}
+.explorer-search-results span,
+.explorer-search-results p {
+  color: #aab6c7;
+  font-size: 0.7rem;
+}
+.explorer-search-results p {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+}
 .graph-toolbar .icon-button,
 .graph-toolbar .button {
   color: white;
@@ -1248,6 +1317,12 @@ td > span {
   display: inline-block;
   border-radius: 50%;
   background: var(--field);
+}
+.graph-layout-note {
+  margin: 0;
+  padding: 0 1rem 0.75rem;
+  color: #aab6c7;
+  font-size: 0.7rem;
 }
 .network-legend .legend-team {
   border-radius: 3px;
@@ -1540,6 +1615,11 @@ code {
   .graph-toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .graph-toolbar .graph-toolbar-actions,
+  .explorer-network-search,
+  .explorer-network-search label {
+    width: 100%;
   }
   .network-legend {
     flex-wrap: wrap;

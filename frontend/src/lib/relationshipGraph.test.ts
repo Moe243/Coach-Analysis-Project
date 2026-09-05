@@ -14,7 +14,12 @@ function response(
 ) {
   return {
     ...relationshipExplorer,
-    query: { ...relationshipExplorer.query, mode },
+    query: {
+      ...relationshipExplorer.query,
+      mode,
+      coach_id: mode === "coach_journey" ? "coach-1" : null,
+      player_id: mode === "qb_journey" ? "qb-1" : null,
+    },
     nodes: relationshipExplorer.nodes.map((node) => ({ ...node })),
     relationships: relationshipExplorer.relationships.map((relationship) => ({
       ...relationship,
@@ -111,8 +116,9 @@ describe("buildRelationshipGraph", () => {
       (element) =>
         !element.data.source && element.data.canonicalId === "coach:coach-1",
     );
-    expect(appearances).toHaveLength(2);
-    expect(new Set(appearances.map((element) => element.data.id)).size).toBe(2);
+    expect(appearances).toHaveLength(1);
+    expect(appearances[0].data.id).toBe("coach:coach-1");
+    expect(appearances[0].data.layer).toBe(1);
   });
 
   it("keeps one canonical QB node across years and teams", () => {
@@ -133,12 +139,13 @@ describe("buildRelationshipGraph", () => {
     expect(new Set(qbRows.map((row) => row.team_id))).toEqual(
       new Set(["team_den", "team_hou"]),
     );
-    expect(
-      graph.elements.filter(
-        (element) =>
-          !element.data.source && element.data.canonicalId === "qb:qb-1",
-      ),
-    ).toHaveLength(3);
+    const appearances = graph.elements.filter(
+      (element) =>
+        !element.data.source && element.data.canonicalId === "qb:qb-1",
+    );
+    expect(appearances).toHaveLength(1);
+    expect(appearances[0].data.id).toBe("qb:qb-1");
+    expect(appearances[0].data.layer).toBe(1);
   });
 
   it("preserves multi-team same-season QB records and their complete-key PAE", () => {
@@ -179,8 +186,39 @@ describe("buildRelationshipGraph", () => {
     ]);
   });
 
+  it("keeps parallel journey assignments distinct without duplicating the coach", () => {
+    const fixture = response("coach_journey");
+    const assignment = fixture.relationships.find(
+      (row): row is CoachAssignmentRelationship =>
+        row.relationship_type === "coach_assignment" &&
+        row.relationship_id === "den-2024-hc",
+    )!;
+    fixture.relationships.push({
+      ...assignment,
+      relationship_id: "den-2024-hc-return",
+      assignment_key: "den-2024-hc-return",
+      start_week: 10,
+      end_week: 18,
+    });
+    const graph = buildRelationshipGraph(fixture, defaultExplorerFilters());
+    expect(
+      graph.elements.filter(
+        (row) => !row.data.source && row.data.id === "coach:coach-1",
+      ),
+    ).toHaveLength(1);
+    expect(
+      graph.elements
+        .filter(
+          (row) =>
+            row.data.source === "coach:coach-1" &&
+            row.data.target === "team-season:team_den:2024",
+        )
+        .map((row) => row.data.label),
+    ).toEqual(["HC · Weeks 1–9", "HC · Weeks 10–18"]);
+  });
+
   it("keeps mixed head-coach and subordinate-role identities acyclic", () => {
-    const fixture = response();
+    const fixture = response("coach_journey");
     const mixedRole = fixture.relationships.find(
       (relationship): relationship is CoachAssignmentRelationship =>
         relationship.relationship_type === "coach_assignment" &&
@@ -198,17 +236,11 @@ describe("buildRelationshipGraph", () => {
         element.data.id === `relationship:${mixedRole!.relationship_id}`,
     );
     expect(mixedEdges).toHaveLength(1);
-    expect(mixedEdges[0].data.source).toBe(
-      `appearance:coach:coach-1:${mixedRole!.assignment_key}`,
-    );
+    expect(mixedEdges[0].data.source).toBe("coach:coach-1");
   });
 
-  it("keeps chronological modes on a strict deterministic vertical season spine", () => {
-    for (const mode of [
-      "coach_journey",
-      "qb_journey",
-      "team_history",
-    ] as const) {
+  it("keeps journey seasons chronologically ordered across deterministic layers", () => {
+    for (const mode of ["coach_journey", "qb_journey"] as const) {
       const first = buildRelationshipGraph(
         response(mode),
         defaultExplorerFilters(),
@@ -218,10 +250,185 @@ describe("buildRelationshipGraph", () => {
         defaultExplorerFilters(),
       );
       expect(first.positions).toEqual(second.positions);
-      expect(first.positions["team-season:team_den:2024"].y).toBeLessThan(
+      expect(first.positions["team-season:team_den:2024"].x).toBeLessThan(
+        first.positions["team-season:team_den:2025"].x,
+      );
+      expect(first.positions["team-season:team_den:2024"].y).toBe(
         first.positions["team-season:team_den:2025"].y,
       );
     }
+  });
+
+  it("layers QB Journey from one QB through seasons, head coaches, and other coaches", () => {
+    const fixture = response("qb_journey");
+    const baseAssignment = fixture.relationships.find(
+      (row): row is CoachAssignmentRelationship =>
+        row.relationship_type === "coach_assignment" &&
+        row.relationship_id === "den-2024-hc",
+    )!;
+    const assistants = [
+      ["coach-3", "Coordinator Coach", "offensive_coordinator"],
+      ["coach-4", "Quarterback Coach", "quarterbacks_coach"],
+      ["coach-5", "Play Caller", "play_caller"],
+    ] as const;
+    assistants.forEach(([coachId, name, role]) => {
+      fixture.nodes.push({
+        node_id: `coach:${coachId}`,
+        node_type: "coach",
+        coach_id: coachId,
+        canonical_name: name,
+      });
+      fixture.relationships.push({
+        ...baseAssignment,
+        relationship_id: `den-2024-${role}`,
+        assignment_key: `den-2024-${role}`,
+        source_node_id: `coach:${coachId}`,
+        coach_id: coachId,
+        role,
+      });
+    });
+    const graph = buildRelationshipGraph(fixture, defaultExplorerFilters());
+    expect(
+      graph.elements.find((row) => row.data.id === "qb:qb-1")?.data.layer,
+    ).toBe(1);
+    expect(
+      graph.elements.find((row) => row.data.id === "team-season:team_den:2024")
+        ?.data.layer,
+    ).toBe(2);
+    expect(
+      graph.elements.find((row) => row.data.id === "coach:coach-1")?.data.layer,
+    ).toBe(3);
+    assistants.forEach(([coachId]) => {
+      expect(
+        graph.elements.find((row) => row.data.id === `coach:${coachId}`)?.data
+          .layer,
+      ).toBe(4);
+    });
+    const hierarchyEdges = graph.elements.filter((row) => row.data.source);
+    expect(
+      hierarchyEdges.some(
+        (row) =>
+          row.data.source === "qb:qb-1" &&
+          row.data.target === "team-season:team_den:2024",
+      ),
+    ).toBe(true);
+    expect(
+      hierarchyEdges.some(
+        (row) =>
+          row.data.source === "team-season:team_den:2024" &&
+          row.data.target === "coach:coach-1" &&
+          row.data.role === "head_coach",
+      ),
+    ).toBe(true);
+    assistants.forEach(([coachId, , role]) => {
+      expect(
+        hierarchyEdges.some(
+          (row) =>
+            row.data.source === "coach:coach-1" &&
+            row.data.target === `coach:${coachId}` &&
+            row.data.role === role,
+        ),
+      ).toBe(true);
+      expect(
+        hierarchyEdges.some(
+          (row) =>
+            row.data.source === "team-season:team_den:2024" &&
+            row.data.target === `coach:${coachId}`,
+        ),
+      ).toBe(false);
+    });
+    expect(
+      hierarchyEdges.some(
+        (row) =>
+          assistants.some(
+            ([coachId]) => row.data.source === `coach:${coachId}`,
+          ) && String(row.data.target).startsWith("coach:"),
+      ),
+    ).toBe(false);
+    expect(
+      graph.elements.filter((row) => row.data.kind === "identity_continuity"),
+    ).toHaveLength(0);
+  });
+
+  it("layers Coach Journey from one coach through seasons, staff context, and QBs", () => {
+    const fixture = response("coach_journey");
+    const supportingCoach = fixture.relationships.find(
+      (row): row is CoachAssignmentRelationship =>
+        row.relationship_type === "coach_assignment" &&
+        row.source_node_id === "coach:coach-2",
+    )!;
+    fixture.relationships.push({
+      ...supportingCoach,
+      relationship_id: "hou-2025-hc",
+      assignment_key: "hou-2025-hc",
+      target_node_id: "team-season:team_hou:2025",
+      team_id: "team_hou",
+      season: 2025,
+      start_week: 1,
+      end_week: 18,
+      is_interim: false,
+    });
+    const graph = buildRelationshipGraph(fixture, defaultExplorerFilters());
+    expect(
+      graph.elements.find((row) => row.data.id === "coach:coach-1")?.data.layer,
+    ).toBe(1);
+    expect(
+      graph.elements.find((row) => row.data.id === "team-season:team_den:2024")
+        ?.data.layer,
+    ).toBe(2);
+    expect(
+      graph.elements.find((row) => row.data.id === "coach:coach-2")?.data.layer,
+    ).toBe(3);
+    expect(
+      graph.elements.find((row) => row.data.id === "qb:qb-1")?.data.layer,
+    ).toBe(4);
+    expect(
+      graph.elements.filter((row) => row.data.kind === "identity_continuity"),
+    ).toHaveLength(0);
+    const hierarchyEdges = graph.elements.filter((row) => row.data.source);
+    expect(
+      hierarchyEdges.some(
+        (row) =>
+          row.data.source === "coach:coach-1" &&
+          row.data.target === "team-season:team_den:2024",
+      ),
+    ).toBe(true);
+    expect(
+      hierarchyEdges.some(
+        (row) =>
+          row.data.source === "team-season:team_den:2024" &&
+          row.data.target === "coach:coach-2",
+      ),
+    ).toBe(true);
+    expect(
+      hierarchyEdges.some(
+        (row) =>
+          row.data.source === "coach:coach-2" && row.data.target === "qb:qb-1",
+      ),
+    ).toBe(true);
+    expect(
+      hierarchyEdges.some(
+        (row) =>
+          row.data.source === "coach:coach-1" &&
+          String(row.data.target).startsWith("qb:"),
+      ),
+    ).toBe(false);
+    expect(
+      graph.elements.filter(
+        (row) => !row.data.source && row.data.canonicalId === "coach:coach-2",
+      ),
+    ).toHaveLength(1);
+    expect(
+      graph.elements.filter(
+        (row) => !row.data.source && row.data.canonicalId === "qb:qb-1",
+      ),
+    ).toHaveLength(1);
+    expect(
+      hierarchyEdges.filter(
+        (row) =>
+          row.data.source === "coach:coach-2" && row.data.target === "qb:qb-1",
+      ),
+    ).toHaveLength(2);
   });
 
   it("preserves interim, shared, verified, and provisional states", () => {

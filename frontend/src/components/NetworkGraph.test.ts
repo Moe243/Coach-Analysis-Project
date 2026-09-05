@@ -137,6 +137,133 @@ describe("applyGraphSelection", () => {
     core.destroy();
   });
 
+  it("highlights an entire fixed Journey branch through branch metadata", () => {
+    const core = cytoscape({
+      headless: true,
+      elements: [
+        {
+          data: {
+            id: "qb:a",
+            canonicalId: "qb:a",
+            kind: "quarterback",
+            branchIds: ["team:one"],
+          },
+        },
+        {
+          data: {
+            id: "team:one",
+            kind: "team_season",
+            branchIds: ["team:one"],
+          },
+        },
+        {
+          data: {
+            id: "coach:hc",
+            canonicalId: "coach:hc",
+            kind: "coach",
+            branchIds: ["team:one"],
+          },
+        },
+        {
+          data: {
+            id: "coach:oc",
+            canonicalId: "coach:oc",
+            kind: "coach",
+            branchIds: ["team:one"],
+          },
+        },
+        {
+          data: {
+            id: "team:two",
+            kind: "team_season",
+            branchIds: ["team:two"],
+          },
+        },
+        ...[
+          ["qb-season", "qb:a", "team:one", "team:one"],
+          ["season-hc", "team:one", "coach:hc", "team:one"],
+          ["hc-oc", "coach:hc", "coach:oc", "team:one"],
+        ].map(([id, source, target, branchId]) => ({
+          data: { id, source, target, branchIds: [branchId] },
+        })),
+      ],
+    });
+
+    applyGraphSelection(core, "qb:a");
+    for (const id of [
+      "qb:a",
+      "team:one",
+      "coach:hc",
+      "coach:oc",
+      "qb-season",
+      "season-hc",
+      "hc-oc",
+    ]) {
+      expect(core.getElementById(id).hasClass("is-highlighted")).toBe(true);
+    }
+    expect(core.getElementById("team:two").hasClass("is-faded")).toBe(true);
+    core.destroy();
+  });
+
+  it("highlights every chronological appearance of a selected canonical identity", () => {
+    const core = cytoscape({
+      headless: true,
+      elements: [
+        {
+          data: {
+            id: "appearance:coach:a:2024",
+            canonicalId: "coach:a",
+            kind: "coach",
+          },
+        },
+        {
+          data: {
+            id: "appearance:coach:a:2025",
+            canonicalId: "coach:a",
+            kind: "coach",
+          },
+        },
+        { data: { id: "team:2024", kind: "team_season" } },
+        { data: { id: "team:2025", kind: "team_season" } },
+        { data: { id: "qb:2024", kind: "quarterback" } },
+        { data: { id: "qb:2025", kind: "quarterback" } },
+        {
+          data: {
+            id: "coach-2024",
+            source: "appearance:coach:a:2024",
+            target: "team:2024",
+          },
+        },
+        {
+          data: {
+            id: "coach-2025",
+            source: "appearance:coach:a:2025",
+            target: "team:2025",
+          },
+        },
+        {
+          data: { id: "qb-edge-2024", source: "qb:2024", target: "team:2024" },
+        },
+        {
+          data: { id: "qb-edge-2025", source: "qb:2025", target: "team:2025" },
+        },
+      ],
+    });
+    applyGraphSelection(core, "coach:a");
+    for (const id of [
+      "appearance:coach:a:2024",
+      "appearance:coach:a:2025",
+      "team:2024",
+      "team:2025",
+      "qb:2024",
+      "qb:2025",
+    ]) {
+      expect(core.getElementById(id).hasClass("is-highlighted")).toBe(true);
+    }
+    expect(core.$(":selected")).toHaveLength(2);
+    core.destroy();
+  });
+
   it("highlights the selected node, connected context, and edges while fading unrelated elements", () => {
     const core = cytoscape({
       headless: true,
@@ -219,6 +346,9 @@ describe("applyGraphSelection", () => {
       createElement(NetworkGraph, { ...props, elements, selected: "coach:a" }),
     );
     await waitFor(() => expect(activeCore).not.toBeNull());
+    expect(vi.mocked(cytoscape)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ minZoom: 0.02 }),
+    );
     const originalCore = activeCore!;
     expect(originalCore.getElementById("coach:a").selected()).toBe(true);
 
