@@ -704,6 +704,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 "WHERE a.verification_status='verified' GROUP BY c.load_id,c.assignment_key "
                 "HAVING count(*)=1 ORDER BY c.assignment_key LIMIT 2"
             ).fetchall()
+            connection.commit()
             with self.assertRaises(psycopg.Error):
                 with connection.transaction():
                     connection.execute(
