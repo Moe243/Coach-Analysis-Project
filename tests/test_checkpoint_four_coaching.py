@@ -46,9 +46,9 @@ class CheckpointFourCoachingTest(unittest.TestCase):
     def test_committed_dataset_passes_all_contracts(self) -> None:
         result = validate_coaching_data(ROOT)
         self.assertEqual(result.covered_team_seasons, 512)
-        self.assertEqual(result.assignments, 1549)
+        self.assertEqual(result.assignments, 1639)
         self.assertGreaterEqual(result.citations, result.assignments)
-        self.assertEqual(result.role_counts["play_caller"], 217)
+        self.assertEqual(result.role_counts["play_caller"], 307)
         self.assertGreater(result.role_counts["head_coach"], 512)
         self.assertGreater(result.open_reviews, 512)
 
@@ -203,6 +203,13 @@ class CheckpointFourCoachingTest(unittest.TestCase):
                 "Tim Kelly was offensive coordinator.", "quarterbacks", "fixture"
             )
 
+    def test_source_content_normalizes_entities_punctuation_and_numeric_dates(self) -> None:
+        validate_source_content(
+            "Offensive coordinator &amp; quarterbacks coach — Aug. 08, 2020",
+            "offensive coordinator & quarterbacks coach|Aug 8 2020",
+            "fixture",
+        )
+
     def test_houston_content_checks_prove_each_interval_boundary(self) -> None:
         checks = self._read("coaching_source_content_checks.csv")
         fixtures = {
@@ -244,7 +251,7 @@ class CheckpointFourCoachingTest(unittest.TestCase):
 
     def test_sourced_interim_head_coach_passes(self) -> None:
         result = validate_coaching_data(ROOT)
-        self.assertEqual(result.assignments, 1549)
+        self.assertEqual(result.assignments, 1639)
         assignments = self._read("coaching_assignments.csv")
         self.assertEqual(
             next(
@@ -300,11 +307,11 @@ class CheckpointFourCoachingTest(unittest.TestCase):
                     [row for row in rows if row["evidence_id"] != "2010-jason-garrett-interim"],
                 ),
             )
-            self.assertEqual(validate_coaching_data(root).assignments, 1549)
+            self.assertEqual(validate_coaching_data(root).assignments, 1639)
 
     def test_loading_path_preserves_each_interval_basis(self) -> None:
         connection = _RecordingConnection()
-        self.assertEqual(load_coaching_data(connection, ROOT), 1549)
+        self.assertEqual(load_coaching_data(connection, ROOT), 1639)
         loaded = [
             parameters
             for parameters in connection.assignment_parameters

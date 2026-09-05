@@ -105,7 +105,9 @@ def _verify_source_hashes(project_root: Path, expected: dict[str, str]) -> None:
 
 
 def build_coaching_coverage(
-    project_root: Path, assignment_rows: list[dict[str, str]] | None = None
+    project_root: Path,
+    assignment_rows: list[dict[str, str]] | None = None,
+    no_role_rows: list[dict[str, str]] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Return the complete 2,048-cell role matrix and unresolved caller queue."""
 
@@ -123,6 +125,9 @@ def build_coaching_coverage(
     assignments_by_grain: dict[tuple[int, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in assignments:
         assignments_by_grain[(int(row["season"]), row["team_id"], row["role"])].append(row)
+    no_roles_by_grain: dict[tuple[int, str, str], list[dict[str, str]]] = defaultdict(list)
+    for row in no_role_rows or []:
+        no_roles_by_grain[(int(row["season"]), row["team_id"], row["role"])].append(row)
     season_weeks_by_team: dict[tuple[int, str], set[int]] = defaultdict(set)
     for row in assignments:
         if row["role"] == "head_coach":
@@ -149,6 +154,14 @@ def build_coaching_coverage(
                     ),
                 )
                 role_reviews = sorted(reviews_by_grain[grain], key=lambda row: row["review_id"])
+                role_no_roles = sorted(
+                    no_roles_by_grain[grain],
+                    key=lambda row: (
+                        int(row["start_week"]),
+                        int(row["end_week"]),
+                        row["evidence_key"],
+                    ),
+                )
                 statuses = {row["verification_status"] for row in role_assignments}
                 expected_weeks = season_weeks_by_team[(season, team)]
                 verified_weeks = {
@@ -163,22 +176,28 @@ def build_coaching_coverage(
                     if row["verification_status"] in {"verified", "provisional"}
                     for week in range(int(row["start_week"]), int(row["end_week"]) + 1)
                 }
+                no_role_weeks = {
+                    week
+                    for row in role_no_roles
+                    for week in range(int(row["start_week"]), int(row["end_week"]) + 1)
+                }
+                resolved_weeks = verified_weeks | no_role_weeks
                 if "conflicting" in statuses:
                     status = "conflicting"
                 elif expected_weeks <= verified_weeks:
-                    status = "verified"
+                    status = "verified_person"
+                elif expected_weeks <= resolved_weeks and role_assignments:
+                    status = "verified_person"
+                elif expected_weeks <= no_role_weeks:
+                    status = "verified_no_designated_role"
                 elif expected_weeks <= supported_weeks and "provisional" in statuses:
                     status = "provisional"
-                elif "verified" in statuses:
-                    status = "partial_verified"
+                elif "verified" in statuses or role_no_roles:
+                    status = "partial"
                 elif "provisional" in statuses:
                     status = "provisional"
-                elif role_assignments:
-                    status = "unverified"
-                elif any(row["issue_type"] == "missing_formal_role" for row in role_reviews):
-                    status = "missing"
                 else:
-                    status = "manual_review"
+                    status = "unresolved"
                 assignment_keys = [row["assignment_key"] for row in role_assignments]
                 source_urls = sorted(
                     {
@@ -187,6 +206,7 @@ def build_coaching_coverage(
                         for citation in citations_by_key[key]
                     }
                     | {row["source_url"] for row in role_reviews}
+                    | {row["source_url"] for row in role_no_roles}
                 )
                 record = {
                     "season": season,
@@ -210,6 +230,11 @@ def build_coaching_coverage(
                     "confidence_levels": "|".join(
                         dict.fromkeys(row["confidence_level"] for row in role_assignments)
                     ),
+                    "no_role_evidence_keys": "|".join(row["evidence_key"] for row in role_no_roles),
+                    "no_role_intervals": "|".join(
+                        f"{row['start_week']}-{row['end_week']}:{row['interval_basis']}"
+                        for row in role_no_roles
+                    ),
                     "review_ids": "|".join(row["review_id"] for row in role_reviews),
                     "review_issue_types": "|".join(
                         dict.fromkeys(row["issue_type"] for row in role_reviews)
@@ -217,7 +242,7 @@ def build_coaching_coverage(
                     "source_urls": "|".join(source_urls),
                 }
                 records.append(record)
-                if role == "play_caller" and status != "verified":
+                if role == "play_caller" and status != "verified_person":
                     unresolved.append(record.copy())
                 elif role == "play_caller" and role_reviews:
                     unresolved.append(record.copy())

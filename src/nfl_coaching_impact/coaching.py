@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -72,6 +73,7 @@ AFFIRMATIVE_TEMPORARY_TERMS = (
     "interim head coach",
     "interim offensive coordinator",
     "interim play-caller",
+    "interim basis",
     "temporary coach",
     "temporary head coach",
     "temporary replacement",
@@ -85,6 +87,17 @@ NEGATED_TEMPORARY_TERMS = (
     "does not designate interim",
     "does not designate the coach interim",
     "rather than an interim",
+)
+PLAY_CALLER_EVIDENCE_TERMS = (
+    "play call",
+    "play caller",
+    "called plays",
+    "called the plays",
+    "calling plays",
+    "call plays",
+    "call the plays",
+    "calling the offense",
+    "called the offense",
 )
 
 
@@ -121,8 +134,12 @@ def normalize_coach_name(value: str) -> str:
 def validate_source_content(content: str, required_terms: str, evidence_id: str) -> None:
     """Require every pipe-delimited evidence term in fetched source content."""
 
-    normalized = " ".join(content.casefold().replace("’", "'").split())
-    missing = [term for term in required_terms.split("|") if term.casefold() not in normalized]
+    def normalize(value: str) -> str:
+        tokens = re.sub(r"[^a-z0-9]+", " ", html.unescape(value).casefold()).split()
+        return " ".join(str(int(token)) if token.isdigit() else token for token in tokens)
+
+    normalized = normalize(content)
+    missing = [term for term in required_terms.split("|") if normalize(term) not in normalized]
     if missing:
         raise CoachingDataError(
             f"source content check {evidence_id} is missing required terms: {missing}"
@@ -408,6 +425,7 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
         ):
             expected_issues = (
                 {
+                    "explicit_play_caller_evidence_required",
                     "season_interval_verification_required",
                     "partial_interval_unresolved",
                     "shared_duty_verification_required",
@@ -421,9 +439,15 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
                 )
         if row["role"] == "play_caller":
             evidence = " ".join(
-                citation["evidence_note"]
-                for citation in citations
-                if citation["assignment_key"] == row["assignment_key"]
+                [
+                    citation["evidence_note"]
+                    for citation in citations
+                    if citation["assignment_key"] == row["assignment_key"]
+                ]
+                + [
+                    check["required_terms"]
+                    for check in content_checks_by_assignment[row["assignment_key"]]
+                ]
             ).casefold()
             evidence = " ".join(evidence.replace("-", " ").split())
             verified = row["verification_status"] == "verified"
@@ -433,13 +457,16 @@ def validate_coaching_data(project_root: Path) -> CoachingValidationResult:
                 and any(
                     (*grain, issue) in review_issues
                     for issue in (
+                        "explicit_play_caller_evidence_required",
                         "season_interval_verification_required",
                         "partial_interval_unresolved",
                         "shared_duty_verification_required",
                     )
                 )
             )
-            if not (verified or allowed_provisional) or "play call" not in evidence:
+            if not (verified or allowed_provisional) or not any(
+                term in evidence for term in PLAY_CALLER_EVIDENCE_TERMS
+            ):
                 raise CoachingDataError(
                     f"play-caller assignment lacks explicit evidence or review routing: "
                     f"{row['assignment_key']}"

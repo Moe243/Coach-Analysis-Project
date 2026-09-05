@@ -106,19 +106,19 @@ class CheckpointElevenTests(unittest.TestCase):
         self.assertTrue(
             statuses
             <= {
-                "verified",
-                "partial_verified",
+                "verified_person",
+                "verified_no_designated_role",
+                "partial",
                 "provisional",
                 "conflicting",
-                "missing",
-                "manual_review",
+                "unresolved",
             }
         )
-        self.assertTrue({"verified", "provisional", "missing", "manual_review"} <= statuses)
+        self.assertTrue({"verified_person", "provisional", "unresolved"} <= statuses)
         self.assertEqual(
             512,
             coverage.filter(
-                (pl.col("role") == "head_coach") & (pl.col("coverage_status") == "verified")
+                (pl.col("role") == "head_coach") & (pl.col("coverage_status") == "verified_person")
             ).height,
         )
         self.assertEqual(512, coverage.filter(pl.col("role") == "play_caller").height)

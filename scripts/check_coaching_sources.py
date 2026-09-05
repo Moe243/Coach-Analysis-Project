@@ -54,6 +54,14 @@ additional_overlay_urls = sorted(overlay_urls - citation_urls - book_urls)
 for index, url in enumerate(additional_overlay_urls, start=1):
     check_url(url, f"Eleven-B source {index}/{len(additional_overlay_urls)}")
 
+no_role_path = ROOT / "data" / "manual" / "coaching_no_role_evidence_11b.csv"
+with no_role_path.open(newline="", encoding="utf-8") as handle:
+    no_role_rows = list(csv.DictReader(handle))
+no_role_urls = {row["source_url"] for row in no_role_rows}
+additional_no_role_urls = sorted(no_role_urls - overlay_urls - citation_urls - book_urls)
+for index, url in enumerate(additional_no_role_urls, start=1):
+    check_url(url, f"Eleven-B no-role source {index}/{len(additional_no_role_urls)}")
+
 evidence_path = ROOT / "data" / "manual" / "coaching_source_content_checks.csv"
 with evidence_path.open(newline="", encoding="utf-8") as handle:
     evidence_rows = list(csv.DictReader(handle))
@@ -79,3 +87,15 @@ for row in overlay_rows:
         content_by_url[row["source_url"]] = content
     validate_source_content(content, row["required_terms"], row["assignment_key"])
     print(f"Eleven-B content {row['assignment_key']}: ok")
+
+for row in no_role_rows:
+    if not row["required_terms"].strip():
+        continue
+    content = content_by_url.get(row["source_url"])
+    if content is None:
+        request = urllib.request.Request(row["source_url"], headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(request, context=context, timeout=30) as response:
+            content = response.read().decode("utf-8", errors="replace")
+        content_by_url[row["source_url"]] = content
+    validate_source_content(content, row["required_terms"], row["evidence_key"])
+    print(f"Eleven-B no-role content {row['evidence_key']}: ok")

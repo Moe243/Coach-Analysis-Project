@@ -55,6 +55,7 @@ OUTPUT_NAMES = (
 )
 PAE_KEY = ("data_version", "player_id", "team_id", "season")
 FORMAL_ROLES = {"offensive_coordinator", "quarterbacks_coach"}
+NO_ROLE_STATUS = "verified_no_designated_role"
 
 
 def _pae_path(project_root: Path) -> Path:
@@ -94,6 +95,10 @@ def _evidence_assignments(project_root: Path) -> list[dict[str, str]]:
     if len(keys) != len(set(keys)):
         raise ValueError("Eleven-B evidence assignments contain duplicate keys")
     return rows
+
+
+def _no_role_evidence(project_root: Path) -> list[dict[str, str]]:
+    return _read_csv(project_root / "data/manual/coaching_no_role_evidence_11b.csv")
 
 
 def validate_checkpoint_eleven_b_evidence(project_root: Path) -> int:
@@ -144,13 +149,52 @@ def validate_checkpoint_eleven_b_evidence(project_root: Path) -> int:
                     "Eleven-B overlay has overlapping non-shared assignments: "
                     f"{left[3]} and {right[3]}"
                 )
-    return len(rows)
+    no_role_rows = _no_role_evidence(project_root)
+    no_role_keys = [row["evidence_key"] for row in no_role_rows]
+    if len(no_role_keys) != len(set(no_role_keys)):
+        raise ValueError("Eleven-B no-role evidence contains duplicate evidence keys")
+
+    assignment_weeks = {
+        (int(row["season"]), row["team_id"], row["role"], week)
+        for row in rows
+        for week in range(int(row["start_week"]), int(row["end_week"]) + 1)
+    }
+    for row in no_role_rows:
+        key = row["evidence_key"]
+        role = row["role"]
+        season = int(row["season"])
+        start = int(row["start_week"])
+        end = int(row["end_week"])
+        final_week = 18 if season >= 2021 else 17
+        if role not in FORMAL_ROLES or row["resolution_status"] != NO_ROLE_STATUS:
+            raise ValueError(f"Eleven-B no-role evidence has invalid role/status: {key}")
+        if not 1 <= start <= end <= final_week:
+            raise ValueError(f"Eleven-B no-role evidence has invalid week interval: {key}")
+        parsed = urlparse(row["source_url"])
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError(f"Eleven-B no-role evidence lacks an HTTPS source: {key}")
+        note = " ".join(row["evidence_note"].casefold().replace("-", " ").split())
+        if "no separately designated" not in note:
+            raise ValueError(f"Eleven-B no-role evidence lacks explicit absence evidence: {key}")
+        overlap = [
+            week
+            for week in range(start, end + 1)
+            if (season, row["team_id"], role, week) in assignment_weeks
+        ]
+        if overlap:
+            detail = f"{key}; weeks={overlap[:3]}"
+            raise ValueError(f"Eleven-B no-role evidence overlaps a person assignment: {detail}")
+    return len(rows) + len(no_role_rows)
 
 
 def build_evidence_coverage(project_root: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Build coverage using the research overlay without mutating serving assignments."""
 
-    return build_coaching_coverage(project_root, _evidence_assignments(project_root))
+    return build_coaching_coverage(
+        project_root,
+        _evidence_assignments(project_root),
+        _no_role_evidence(project_root),
+    )
 
 
 def build_pae_joinability(
@@ -375,10 +419,10 @@ def run_checkpoint_eleven_b(project_root: Path, output_root: Path | None = None)
                     if not season_attributed.is_empty()
                     else 0
                 ),
-                "full_coverage_teams": statuses.filter(statuses == "verified").len(),
-                "partial_coverage_teams": statuses.filter(statuses == "partial_verified").len(),
+                "full_coverage_teams": statuses.filter(statuses == "verified_person").len(),
+                "partial_coverage_teams": statuses.filter(statuses == "partial").len(),
                 "unresolved_teams": statuses.filter(
-                    ~statuses.is_in(["verified", "partial_verified"])
+                    ~statuses.is_in(["verified_person", "partial"])
                 ).len(),
                 "model_available": season in target_seasons,
             }

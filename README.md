@@ -8,7 +8,7 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
-All nine release checkpoints are complete. Checkpoint Eleven-B is an uncommitted, research-only evidence extension: its separate evidence overlay verifies formal OC/QB-coach titles where supported without rewriting frozen serving assignments, adds complete weekly play-caller maps for 2023–2025, and rebuilds leakage-safe historical PCAE readiness. The deployed Render/Neon release and Checkpoint Eleven Relationship Explorer are unchanged. Neither the local nor deployed interface turns same-team-season context into exact weekly overlap or causal coach attribution.
+All nine release checkpoints are complete. Checkpoint Eleven-B is an uncommitted, research-only evidence extension: its separate evidence overlay verifies formal OC/QB-coach titles where supported without rewriting frozen serving assignments, represents a verified absence when no separate formal role existed, and rebuilds leakage-safe historical PCAE readiness. The final adversarial matrix contains 488 verified-person and 24 verified-no-separate-role OC cells; 496 verified-person and 16 verified-no-separate-role QB-coach cells; and 119 verified, one partial, 125 provisional, and 267 unresolved play-caller cells. The November 2017 all-team caller source is bounded through Week 10 rather than extrapolated through season end. The deployed Render/Neon release and Checkpoint Eleven Relationship Explorer are unchanged. Neither the local nor deployed interface turns same-team-season context into exact weekly overlap or causal coach attribution.
 
 - [Live application](https://nfl-coaching-impact-engine.onrender.com)
 - [Live API](https://nfl-coaching-impact-api.onrender.com)

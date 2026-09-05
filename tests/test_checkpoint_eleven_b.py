@@ -135,7 +135,7 @@ class CheckpointElevenBTests(unittest.TestCase):
             (pl.col("role") == "play_caller") & pl.col("season").is_in([2024, 2025])
         )
         self.assertEqual(64, recent.height)
-        self.assertEqual({"verified"}, set(recent["coverage_status"]))
+        self.assertEqual({"verified_person"}, set(recent["coverage_status"]))
 
         assignments = self._read("coaching_assignments.csv")
         expected = {
@@ -151,6 +151,191 @@ class CheckpointElevenBTests(unittest.TestCase):
                 and row["role"] == "play_caller"
             ]
             self.assertEqual(intervals, actual)
+
+    def test_2017_play_callers_do_not_infer_future_weeks_from_november_source(self) -> None:
+        coverage, _ = build_evidence_coverage(ROOT)
+        season = coverage.filter((pl.col("role") == "play_caller") & (pl.col("season") == 2017))
+        self.assertEqual(32, season.height)
+        self.assertEqual(
+            {"verified_person": 3, "provisional": 29},
+            {
+                row["coverage_status"]: row["len"]
+                for row in season.group_by("coverage_status").len().to_dicts()
+            },
+        )
+
+        assignments = self._read("coaching_assignments.csv")
+        expected = {
+            "CIN": [(1, 2, "Ken Zampese"), (3, 17, "Bill Lazor")],
+            "DEN": [(1, 11, "Mike McCoy"), (12, 17, "Bill Musgrave")],
+            "KC": [(1, 12, "Andy Reid"), (13, 17, "Matt Nagy")],
+            "NYG": [
+                (1, 5, "Ben McAdoo", "verified"),
+                (6, 10, "Mike Sullivan", "verified"),
+                (11, 17, "Mike Sullivan", "provisional"),
+            ],
+            "ARI": [
+                (1, 10, "Bruce Arians", "verified"),
+                (11, 17, "Bruce Arians", "provisional"),
+            ],
+        }
+        for team, intervals in expected.items():
+            actual = [
+                (
+                    int(row["start_week"]),
+                    int(row["end_week"]),
+                    row["coach_canonical_name"],
+                    row["verification_status"],
+                )
+                for row in assignments
+                if row["season"] == "2017"
+                and row["team_id"] == team
+                and row["role"] == "play_caller"
+            ]
+            if team in {"CIN", "DEN", "KC"}:
+                actual = [item[:3] for item in actual]
+            self.assertEqual(intervals, actual)
+
+    def test_2018_play_caller_changes_preserve_observed_intervals(self) -> None:
+        assignments = self._read("coaching_assignments.csv")
+        expected = {
+            "ARI": [(1, 7, "Mike McCoy"), (8, 17, "Byron Leftwich")],
+            "CLE": [(1, 8, "Todd Haley"), (9, 17, "Freddie Kitchens")],
+            "JAX": [(1, 12, "Nathaniel Hackett"), (13, 17, "Scott Milanovich")],
+            "MIN": [(1, 14, "John DeFilippo"), (15, 17, "Kevin Stefanski")],
+        }
+        for team, intervals in expected.items():
+            actual = [
+                (int(row["start_week"]), int(row["end_week"]), row["coach_canonical_name"])
+                for row in assignments
+                if row["season"] == "2018"
+                and row["team_id"] == team
+                and row["role"] == "play_caller"
+            ]
+            self.assertEqual(intervals, actual)
+
+        stefanski = next(
+            row
+            for row in assignments
+            if row["assignment_key"] == "2018-MIN-play_caller-15-17-kevin-stefanski"
+        )
+        self.assertEqual("true", stefanski["is_interim"])
+
+    def test_formal_role_sanity_pass_preserves_compound_titles_and_no_role_states(self) -> None:
+        evidence = self._read("coaching_evidence_11b.csv")
+        no_role_evidence = self._read("coaching_no_role_evidence_11b.csv")
+        godsey = next(
+            row
+            for row in evidence
+            if row["assignment_key"] == "2016-HOU-quarterbacks_coach-01-17-george-godsey"
+        )
+        self.assertIn("offensive coordinator & quarterbacks", godsey["evidence_note"])
+        self.assertFalse(
+            any(
+                row["season"] == "2016"
+                and row["team_id"] == "HOU"
+                and row["role"] == "play_caller"
+                and row["coach_id"] == "coach-george-godsey"
+                for row in evidence
+            )
+        )
+
+        coverage, _ = build_evidence_coverage(ROOT)
+        no_role_cells = {
+            (2010, "ARI", "offensive_coordinator"),
+            (2011, "CLE", "offensive_coordinator"),
+            (2023, "ATL", "quarterbacks_coach"),
+        }
+        actual = {
+            (row["season"], row["team_id"], row["role"])
+            for row in coverage.filter(
+                pl.col("coverage_status") == "verified_no_designated_role"
+            ).to_dicts()
+        }
+        self.assertTrue(no_role_cells.issubset(actual))
+        excluded_assistant_titles = {
+            (2010, "DET"),
+            (2011, "DET"),
+            (2012, "MIA"),
+            (2016, "KC"),
+            (2017, "KC"),
+            (2018, "IND"),
+            (2021, "LA"),
+        }
+        self.assertFalse(
+            any(
+                (int(row["season"]), row["team_id"]) in excluded_assistant_titles
+                and row["role"] == "quarterbacks_coach"
+                for row in evidence
+            )
+        )
+        self.assertEqual(
+            excluded_assistant_titles,
+            {
+                (int(row["season"]), row["team_id"])
+                for row in no_role_evidence
+                if (int(row["season"]), row["team_id"]) in excluded_assistant_titles
+                and row["role"] == "quarterbacks_coach"
+            },
+        )
+        for season, team in ((2013, "BUF"), (2021, "JAX")):
+            status = coverage.filter(
+                (pl.col("season") == season)
+                & (pl.col("team_id") == team)
+                & (pl.col("role") == "quarterbacks_coach")
+            )["coverage_status"].item()
+            self.assertEqual("verified_person", status)
+
+    def test_no_role_evidence_is_validated_and_cannot_overlap_a_person(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._copy_manual(Path(directory))
+            path = root / "data/manual/coaching_no_role_evidence_11b.csv"
+
+            def overlap_person(rows: list[dict[str, str]]) -> None:
+                row = next(
+                    row
+                    for row in rows
+                    if row["evidence_key"] == "2010-ARI-offensive_coordinator-no-role-01-17"
+                )
+                row["team_id"] = "ATL"
+
+            self._mutate(path, overlap_person)
+            with self.assertRaisesRegex(ValueError, "overlaps a person assignment"):
+                validate_checkpoint_eleven_b_evidence(root)
+
+    def test_oc_and_qb_coach_cells_use_explicit_resolution_states(self) -> None:
+        coverage, _ = build_evidence_coverage(ROOT)
+        for role in ("offensive_coordinator", "quarterbacks_coach"):
+            role_rows = coverage.filter(pl.col("role") == role)
+            self.assertEqual(512, role_rows.height)
+            self.assertFalse(
+                set(role_rows["coverage_status"])
+                & {"unresolved", "conflicting", "partial", "provisional"}
+            )
+        resolved_absences = coverage.filter(
+            pl.col("coverage_status") == "verified_no_designated_role"
+        )
+        self.assertTrue(resolved_absences["source_urls"].is_not_null().all())
+        self.assertTrue((resolved_absences["source_urls"].str.len_chars() > 0).all())
+
+    def test_arizona_2018_role_change_does_not_overstate_full_season_titles(self) -> None:
+        evidence = self._read("coaching_evidence_11b.csv")
+        rows = [row for row in evidence if row["season"] == "2018" and row["team_id"] == "ARI"]
+        offensive_coordinators = [
+            (int(row["start_week"]), int(row["end_week"]), row["coach_canonical_name"])
+            for row in rows
+            if row["role"] == "offensive_coordinator"
+        ]
+        quarterback_coaches = [
+            (int(row["start_week"]), int(row["end_week"]), row["coach_canonical_name"])
+            for row in rows
+            if row["role"] == "quarterbacks_coach"
+        ]
+        self.assertEqual(
+            [(1, 7, "Mike McCoy"), (8, 17, "Byron Leftwich")],
+            offensive_coordinators,
+        )
+        self.assertEqual([(1, 7, "Byron Leftwich")], quarterback_coaches)
 
     def test_jacksonville_2023_uses_official_press_taylor_evidence(self) -> None:
         row = next(
