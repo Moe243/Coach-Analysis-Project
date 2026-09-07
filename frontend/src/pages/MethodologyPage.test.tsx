@@ -42,14 +42,14 @@ describe("MethodologyPage", () => {
     expect(document.body).not.toHaveTextContent(
       /component weights|residualization|shrinkage/i,
     );
-    expect(await screen.findByText("api-v1.4")).toBeInTheDocument();
+    expect(await screen.findByText("api-v1.5")).toBeInTheDocument();
   });
 
   it("has no automated accessibility violations", async () => {
     installApiFixture();
     renderRoute(<MethodologyPage />, "/methodology");
     await screen.findByRole("heading", { name: "How to read Coach Effect" });
-    await screen.findByText("api-v1.4");
+    await screen.findByText("api-v1.5");
     const result = await axe.run(document.body, {
       rules: {
         region: { enabled: false },

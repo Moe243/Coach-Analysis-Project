@@ -111,7 +111,7 @@ Roles are `head_coach`, `offensive_coordinator`, `play_caller`, and `quarterback
 
 ### Checkpoint-seven serving layer
 
-Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, coach model/data, and enhancement data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. The local Stage 1 candidate uses schema `checkpoint-7.4`, loader `serving-loader-v6`, and API `api-v1.4`. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
+Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts from crossing versions. `serving_loads` records schema, loader, API, historical, PAE, coach model/data, and enhancement data versions plus combined upstream and manual-input manifest digests. `serving_publication` selects exactly one visible load. The current candidate uses schema `checkpoint-7.5`, loader `serving-loader-v7`, and API `api-v1.5`. Manual CSV rows are parsed from the exact captured bytes used for their digest, and a final pre-publication hash check fails closed if any file changes during loading.
 
 | Table/view | Grain or contract |
 |---|---|
@@ -123,7 +123,7 @@ Every `serving_*` fact includes `load_id`; composite foreign keys prevent facts 
 | `canonical_qb_game_performance`, `canonical_qb_team_season_performance`, `canonical_qb_pae` | Versioned production-bound copies containing only identities whose canonical position is `QB`; source checkpoints remain immutable |
 | `qb_eligibility_exclusions` | Explicit audit rows removed from QB publication, retaining source dataset, canonical position, and exclusion reason |
 | `serving_team_season_statistics` | One team-season with W-L-T, points, PBP-derived yards/TD/turnovers/sacks, EPA and success rates, and within-season competition ranks |
-| `serving_coaching_completeness` | One `(team_id, season, role)` audit cell with explicit assignment/manual-review state and interval metadata payload |
+| `serving_coaching_completeness` | One `(team_id, season, role)` audit cell with final Eleven-B status, evidence version, source URLs, and person/no-role interval evidence. `verified` means a named assignment is verified; `verified_no_designated_role` means the sourced absence of a separate role holder is verified; `partial`, `provisional`, `conflicting`, and `unresolved` preserve incomplete states. The legacy API filter `missing` aliases `unresolved`. No-role cells never create coach identities or assignments. |
 | `serving_inherited_environment` | One team-season, strictly preseason context row with `feature_source_max_season < season` |
 | `serving_coach_assignments`, `serving_coach_citations` | Source-backed role interval and evidence |
 | `serving_review_queue` | Manual-review item with full source payload |

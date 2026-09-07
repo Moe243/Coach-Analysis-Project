@@ -32,11 +32,12 @@ variables and are never committed.
 7. Record the verified URLs and evidence in `CHECKPOINT_9_REPORT.md`, then tag
    the release.
 
-The verified publication load is `5d8d74f5-70a5-53a8-8af7-e5c61d9f1892`
-under schema `checkpoint-7.2`, loader `serving-loader-v3`, and API contract
-`api-v1.2`. Migrations are applied from immutable Alembic revision resources;
-the loader publishes in one transaction and changes the active pointer only
-after every validation succeeds.
+The deterministic coaching-completeness publication is
+`22680407-d503-5290-bda2-18f4cbcb622a` under schema `checkpoint-7.5`, loader
+`serving-loader-v7`, and API contract `api-v1.5`. The load identity includes the
+captured Eleven-B manual evidence bytes. Migrations are applied from immutable
+Alembic revision resources; the loader publishes in one transaction and changes
+the active pointer only after every validation succeeds.
 
 The static-site rewrite sends client-side routes to `index.html`. The API CORS
 configuration rejects wildcard origins. Render health checks call `/health`,

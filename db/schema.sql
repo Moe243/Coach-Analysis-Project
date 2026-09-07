@@ -1107,7 +1107,10 @@ CREATE TABLE serving_coaching_completeness (
     season smallint NOT NULL,
     role coach_role NOT NULL,
     assignment_status text NOT NULL
-        CHECK (assignment_status IN ('verified', 'provisional', 'conflicting', 'missing')),
+        CHECK (assignment_status IN (
+            'verified', 'verified_no_designated_role', 'partial',
+            'provisional', 'conflicting', 'unresolved'
+        )),
     review_status text NOT NULL CHECK (review_status IN ('complete', 'manual_review')),
     requires_manual_review boolean NOT NULL,
     assignment_count smallint NOT NULL CHECK (assignment_count >= 0),
@@ -1117,9 +1120,21 @@ CREATE TABLE serving_coaching_completeness (
     has_interim boolean NOT NULL,
     has_shared_duty boolean NOT NULL,
     has_unclear_interval boolean NOT NULL,
+    evidence_version text NOT NULL,
+    source_urls jsonb NOT NULL CHECK (jsonb_typeof(source_urls) = 'array'),
+    evidence_intervals jsonb NOT NULL CHECK (jsonb_typeof(evidence_intervals) = 'array'),
     payload jsonb NOT NULL,
     PRIMARY KEY (load_id, team_id, season, role),
-    FOREIGN KEY (load_id, team_id) REFERENCES serving_teams(load_id, team_id)
+    FOREIGN KEY (load_id, team_id) REFERENCES serving_teams(load_id, team_id),
+    CHECK (
+        assignment_status <> 'verified_no_designated_role'
+        OR (
+            assignment_count = 0
+            AND verified_assignment_count = 0
+            AND jsonb_array_length(source_urls) > 0
+            AND jsonb_array_length(evidence_intervals) > 0
+        )
+    )
 );
 
 CREATE TABLE serving_inherited_environment (

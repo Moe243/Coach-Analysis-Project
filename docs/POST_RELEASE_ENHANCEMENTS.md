@@ -57,11 +57,11 @@ tables. `api_qb_statistics` left joins supplemental facts by the
 complete `(load_id, player_id, team_id, season)` key, preserving every existing QB row even
 when an additive fact is unavailable. `GET /coaching/completeness` exposes the audit matrix;
 `GET /environment` exposes only timing-safe team-season context; `GET /team-seasons` exposes
-descriptive target-season team results and offense. API contract `api-v1.4`, schema
-`checkpoint-7.4`, and loader `serving-loader-v6` include the enhancement data version
+descriptive target-season team results and offense. API contract `api-v1.5`, schema
+`checkpoint-7.5`, and loader `serving-loader-v7` include the enhancement data version
 in the deterministic serving identity. These additive code and artifact contracts require an
-explicit migration/load/release; this foundation does not mutate the existing deployed
-publication by itself.
+explicit migration/load/release. The coaching-completeness hotfix performs that authorized
+publication without changing PAE, PCAE, or frozen named assignments.
 
 ## Evidence and limits
 

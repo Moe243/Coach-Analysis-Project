@@ -20,10 +20,11 @@ from psycopg.types.json import Jsonb
 from .errors import PipelineError
 from .pipeline import _validate_existing_version
 from .qb_eligibility import assert_canonical_qb_rows, partition_canonical_qb_rows
+from .serving_completeness import build_serving_coaching_completeness
 
-SCHEMA_VERSION = "checkpoint-7.4"
-LOADER_VERSION = "serving-loader-v6"
-API_CONTRACT_VERSION = "api-v1.4"
+SCHEMA_VERSION = "checkpoint-7.5"
+LOADER_VERSION = "serving-loader-v7"
+API_CONTRACT_VERSION = "api-v1.5"
 PUBLICATION_NAMESPACE = uuid.UUID("c79812ad-1480-48ec-9972-e94b6f158a31")
 
 
@@ -393,6 +394,7 @@ def load_serving_database(database_url: str, project_root: Path) -> ServingLoadR
 
     versions, frames, manifest_paths = _source_tables(project_root)
     manual = _manual_snapshot(project_root)
+    frames["coaching_completeness"] = build_serving_coaching_completeness(manual.rows)
     team_by_abbr = dict(frames["teams"].select("team_abbr", "team_id").iter_rows())
     _validate_sources(frames, manual, team_by_abbr)
     load_id = _serving_load_id(versions, manual.digest)
@@ -777,8 +779,12 @@ def _insert_frames(
         ],
     )
     many(
-        "INSERT INTO serving_coaching_completeness VALUES "
-        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO serving_coaching_completeness "
+        "(load_id,team_id,season,role,assignment_status,review_status,"
+        "requires_manual_review,assignment_count,verified_assignment_count,citation_count,"
+        "has_in_season_change,has_interim,has_shared_duty,has_unclear_interval,"
+        "evidence_version,source_urls,evidence_intervals,payload) VALUES "
+        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         [
             (
                 lid,
@@ -795,7 +801,10 @@ def _insert_frames(
                 r["has_interim"],
                 r["has_shared_duty"],
                 r["has_unclear_interval"],
-                _payload(r),
+                r["evidence_version"],
+                Jsonb(r["source_urls"]),
+                Jsonb(r["evidence_intervals"]),
+                _payload(r["payload"]),
             )
             for r in frames["coaching_completeness"].to_dicts()
         ],

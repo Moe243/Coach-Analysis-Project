@@ -150,12 +150,34 @@ class RelationshipSemantics(ApiModel):
     exact_weekly_overlap: bool
 
 
+class RelationshipCoachingCompleteness(ApiModel):
+    team_id: str
+    team_abbr: str
+    team_name: str
+    season: int
+    role: str
+    assignment_status: str
+    review_status: str
+    requires_manual_review: bool
+    assignment_count: int
+    verified_assignment_count: int
+    citation_count: int
+    has_in_season_change: bool
+    has_interim: bool
+    has_shared_duty: bool
+    has_unclear_interval: bool
+    evidence_version: str
+    source_urls: list[str]
+    evidence_intervals: list[dict[str, Any]]
+
+
 class RelationshipExplorerResponse(ApiModel):
     query: RelationshipQuery
     versions: Versions
     semantics: RelationshipSemantics
     nodes: list[RelationshipNode]
     relationships: list[Relationship]
+    coaching_completeness: list[RelationshipCoachingCompleteness]
     node_count: int
     relationship_count: int
     max_nodes: int
@@ -549,7 +571,16 @@ def coaching_completeness(
     team_id: str | None = None,
     season: int | None = Query(None, ge=2010, le=2025),
     role: CoachRole | None = None,
-    assignment_status: Literal["verified", "provisional", "conflicting", "missing"] | None = None,
+    assignment_status: Literal[
+        "verified",
+        "verified_no_designated_role",
+        "partial",
+        "provisional",
+        "conflicting",
+        "unresolved",
+        "missing",
+    ]
+    | None = None,
     requires_manual_review: bool | None = None,
     limit: Limit = 50,
     offset: Offset = 0,
@@ -558,7 +589,7 @@ def coaching_completeness(
         "team_id": team_id,
         "season": season,
         "role::text": role.value if role else None,
-        "assignment_status": assignment_status,
+        "assignment_status": "unresolved" if assignment_status == "missing" else assignment_status,
         "requires_manual_review": requires_manual_review,
     }
     clauses = [f"{column} = %s" for column, value in values.items() if value is not None]
@@ -677,6 +708,38 @@ def _relationship_qb_rows(
     if player_id:
         params.append(player_id)
     params.append(relationship_limit + 1)
+    return connection.execute(query, params).fetchall()
+
+
+def _relationship_completeness_rows(
+    connection: Any,
+    team_seasons: set[tuple[str, int]],
+    *,
+    role: CoachRole | None,
+) -> list[dict[str, Any]]:
+    if not team_seasons:
+        return []
+    ordered_scope = sorted(team_seasons, key=lambda item: (item[1], item[0]))
+    values = sql.SQL(", ").join(sql.SQL("(%s, %s)") for _ in ordered_scope)
+    role_clause = sql.SQL(" AND c.role::text = %s") if role else sql.SQL("")
+    query = sql.SQL(
+        """
+        WITH scope(team_id, season) AS (VALUES {values})
+        SELECT c.team_id, c.team_abbr, c.team_name, c.season, c.role::text,
+               c.assignment_status, c.review_status, c.requires_manual_review,
+               c.assignment_count, c.verified_assignment_count, c.citation_count,
+               c.has_in_season_change, c.has_interim, c.has_shared_duty,
+               c.has_unclear_interval, c.evidence_version, c.source_urls,
+               c.evidence_intervals
+          FROM api_coaching_completeness c
+          JOIN scope s ON s.team_id = c.team_id AND s.season = c.season
+         WHERE true {role_clause}
+         ORDER BY c.season, c.team_id, c.role
+        """
+    ).format(values=values, role_clause=role_clause)
+    params: list[Any] = [value for item in ordered_scope for value in item]
+    if role:
+        params.append(role.value)
     return connection.execute(query, params).fetchall()
 
 
@@ -821,6 +884,11 @@ def relationship_explorer(
             if assignment_keys
             else []
         )
+        completeness_rows = _relationship_completeness_rows(
+            connection,
+            team_seasons,
+            role=role,
+        )
 
     citations: dict[str, list[RelationshipCitation]] = {}
     for row in citation_rows:
@@ -964,6 +1032,7 @@ def relationship_explorer(
         ),
         nodes=nodes,
         relationships=relationships,
+        coaching_completeness=completeness_rows,
         node_count=len(nodes),
         relationship_count=len(relationships),
         max_nodes=node_limit,

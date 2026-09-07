@@ -493,6 +493,18 @@ export function NetworkPage() {
   const selectedRelationships = selected
     ? (graph?.relationshipsByNode.get(selected) ?? [])
     : [];
+  const completeness = explorer.data?.coaching_completeness ?? [];
+  const selectedCompleteness =
+    selectedNode?.node_type === "team_season"
+      ? completeness.filter(
+          (row) =>
+            row.team_id === selectedNode.team_id &&
+            row.season === selectedNode.season,
+        )
+      : [];
+  const noRoleCompleteness = completeness.filter(
+    (row) => row.assignment_status === "verified_no_designated_role",
+  );
   const explorerSearchOptions = useMemo(() => {
     const query = networkSearch.trim().toLocaleLowerCase();
     if (!query || !graph) return [];
@@ -631,7 +643,7 @@ export function NetworkPage() {
       <div className="page-heading">
         <div>
           <p className="eyebrow">
-            Canonical entities · Source-backed intervals · API v1.4
+            Canonical entities · Source-backed intervals · API v1.5
           </p>
           <h1>Relationship Explorer</h1>
           <p>
@@ -1198,6 +1210,17 @@ export function NetworkPage() {
                     {selectedRelationships.length === 1 ? "" : "s"}. Unrelated
                     graph elements are faded.
                   </p>
+                  {selectedCompleteness.length > 0 && (
+                    <div className="selection-relationship">
+                      <strong>Coaching role status</strong>
+                      {selectedCompleteness.map((row) => (
+                        <small key={`${row.team_id}-${row.season}-${row.role}`}>
+                          {roleLabel(row.role)} ·{" "}
+                          {row.assignment_status.replaceAll("_", " ")}
+                        </small>
+                      ))}
+                    </div>
+                  )}
                   {selectedNode.node_type === "coach" && (
                     <Link
                       className="button button-secondary"
@@ -1296,6 +1319,42 @@ export function NetworkPage() {
                 </article>
               ))}
             </div>
+            {noRoleCompleteness.length > 0 && (
+              <div
+                className="connection-grid relationship-card-grid"
+                aria-label="Verified no separately designated coaching roles"
+              >
+                {noRoleCompleteness.map((row) => (
+                  <article key={`${row.team_id}-${row.season}-${row.role}`}>
+                    <p className="relationship-grain">
+                      {row.team_abbr} {row.season} · {roleLabel(row.role)}
+                    </p>
+                    <h3>Verified no separately designated role</h3>
+                    <p>
+                      The sourced staff record verifies that no separate person
+                      held this role. No coach node or assignment is created.
+                    </p>
+                    <StatusBadge value="verified no designated role" />
+                    <small>Evidence {row.evidence_version}</small>
+                    {row.source_urls.length > 0 && (
+                      <ul className="relationship-citations">
+                        {row.source_urls.map((sourceUrl) => (
+                          <li key={sourceUrl}>
+                            <a
+                              href={sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open no-role source
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
             <div className="connection-grid relationship-card-grid">
               {graph.relationships.map((relationship) => (
                 <article key={relationship.relationship_id}>

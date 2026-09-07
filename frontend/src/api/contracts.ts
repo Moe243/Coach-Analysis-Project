@@ -353,6 +353,33 @@ export interface QbTeamSeasonRelationship {
 export type Relationship =
   CoachAssignmentRelationship | QbTeamSeasonRelationship;
 
+export interface RelationshipCoachingCompleteness {
+  team_id: string;
+  team_abbr: string;
+  team_name: string;
+  season: number;
+  role: CoachRole;
+  assignment_status:
+    | "verified"
+    | "verified_no_designated_role"
+    | "partial"
+    | "provisional"
+    | "conflicting"
+    | "unresolved";
+  review_status: "complete" | "manual_review";
+  requires_manual_review: boolean;
+  assignment_count: number;
+  verified_assignment_count: number;
+  citation_count: number;
+  has_in_season_change: boolean;
+  has_interim: boolean;
+  has_shared_duty: boolean;
+  has_unclear_interval: boolean;
+  evidence_version: string;
+  source_urls: string[];
+  evidence_intervals: Array<Record<string, unknown>>;
+}
+
 export interface RelationshipExplorerResponse {
   query: {
     mode: RelationshipMode;
@@ -374,6 +401,7 @@ export interface RelationshipExplorerResponse {
   };
   nodes: RelationshipNode[];
   relationships: Relationship[];
+  coaching_completeness?: RelationshipCoachingCompleteness[];
   node_count: number;
   relationship_count: number;
   max_nodes: number;

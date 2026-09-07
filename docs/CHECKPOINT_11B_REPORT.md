@@ -1,7 +1,7 @@
 # Checkpoint Eleven-B report
 
 Date: 2026-09-04
-Status: independent adversarial review completed locally; uncommitted; not pushed or deployed
+Status: independent adversarial review completed; serving-completeness publication authorized
 
 ## Scope and evidence standard
 
@@ -16,8 +16,9 @@ text establishing play-calling responsibility and defensible weekly boundaries. 
 `season_designation` may resolve the person for the coverage matrix, but it is excluded from PCAE
 attribution unless its weekly interval is independently bounded. Shared intervals remain shared.
 
-The research overlay does not promote frozen serving assignments or change the deployed database,
-API, frontend, PAE/PCAE formulas, Coach Effect logic, rankings, or deployment.
+The research overlay does not promote frozen named assignments or change PAE/PCAE formulas, Coach
+Effect logic, or rankings. A subsequent authorized serving hotfix publishes its completeness status
+and provenance without creating people, assignments, or graph edges for no-role cells.
 
 ## Recalculated starting and final coverage
 
@@ -35,9 +36,9 @@ Final evidence-state coverage is:
 | Quarterbacks coach | 496 | 16 | 0 | 0 | 0 | 512 |
 | Play caller | 119 | 0 | 1 | 125 | 267 | 512 |
 
-No OC or QB-coach cell remains unresolved in the research coverage matrix. This does not mutate
-the frozen serving layer: the production manual queue still contains its prior season-interval
-reviews until a later authorized publication step.
+No OC or QB-coach cell remains unresolved in the evidence coverage matrix. The authorized serving
+hotfix materializes these results in a separate completeness representation while leaving the
+frozen named-assignment rows and their season-interval review history intact.
 
 ## Corrections from the independent review
 
@@ -177,8 +178,8 @@ both opt-in network tests passed; and the complete source validator passed all r
 contracts, and nonblank overlay/no-role source terms. Ruff lint, Ruff formatting, deterministic
 clean-rebuild tests, and `git diff --check` also passed. Generated research outputs remain ignored.
 
-OC and QB-coach research coverage is complete only because verified no-separate-role is an explicit
+OC and QB-coach evidence coverage is complete only because verified no-separate-role is an explicit
 outcome; it is not a person assignment. Play-caller coverage remains materially incomplete. The
 production Coach Effect gate remains closed, the Coach Effect equation remains open, and no effect,
-weight, score, or ranking was estimated. Nothing in this worktree has been committed, pushed,
-deployed, or written to Neon.
+weight, score, or ranking was estimated. The serving hotfix publishes only this evidence-state
+completeness after its independent release validation succeeds.

@@ -37,7 +37,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         return project_root
 
     @classmethod
-    def _create_database(cls, database: str) -> str:
+    def _create_database(cls, database: str, revision: str = "head") -> str:
         with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as admin:
             admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
         prefix, query = (
@@ -51,7 +51,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         previous = os.environ.get("DATABASE_URL")
         os.environ["DATABASE_URL"] = url
         try:
-            command.upgrade(config, "head")
+            command.upgrade(config, revision)
         finally:
             if previous is None:
                 os.environ.pop("DATABASE_URL", None)
@@ -92,6 +92,64 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         second = load_serving_database(self.url, ROOT)
         self.assertTrue(second.reused_existing)
         self.assertEqual(second.load_id, self.first.load_id)
+
+    def test_completeness_migration_translates_existing_publication(self) -> None:
+        database = f"nfl_c7_upgrade_{secrets.token_hex(5)}"
+        url = self._create_database(database, "0004_stage1_statistics")
+        try:
+            load_id = "00000000-0000-0000-0000-000000000001"
+            with psycopg.connect(url) as connection:
+                connection.execute(
+                    "INSERT INTO serving_loads "
+                    "(load_id,schema_version,loader_version,api_contract_version,"
+                    "historical_data_version,expected_data_version,expected_model_version,"
+                    "coach_data_version,coach_model_version,manifest_sha256,"
+                    "manual_manifest_sha256) VALUES "
+                    "(%s,'old-schema','old-loader','old-api','c3','c5','m5','c6','m6','a','b')",
+                    (load_id,),
+                )
+                connection.execute(
+                    "INSERT INTO serving_teams VALUES (%s,'team_ari','ARI','Arizona Cardinals',"
+                    "'ARI','{}'::jsonb)",
+                    (load_id,),
+                )
+                for role, status in (
+                    ("head_coach", "verified"),
+                    ("offensive_coordinator", "missing"),
+                ):
+                    connection.execute(
+                        "INSERT INTO serving_coaching_completeness VALUES "
+                        "(%s,'team_ari',2010,%s,%s,'complete',false,0,0,0,false,false,false,"
+                        "false,'{}'::jsonb)",
+                        (load_id, role, status),
+                    )
+            config = Config(str(ROOT / "alembic.ini"))
+            config.set_main_option(
+                "sqlalchemy.url", url.replace("postgresql://", "postgresql+psycopg://", 1)
+            )
+            previous = os.environ.get("DATABASE_URL")
+            os.environ["DATABASE_URL"] = url
+            try:
+                command.upgrade(config, "head")
+            finally:
+                if previous is None:
+                    os.environ.pop("DATABASE_URL", None)
+                else:
+                    os.environ["DATABASE_URL"] = previous
+            with psycopg.connect(url) as connection:
+                rows = connection.execute(
+                    "SELECT role::text,assignment_status,evidence_version "
+                    "FROM serving_coaching_completeness ORDER BY role"
+                ).fetchall()
+            self.assertEqual(
+                [
+                    ("head_coach", "verified", "legacy"),
+                    ("offensive_coordinator", "unresolved", "legacy"),
+                ],
+                rows,
+            )
+        finally:
+            self._drop_database(database)
 
     def test_supplemental_stats_completeness_and_environment_api(self) -> None:
         response = self.client.get("/qbs", params={"search": "Trent Edwards", "season": 2010})
@@ -138,6 +196,89 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                     "SET feature_source_max_season = season WHERE load_id = %s",
                     (load_id,),
                 )
+
+    def test_final_coaching_completeness_and_no_role_api(self) -> None:
+        expected = {
+            "head_coach": {"verified": 512},
+            "offensive_coordinator": {
+                "verified": 488,
+                "verified_no_designated_role": 24,
+            },
+            "quarterbacks_coach": {
+                "verified": 496,
+                "verified_no_designated_role": 16,
+            },
+            "play_caller": {
+                "verified": 119,
+                "partial": 1,
+                "provisional": 125,
+                "unresolved": 267,
+            },
+        }
+        with psycopg.connect(self.url) as connection:
+            actual_rows = connection.execute(
+                "SELECT role::text,assignment_status,count(*) FROM api_coaching_completeness "
+                "GROUP BY role,assignment_status ORDER BY role,assignment_status"
+            ).fetchall()
+            actual: dict[str, dict[str, int]] = {}
+            for role, status, count in actual_rows:
+                actual.setdefault(role, {})[status] = count
+            self.assertEqual(expected, actual)
+            no_role = connection.execute(
+                "SELECT count(*),count(*) FILTER (WHERE jsonb_array_length(source_urls)>0),"
+                "count(*) FILTER (WHERE jsonb_array_length(evidence_intervals)>0) "
+                "FROM api_coaching_completeness "
+                "WHERE assignment_status='verified_no_designated_role'"
+            ).fetchone()
+            self.assertEqual((40, 40, 40), no_role)
+
+        for team_id, role in (
+            ("team_ari", "offensive_coordinator"),
+            ("team_det", "quarterbacks_coach"),
+        ):
+            response = self.client.get(
+                "/coaching/completeness",
+                params={"team_id": team_id, "season": 2010, "role": role},
+            )
+            self.assertEqual(response.status_code, 200)
+            row = response.json()["items"][0]
+            self.assertEqual("verified_no_designated_role", row["assignment_status"])
+            self.assertEqual(0, row["assignment_count"])
+            self.assertTrue(row["source_urls"])
+            self.assertTrue(row["evidence_intervals"])
+            assignments = self.client.get(
+                "/assignments",
+                params={"team_id": team_id, "season": 2010, "role": role},
+            ).json()
+            self.assertEqual(0, assignments["total"])
+
+            explorer = self.client.get(
+                "/relationships/explorer",
+                params={
+                    "mode": "team_history",
+                    "team_id": team_id,
+                    "start_season": 2010,
+                    "end_season": 2010,
+                    "role": role,
+                },
+            )
+            self.assertEqual(explorer.status_code, 200)
+            body = explorer.json()
+            self.assertEqual(
+                "verified_no_designated_role",
+                body["coaching_completeness"][0]["assignment_status"],
+            )
+            self.assertFalse(
+                any(row["relationship_type"] == "coach_assignment" for row in body["relationships"])
+            )
+            self.assertFalse(any(node["node_type"] == "coach" for node in body["nodes"]))
+
+        legacy_missing = self.client.get(
+            "/coaching/completeness",
+            params={"assignment_status": "missing", "role": "play_caller"},
+        )
+        self.assertEqual(200, legacy_missing.status_code)
+        self.assertEqual(267, legacy_missing.json()["total"])
 
     def test_qb_endpoints_exclude_non_quarterback_positions(self) -> None:
         for name, player_id in (
@@ -620,6 +761,17 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertTrue(integrity_revision.is_file())
         self.assertTrue(integrity_sql.is_file())
         self.assertIn("0002_checkpoint7_integrity.sql", integrity_revision.read_text())
+        completeness_revision = ROOT / "db/migrations/versions/0005_coaching_completeness.py"
+        completeness_sql = ROOT / "db/migrations/versions/0005_coaching_completeness.sql"
+        self.assertTrue(completeness_revision.is_file())
+        self.assertTrue(completeness_sql.is_file())
+        self.assertIn(
+            "0005_coaching_completeness.sql",
+            completeness_revision.read_text(),
+        )
+        self.assertNotIn("db/schema.sql", completeness_revision.read_text())
+        completeness_migration = completeness_sql.read_text()
+        self.assertIn("WHEN 'missing' THEN 'unresolved'", completeness_migration)
 
     def test_model_version_mismatch_fails_before_loading(self) -> None:
         from nfl_coaching_impact import serving
@@ -717,7 +869,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code, 200)
         response = self.client.get("/versions")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["api_contract_version"], "api-v1.4")
+        self.assertEqual(response.json()["api_contract_version"], "api-v1.5")
 
     def test_relationship_explorer_all_modes_use_the_active_publication(self) -> None:
         with psycopg.connect(self.url) as connection:
@@ -757,7 +909,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
                 body = response.json()
                 self.assertEqual(body["query"]["mode"], mode)
                 self.assertEqual(body["versions"]["load_id"], load_id)
-                self.assertEqual(body["versions"]["api_contract_version"], "api-v1.4")
+                self.assertEqual(body["versions"]["api_contract_version"], "api-v1.5")
 
     def test_relationship_explorer_requires_a_bounded_valid_scope(self) -> None:
         invalid = (
@@ -1364,7 +1516,7 @@ class CheckpointSevenPostgreSQLTest(unittest.TestCase):
         self.assertFalse(body["semantics"]["exact_weekly_overlap"])
         self.assertIn("within the same season", body["semantics"]["coach_qb_context"])
         self.assertEqual(body["versions"]["load_id"], load_id)
-        self.assertEqual(body["versions"]["api_contract_version"], "api-v1.4")
+        self.assertEqual(body["versions"]["api_contract_version"], "api-v1.5")
         node_ids = [row["node_id"] for row in body["nodes"]]
         relationship_ids = [row["relationship_id"] for row in body["relationships"]]
         self.assertEqual(len(node_ids), len(set(node_ids)))

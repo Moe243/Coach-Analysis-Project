@@ -147,6 +147,31 @@ describe("NetworkPage Relationship Explorer", () => {
     expect(screen.getByText(/Test Coach → HOU 2025/)).toBeInTheDocument();
   });
 
+  it("shows sourced no-role completeness without inventing graph entities", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    const statusList = await screen.findByLabelText(
+      "Verified no separately designated coaching roles",
+    );
+    expect(statusList).toHaveTextContent("DEN 2024 · Offensive coordinator");
+    expect(statusList).toHaveTextContent(
+      "Verified no separately designated role",
+    );
+    expect(statusList).toHaveTextContent(
+      "No coach node or assignment is created",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Tree" }));
+    expect(
+      screen.getAllByRole("button", { name: /^Graph / }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: /Graph.*no designated/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows one QB across years and distinct same-season teams with correct PAE", async () => {
     installApiFixture();
     renderRoute(
