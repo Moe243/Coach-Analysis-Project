@@ -1,5 +1,19 @@
 # Methodology
 
+## Checkpoint 14 Player State
+
+Player State is generated at canonical player-target-season grain from information available by
+August 31. Its universe is independent of target-season outcomes; a separate evaluation cohort is
+joined only afterward. QB-team-season observations remain separate before additive aggregation to
+player-season history.
+
+The preseason ability estimate is a shrunk cumulative EPA/dropback baseline. It remains separate
+from prior-season observed EPA, prior PAE, trend, style, and stability. Binary rates use historical
+Beta-binomial shrinkage and continuous means use historical normal-normal shrinkage, with all
+priors fit only through the preceding season. Stability must persist across eras and medium/high
+volume bands. Scheme-conditioned outcomes require both stability and team-change portability
+evidence before core admission. No latent score or transition model is fitted.
+
 ## Research estimand
 
 The project estimates how quarterback performance differs from a preseason expectation and how those residual differences are associated with coaching roles after adjustment for observable context. It does not identify a treatment effect in the causal-inference sense.

@@ -1,5 +1,18 @@
 # Limitations
 
+## Checkpoint 14 Player State limitations
+
+- The as-of universe intentionally includes historical/drafted quarterbacks without claiming they
+  were active in a target season. Active-roster selection is deferred.
+- Undrafted rookies without dated pre-August-31 evidence cannot be added retrospectively; 41
+  evaluation rows therefore have no valid state-universe membership.
+- Target-season Checkpoint 5 prediction availability is cohort-dependent and is not a state
+  feature. Prior PAE enters only after it becomes historical.
+- Stability and portability are observational screens. They do not prove that conditioned QB
+  performance is independent of scheme, teammates, opponents, or coaching.
+- Low-volume red-zone, scramble, rushing, and other split results remain descriptive or uncertain.
+- Player State is not a transition, projection, simulation, causal, or production model.
+
 ## No causal identification
 
 Coaches are not randomly assigned to quarterbacks or teams. Hiring, firing, roster investment, injuries, organizational quality, opponent strength, and quarterback development all affect observed outcomes. Adjusted estimates remain associations.

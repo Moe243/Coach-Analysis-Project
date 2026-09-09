@@ -1,5 +1,12 @@
 # Expected-quarterback-performance model card
 
+## Checkpoint 14 research representation
+
+Checkpoint 14 adds no production prediction or transition model. Its empirical-Bayes operations
+shrink individual historical QB feature estimates toward as-of league priors and expose the raw
+values, shrinkage weights, standard errors, and intervals. The preseason ability estimate is only
+a cumulative EPA/dropback baseline and must not be interpreted as a latent or composite QB grade.
+
 Status: checkpoint six implemented; pending approval.
 
 ## Version and intended use

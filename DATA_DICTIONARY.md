@@ -1,5 +1,17 @@
 # Data dictionary
 
+## Checkpoint 14 QB Player State artifacts
+
+`qb_state_universe` records one outcome-independent player-target-season membership with its
+August-31 evidence basis. `player_states` records one header at the same grain, including safe age
+and experience proxies, prior/career exposure, state availability, and the distinct preseason EPA
+ability estimate. `qb_state_feature_records` is the authoritative long-form vector with raw and
+shrunk values, numerator, denominator, uncertainty, reliability, timing, lineage, and missingness.
+
+`qb_team_season_profiles` preserves player-team-season-feature stints. `qb_season_profiles`
+rebuilds player-season features from additive totals. `qb_state_evaluation_links` connects the
+separate retrospective QB-team-season cohort without creating or backfilling Player States.
+
 This document defines the core application contract and the implemented historical Parquet tables. Full upstream schemas are versioned in each generated source manifest rather than duplicated here.
 
 ## Shared conventions

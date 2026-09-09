@@ -115,3 +115,18 @@ Exit criterion met: all five registry, leakage, scheme, snapshot, and future-int
 version `c13-5e3d7a34ea4d1af5` contains 81 registered features and reproducible 2011–2026 snapshots.
 No QB prediction, Player State, scenario, database/API/frontend, deployment, or composite Coach
 Effect work was added. Checkpoint 14 is ready but has not begun.
+
+## Checkpoint fourteen — QB Style Profile and Player State (complete)
+
+Build an outcome-independent August 31 QB state universe, leakage-safe historical style
+profiles, feature-specific empirical-Bayes uncertainty, stability and portability audits, and a
+separate retrospective evaluation cohort. Preserve multi-team QB-season stints and keep preseason
+ability, recent observed performance, prior PAE, career history, trend, and uncertainty as
+distinct interpretable fields rather than a latent score.
+
+Exit criterion met: deterministic version `c14-43283062e788e686` contains 8,457 entering-season
+state headers for 2010–2025, 50,787 prior-only state-feature records, a separately materialized
+1,187-row evaluation cohort, explicit missing-state exclusions, declared stability sensitivities,
+conditional portability gates, and byte-identical clean builds. No Player State transition,
+projection, fit, simulation, production database/API/frontend, deployment, or Checkpoint 15 work
+was added.

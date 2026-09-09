@@ -29,6 +29,12 @@ serving data or live product behavior. See the
 [Checkpoint 13 report](docs/CHECKPOINT_13_PREDICTIVE_DATA_FOUNDATION.md) and
 [predictive feature dictionary](docs/PREDICTIVE_FEATURE_DICTIONARY.md).
 
+Phase II Checkpoint 14 adds outcome-independent historical QB state universes, canonical QB style
+profiles, feature-specific uncertainty, and entering-season Player States. It remains an ignored,
+file-based research layer and changes no live product behavior. See the
+[Checkpoint 14 report](docs/CHECKPOINT_14_QB_PLAYER_STATE.md) and
+[QB state feature dictionary](docs/QB_STATE_FEATURE_DICTIONARY.md).
+
 ## Football decision supported
 
 The eventual application is designed for analysts and football-operations staff evaluating whether quarterback performance changed beyond a reasonable preseason expectation while a coach held a particular role. The answer must always be read alongside player history, supporting cast, team context, sample size, and uncertainty.
