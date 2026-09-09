@@ -1,5 +1,19 @@
 # Expected-quarterback-performance model card
 
+## Checkpoint 15 Player × Scheme fit research
+
+Version `c15-2ac7553234223553` compares rolling-origin Ridge models: core Player State (M0), core
+Player State plus prior Scheme main effects (M1), and predeclared Player × Scheme interactions
+(M2). Conditional Checkpoint 13/14 features are challengers, not promoted into the primary
+specifications. Preprocessing and hyperparameter selection are fit inside each training window.
+
+The final status is `NOT SUPPORTED`. M2 has zero estimable historical folds because safely dated
+preseason veteran target-team evidence begins in 2025, while prior years' immutable draft-team rows
+do not have prior NFL style histories. No standalone fit quantity, M2 coefficient, bootstrap
+interval, permutation result, or fit score is released. M0/M1 metrics are narrow-cohort research
+diagnostics and not a projection product. Checkpoint 16 is ready to benchmark M0/M1 but is
+explicitly forbidden from consuming interactions from this checkpoint.
+
 ## Checkpoint 14 research representation
 
 Checkpoint 14 adds no production prediction or transition model. Its empirical-Bayes operations

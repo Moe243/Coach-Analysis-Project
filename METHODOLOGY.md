@@ -1,5 +1,33 @@
 # Methodology
 
+## Checkpoint 15 Player × Scheme fit research
+
+Checkpoint 15 freezes one Checkpoint 14 Player State per `(player_id, target_season)` before
+attaching a target environment. A target team is eligible only through an immutable draft-season
+team fact or the most recent dated QB depth-chart snapshot on or before August 31. The target
+outcome is joined afterward on `(player_id, target_team_id, target_season)` and cannot determine
+state membership or team identity.
+
+M0 uses Checkpoint 14 CORE Player State fields. M1 adds Checkpoint 13 CORE prior-environment Scheme
+fields. M2 would add eight football-defined style/environment products; it is fit only when an
+earlier-season training window has at least 20 finite, varying observations for an interaction.
+Conditional Player State features and conditional expected-pass/PROE fields are separate
+challengers. Descriptive or predictively forbidden fields never enter a model. M3 is omitted
+because no as-of Play Caller PCAE records or preseason caller assignments support this cohort.
+
+Every outer fold trains on seasons strictly before the target. Median imputation, missingness
+indicators, standardization, feature qualification, inner rolling Ridge-alpha selection, and model
+fitting occur within the training window. The target-season outcomes are EPA/dropback and existing
+PAE, with a 50-dropback evaluation minimum. Missing values stay null in the cohort; fold-local
+median handling is permitted only with at least ten finite, varying training observations and is
+always paired with a missingness indicator.
+
+Version `c15-2ac7553234223553` has no estimable M2 fold because historical veteran target-team
+snapshots before 2025 are undated. This yields a `NOT SUPPORTED` interaction decision, no
+standalone fit quantity, no interaction bootstrap interval, and no permutation result. Checkpoint
+16 may benchmark M0/M1 but cannot consume Player × Scheme interactions. See
+`docs/CHECKPOINT_15_PLAYER_SCHEME_FIT.md` for the full cohort and results.
+
 ## Checkpoint 14 Player State
 
 Player State is generated at canonical player-target-season grain from information available by

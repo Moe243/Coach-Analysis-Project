@@ -130,3 +130,17 @@ state headers for 2010–2025, 50,787 prior-only state-feature records, a separa
 conditional portability gates, and byte-identical clean builds. No Player State transition,
 projection, fit, simulation, production database/API/frontend, deployment, or Checkpoint 15 work
 was added.
+
+## Checkpoint fifteen — Player × Scheme fit (complete)
+
+Compare rolling-origin M0 Player State, M1 Player State plus prior Scheme main effects, and M2
+predeclared measurable Player × Scheme interactions without using target-season scheme or outcome
+information as predictors. Keep target-team evidence outside Player State and require that it be
+known by the August 31 boundary.
+
+Exit criterion met: deterministic version `c15-2ac7553234223553` materializes the full 8,032-row
+entering-state cohort and a 130-row safely assigned evaluation cohort. It records a scientifically
+valid `NOT SUPPORTED` interaction decision because no pre-2025 fold has qualified prior player
+style and dated target-environment evidence. Checkpoint 16 may proceed with M0/M1 research only;
+it may not consume interactions. No projection product, simulator, Ask Anything feature,
+college/rookie model, database/API/frontend change, migration, or deployment was added.

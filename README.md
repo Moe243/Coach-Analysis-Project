@@ -35,6 +35,13 @@ file-based research layer and changes no live product behavior. See the
 [Checkpoint 14 report](docs/CHECKPOINT_14_QB_PLAYER_STATE.md) and
 [QB state feature dictionary](docs/QB_STATE_FEATURE_DICTIONARY.md).
 
+Phase II Checkpoint 15 tests whether predeclared, measurable Player × Scheme interactions improve
+future QB prediction. Version `c15-2ac7553234223553` finds the interaction block **not supported**:
+historical target-team evidence cannot be established by the August 31 cutoff for veteran rows
+before 2025, so M2 has no valid rolling-origin training fold. No Fit Score or interaction estimate
+is published. Checkpoint 16 may continue with M0/M1 research only. See the
+[Checkpoint 15 report](docs/CHECKPOINT_15_PLAYER_SCHEME_FIT.md).
+
 ## Football decision supported
 
 The eventual application is designed for analysts and football-operations staff evaluating whether quarterback performance changed beyond a reasonable preseason expectation while a coach held a particular role. The answer must always be read alongside player history, supporting cast, team context, sample size, and uncertainty.
@@ -147,6 +154,20 @@ The command writes content-addressed files under
 `data/processed/predictive_foundation/<data-version>/`. It enforces an August 31 target-season
 boundary, prior-season lineage, registered feature names, rolling train-only standardization, and
 explicit missingness. It does not fit a future QB model or write to PostgreSQL.
+
+## Build checkpoint fifteen
+
+After the approved Checkpoint 13 and 14 artifacts exist locally, run:
+
+```bash
+make PYTHON=.venv/bin/python checkpoint-fifteen
+```
+
+The command writes content-addressed research artifacts under
+`data/processed/player_scheme_fit/<data-version>/`. It keeps Player State independent of team,
+requires preseason-known target-team evidence, uses only prior Scheme Engine records, and performs
+rolling-origin Ridge comparisons. The generated layer is ignored by Git and does not alter the
+database, API, frontend, deployment, Player State, or production predictions.
 
 ## Validate checkpoint four
 

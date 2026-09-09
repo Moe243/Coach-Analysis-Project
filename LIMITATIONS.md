@@ -1,5 +1,24 @@
 # Limitations
 
+## Checkpoint 15 Player × Scheme fit limitations
+
+- Pre-2025 roster and depth-chart assets are not timestamped, so they cannot establish a veteran's
+  target team by the August 31 boundary. They are not used for hindsight assignment.
+- Immutable draft-team facts create historical preseason-known rows, but those rows are rookies
+  without prior NFL style profiles. Dated preseason depth charts add veterans only in 2025.
+- The resulting evaluation cohort changes composition sharply and is not representative of all
+  NFL QB-seasons. M0/M1 backtest metrics are research diagnostics, not production projections.
+- There are no qualified historical interaction observations before 2025, so M2, interaction
+  coefficient stability, bootstrap uncertainty, permutation evidence, and portability are not
+  estimable. Empty artifacts mean unavailable, not zero effect.
+- The 16-row team-change subset is a small 2025-heavy proxy. It cannot establish generalization or
+  verified coach/scheme-change effects.
+- Draft team is a known transaction fact, not proof of August 31 retention. Exact-key outcome
+  joining prevents substitution of a later destination, and unmatched rows are excluded.
+- Scheme features describe prior team behavior. They are not causal coach ownership measures.
+- Checkpoint 16 may use only the M0/M1 research contracts; no fit score, M2 coefficient, or
+  interaction contribution is approved.
+
 ## Checkpoint 14 Player State limitations
 
 - The as-of universe intentionally includes historical/drafted quarterbacks without claiming they

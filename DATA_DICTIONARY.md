@@ -1,5 +1,41 @@
 # Data dictionary
 
+## Checkpoint 15 Player × Scheme fit artifacts
+
+Generated files live under ignored
+`data/processed/player_scheme_fit/c15-2ac7553234223553/`.
+
+| Artifact | Grain / contract |
+|---|---|
+| `fit_feature_registry.csv` | One registered Player State, Scheme, or predeclared interaction feature |
+| `modeling_cohort.parquet` | One entering state per `(player_id, target_season, cohort_version)`; target team and outcome remain separately sourced |
+| `preseason_target_team_assignments.parquet` | One resolved/ambiguous player-target-season assignment from latest valid as-of evidence |
+| `rolling_fold_assignments.csv` | One player-state fold membership; training season is always earlier than fold season |
+| `model_comparison.csv` | One outcome-model aggregate over rolling out-of-sample predictions |
+| `rolling_fold_metrics.csv` | One outcome-model-fold metric row |
+| `model_predictions.parquet` | One `(player_id, target_team_id, target_season, outcome, model)` prediction |
+| `interaction_definitions.csv` | One predeclared football-defined Player × Scheme interaction |
+| `interaction_coefficients.csv` | One estimable standardized interaction coefficient per fold; empty when M2 is unavailable |
+| `interaction_effects.parquet` | Paired M2-minus-M1 prediction delta; empty rather than zero when M2 is unavailable |
+| `fold_stability.csv` | Fold/model estimability and qualified-interaction diagnostics |
+| `team_change_validation.csv` | Rolling predictions restricted to safely identified team changers |
+| `environment_change_validation.csv` | Large as-of Scheme-change subset plus explicit unavailable verified coach-change status |
+| `portability_sensitivity.csv` | Dropback, personnel-family, and PCAE/M3 sensitivity status |
+| `bootstrap_uncertainty.csv` | QB-cluster bootstrap M2-minus-M1 MAE delta or explicit non-estimability |
+| `permutation_placebo.csv` | Deterministic interaction placebo result or explicit non-estimability |
+| `missingness_coverage.csv` | Feature and exclusion counts without zero-filling unsupported values |
+| `fit_approval_decision.csv` | Fit status, standalone-quantity decision, interaction permission, and Checkpoint 16 boundary |
+| `leakage_audit.csv` | Player/scheme source season, assignment cutoff, and entering-state grain gates |
+| `checkpoint_15_summary.csv` | Compact completion and handoff gates |
+| `MANIFEST.json` | Content identity, upstream versions, grains, counts, and output checksums |
+
+Player uncertainty columns retain feature-specific reliability, missingness, shrinkage weight,
+standard error, and interval. Scheme metadata retains feature status, predictive permission,
+sample size, and missingness. `target_team_source_available_date` is populated only for dated
+evidence; immutable draft facts retain an explicit availability-evidence label without inventing
+an exact source date. `outcome_pae` is always actual minus expected EPA/dropback on the complete
+player-team-season key.
+
 ## Checkpoint 14 QB Player State artifacts
 
 `qb_state_universe` records one outcome-independent player-target-season membership with its
