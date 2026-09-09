@@ -11,10 +11,13 @@ version `pcae-expanding-prior-seasons-v1`; eligibility version
 
 ## Intended use
 
-The Phase 1–4 artifacts support reproducible investigation of whether leakage-safe QB PAE and
+The Phase 1–4 artifacts support reproducible, non-causal investigation of whether leakage-safe QB PAE and
 expected play-call value contain stable coach-associated information after limited environment
 controls. They support method critique, sensitivity analysis, attribution auditing, and planning
 future out-of-sample validation.
+
+The historical PCAE expansion retains explicit confidence/uncertainty rules and
+suppression/evidence thresholds; these safeguards do not authorize a production composite.
 
 ## Non-intended use
 

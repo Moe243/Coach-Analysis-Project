@@ -365,7 +365,7 @@ class CheckpointTenResearchTests(unittest.TestCase):
         for value in ("133,636", "32,813", "0.5717", "0.4491", "0.5926"):
             self.assertIn(value, narrative)
         self.assertIn("Exactly reproduced and explained", narrative)
-        self.assertIn("Eligibility reproduced; attribution not reproduced", narrative)
+        self.assertIn("Eligibility reproduced; attribution corrected", narrative)
         self.assertIn("134,138 rows; all 502 excluded rows are two-point conversions", narrative)
 
 

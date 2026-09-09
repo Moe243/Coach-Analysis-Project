@@ -86,3 +86,10 @@ the limited prior-scheme challenger, and writes only ignored content-addressed o
 `outputs/checkpoint_12_final_research/`. The final research decision retains Q and PCAE as
 separate research signals; it approves no composite, fixed weights, score, ranking, production
 change, Phase II work, or Ask Anything implementation.
+
+Checkpoint 13 consumes the frozen scheme findings through the production-quality, file-based
+predictive foundation in `src/nfl_coaching_impact/predictive_foundation.py`. Run it with
+`make PYTHON=.venv/bin/python checkpoint-thirteen`. It builds prior-season as-of records and a
+separate leakage-safe expected-pass/PROE contract without reopening Coach Effect research. PCAE
+is registered only as a conditional verified/non-shared play-caller signal; role-specific Q stays
+experimental; no composite Coach Effect is created.

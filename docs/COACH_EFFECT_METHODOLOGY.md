@@ -139,7 +139,7 @@ season or one QB cannot support an unqualified elite ranking.
 
 ## Assumptions and interpretation
 
-PAE and PCAE are adjusted observational signals. They can retain staff collaboration, roster
+PAE and PCAE are adjusted observational, non-causal signals. They can retain staff collaboration, roster
 construction, injuries, schedule, opponent, scheme, selection, measurement, and random effects.
 Residualization removes only linear overlap in the analyzed sample. Associations must not be
 described as causes, and employment, contract, wagering, or medical decisions are prohibited

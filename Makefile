@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact checkpoint-eleven checkpoint-eleven-b checkpoint-twelve checkpoint-twelve-review checkpoint-twelve-data-expansion checkpoint-twelve-play-caller-verification checkpoint-twelve-final-play-caller-evidence checkpoint-twelve-coverage-gate-review checkpoint-twelve-final-research db-migrate db-load api frontend-install frontend-dev frontend-test frontend-e2e frontend-check frontend-build
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact checkpoint-eleven checkpoint-eleven-b checkpoint-twelve checkpoint-twelve-review checkpoint-twelve-data-expansion checkpoint-twelve-play-caller-verification checkpoint-twelve-final-play-caller-evidence checkpoint-twelve-coverage-gate-review checkpoint-twelve-final-research checkpoint-thirteen db-migrate db-load api frontend-install frontend-dev frontend-test frontend-e2e frontend-check frontend-build
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -82,6 +82,9 @@ checkpoint-twelve-coverage-gate-review:
 
 checkpoint-twelve-final-research:
 	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve_final_research.py
+
+checkpoint-thirteen:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_thirteen.py
 
 db-migrate:
 	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 2)

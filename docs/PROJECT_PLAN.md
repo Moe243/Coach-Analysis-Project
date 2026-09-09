@@ -92,3 +92,26 @@ Exit criterion: every role matrix remains exactly 512 cells, verified rows have 
 evidence, unresolved callers remain exported, attribution reconciles by season, clean research
 builds are byte-identical, and no production model, ranking, serving, frontend, or deployment
 state changes.
+
+## Checkpoint twelve — Coach Effect research closeout (complete)
+
+Freeze verified/non-shared PCAE as a separate research-ready signal, keep role-specific Q
+exploratory, retain scheme as explanatory context, and reject a composite production Coach Effect
+when rolling, portability, and identification evidence do not justify it.
+
+Exit criterion met: deterministic final version `c12-final-0c746df0290c836c` records no approved
+composite, score, fixed weights, ranking, production change, or causal claim and provides the clean
+Phase II handoff.
+
+## Checkpoint thirteen — predictive data foundation and Scheme Engine (complete)
+
+Create a machine-readable feature registry, explicit as-of timing classes, central leakage
+validator, raw-to-as-of lineage, predictive-safe rolling normalization, historical snapshots, and
+a deterministic team-season Scheme Engine. Reuse frozen Checkpoint 12 research, rebuild
+expected-pass/PROE from preceding-season training only, and preserve coach assignment intervals
+without claiming scheme ownership.
+
+Exit criterion met: all five registry, leakage, scheme, snapshot, and future-interface gates pass;
+version `c13-5e3d7a34ea4d1af5` contains 81 registered features and reproducible 2011–2026 snapshots.
+No QB prediction, Player State, scenario, database/API/frontend, deployment, or composite Coach
+Effect work was added. Checkpoint 14 is ready but has not begun.
