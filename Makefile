@@ -1,4 +1,4 @@
-.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact checkpoint-eleven checkpoint-eleven-b db-migrate db-load api frontend-install frontend-dev frontend-test frontend-e2e frontend-check frontend-build
+.PHONY: setup test test-network test-postgres audit audit-network audit-samples vertical-slice vertical-slice-offline historical-preflight historical historical-offline coaching-validate coaching-sources coaching-load expected-performance coach-impact checkpoint-eleven checkpoint-eleven-b checkpoint-twelve checkpoint-twelve-review checkpoint-twelve-data-expansion checkpoint-twelve-play-caller-verification checkpoint-twelve-final-play-caller-evidence checkpoint-twelve-coverage-gate-review checkpoint-twelve-final-research db-migrate db-load api frontend-install frontend-dev frontend-test frontend-e2e frontend-check frontend-build
 
 PYTHON ?= python3
 PROJECT_ROOT := $(CURDIR)
@@ -61,6 +61,27 @@ checkpoint-eleven:
 
 checkpoint-eleven-b:
 	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_eleven_b.py
+
+checkpoint-twelve:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve.py
+
+checkpoint-twelve-review:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve_review.py
+
+checkpoint-twelve-data-expansion:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve_data_expansion.py --offline
+
+checkpoint-twelve-play-caller-verification:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve_play_caller_verification.py
+
+checkpoint-twelve-final-play-caller-evidence:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve_final_play_caller_evidence.py
+
+checkpoint-twelve-coverage-gate-review:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve_coverage_gate_review.py
+
+checkpoint-twelve-final-research:
+	PYTHONPATH=src:. $(PYTHON) scripts/run_checkpoint_twelve_final_research.py
 
 db-migrate:
 	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" && exit 2)

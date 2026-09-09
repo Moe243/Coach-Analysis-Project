@@ -1,7 +1,22 @@
 # Coach Effect research methodology
 
-Status: exploratory, non-causal research contract; no production Coach Effect score or ranking
-exists.
+Status: Checkpoint 12 research complete; no composite or production Coach Effect score or
+ranking is approved.
+
+## Final Checkpoint 12 method decision
+
+The final rerun freezes Prompt 10 evidence and applies Prompt 11's independently selected modern
+gate. Primary Play Caller analysis is 2020–2025; 2010–2025 is separate historical sensitivity.
+The future target is the next verified Play Caller coach-team-season Q observation. For target
+season `S`, all history, centers, scales, residualization, coefficients, and hyperparameters are
+fit using seasons no later than `S-1`. Models 0–5 use identical target rows in the credible 2021,
+2022, 2023, 2024, and 2025 folds.
+
+The final comparison does not support a composite. Q and PCAE remain separate research metrics:
+Q is an exploratory QB-development association; PCAE is a directly attributed but observational
+play-calling decision-value signal. Confidence is evidence metadata and never multiplies either
+estimate. No fixed weights, 0–100 transform, coach ranking, or production implementation exists.
+See `CHECKPOINT_12_FINAL_COACH_EFFECT_RESEARCH.md` for the full decision.
 
 ## Scope and lineage
 
@@ -56,10 +71,11 @@ aggregate validation of model-preferred versus non-preferred calls. For coach `c
 
 `PCAE(c,s) = weighted mean Call Value(c,s) - league weighted mean Call Value(s)`
 
-Shared callers receive fractional attribution that sums to one for a play. Assignment grain is
-`assignment_key`; team, season, week, coach, role, verification, confidence, shared status,
-interval basis, and citation must agree. OC title is not play-caller evidence. Season-designation
-intervals are insufficient for weekly attribution.
+Shared intervals preserve their shared status and exposure metadata, but receive no individual
+PCAE in the final research sample. Assignment grain is `assignment_key`; team, season, week,
+coach, role, verification, confidence, shared status, interval basis, and citation must agree. OC
+title is not play-caller evidence. Season-designation intervals are insufficient for weekly
+attribution.
 
 Checkpoint Eleven's historical extension keeps the same model family and features but uses an
 expanding temporal split: target season `S` is fit only on 1999 through `S-1`. The versioned
@@ -103,21 +119,23 @@ On a common coach-season sample, linear residualization produces:
 - `UniquePCAE`: PCAE residualized on PAE signal;
 - `SharedSignal`: an unweighted standardized common-direction diagnostic.
 
-The conceptual expression is:
+The earlier Prompt 10 conceptual expression was:
 
 `Coach Effect_c = Confidence_c × [w_Q × UniqueQB_c + w_P × UniquePCAE_c + w_S × SharedSignal_c]`
 
-`w_Q`, `w_P`, and `w_S` have no numeric values. Future estimation must use expanded historical
-data, component reliability, and out-of-sample validation. The shared diagnostic is not itself a
+Prompt 12 rejects this as a final architecture: `w_Q`, `w_P`, and `w_S` remain unapproved, and
+confidence must stay separate rather than multiply an effect. The shared diagnostic is not a
 validated latent coaching factor.
 
 ## Evidence, eligibility, and confidence
 
 Evidence breadth includes seasons, distinct QBs, distinct teams, play/sample volume,
-repeatability, component reliability, verification status, and interval precision. Confidence
-has no final numeric formula in checkpoint ten. A production design must publish the underlying
-counts, uncertainty, missingness, and suppression reason. One season or one QB cannot support an
-unqualified elite ranking.
+repeatability, component reliability, verification status, and interval precision. Final
+research grades are transparent: HIGH requires at least four seasons, two QBs, and 1,500 exposure
+units; MODERATE requires three seasons, two QBs, and 600 units;
+all narrower evidence is LOW. These are descriptive research gates, not score points. A
+production design must publish counts, uncertainty, missingness, and suppression reason. One
+season or one QB cannot support an unqualified elite ranking.
 
 ## Assumptions and interpretation
 
@@ -132,7 +150,6 @@ uses.
 Production Coach Effect implementation is blocked until OC, QB-coach, and play-caller
 assignments are comprehensively verified. Every play-caller row requires explicit evidence;
 weekly or in-season intervals are required where duties changed, were shared, or did not span the
-whole season. Before implementation, the project must also reproduce the documented exploratory
-counts and metrics, complete historical PCAE expansion and reliability testing, estimate—not
-invent—component weights out of sample, define confidence/uncertainty rules and explicit
-suppression/evidence thresholds, and pass a separate approval checkpoint.
+whole season. Production also requires a stable out-of-sample architecture, role-specific
+uncertainty and eligibility rules, and at least 95% cell and attributable-play coverage in the
+claimed window. The current final research run does not meet those conditions.

@@ -1,7 +1,9 @@
 # Coach Effect research model card
 
-Status: research foundation only; exploratory, unweighted, non-causal, and blocked from
-production implementation.
+Status: Checkpoint 12 research complete; no composite or production Coach Effect approved.
+
+Final research version: `c12-final-0c746df0290c836c`. Final architecture status: **E — NO
+COMPOSITE COACH EFFECT APPROVED**. Production Coach Effect: **NO-GO**.
 
 Checkpoint Eleven historical research version: `c11-75bc9b540fe22610`; expected-play model
 version `pcae-expanding-prior-seasons-v1`; eligibility version
@@ -18,44 +20,60 @@ future out-of-sample validation.
 
 These artifacts must not produce or imply production coach rankings, employment or compensation
 recommendations, wagering decisions, causal claims, or a definitive comparison of coaches. They
-must not be loaded by the database, API, frontend, or deployed pipeline. No numerical `w_Q`,
-`w_P`, or `w_S` exists.
+must not be loaded by the database, API, frontend, or deployed pipeline. Fold-specific research
+coefficients exist only as failed stability diagnostics; no fixed `w_Q`, `w_P`, or `w_S` is
+approved.
 
 ## Data coverage and current reproducibility
 
 - QB expectation/PAE: checkpoint-five analysis seasons 2010–2025, with 1999–2009 warm-up.
 - Play research: cached nflverse regular-season PBP for 1999–2025; each scored season uses only
-  earlier seasons for training. Verified interval coverage currently permits PCAE rows in 2012,
-  2015, 2016, and 2020.
+  earlier seasons for training. Prompt 10 now supports 287 verified non-shared PCAE intervals,
+  278 coach-seasons, 105 callers, 14 seasons, and 226,266 attributed plays.
 - Coach assignments: repository manual tables preserve identity, role, source, verification,
-  confidence, shared/interim status, and intervals, but are intentionally incomplete outside
-  verified head-coach coverage.
-- Environment and decomposition: the exact corrected 32-team 2025 input and paired coach-level
-  table from the historical exploratory run are not committed.
+  confidence, shared/interim status, and intervals. Research coverage is substantially expanded,
+  but OC, QB-coach, and play-caller coverage is not comprehensively production-complete.
+- Environment and decomposition: deterministic preseason-context, common Q/P, temporal, and
+  residualization artifacts are available in the ignored final research publication.
 
 The specification's exact Phase 1 examples and Phase 2–4 summary numbers are retained as
 historically documented results unless explicitly reproduced. The current audit proves that the
 134,138 regular-season run/pass candidates in 2022–2025 include exactly 502 two-point
 conversions, yielding the documented 133,636 under `pcae-play-eligibility-v2`. The same rule
-yields exactly 32,813 eligible 2025 plays, but none can currently be assigned under the strict
-verified-weekly-caller contract. The historical claim that all 32,813 were attributed therefore
-still depends on the missing comprehensive caller map.
+yields exactly 32,813 eligible 2025 plays. Checkpoint Eleven initially could not attribute those
+plays under the strict contract; Prompts 8–10 subsequently added only explicit source-backed
+weekly intervals. The final PCAE output therefore reflects verified attribution rather than the
+earlier unsupported comprehensive-caller assumption.
+
+## Final validation result
+
+Models 0–5 were compared on the same 136 future rows across independently approved 2021–2025
+folds. The lowest candidate RMSE improved on the no-coach baseline by only 0.12%, kept negative
+pooled correlation, and did not improve direction accuracy. Learned Q/P signs changed across
+folds and cluster-bootstrap intervals included zero. Model 6 was not identifiable. The
+prior-scheme challenger worsened error.
+
+Modern PCAE repeatability was 0.354 with a coach-bootstrap interval [0.119, 0.517], but
+different-team portability remained uncertain. Q repeatability was near zero for every role.
+PCAE is retained as a separate research-ready decision-value association; HC Q is not
+identifiable, all other role Q results remain exploratory, and no composite is approved.
 
 ## Outputs
 
 Research code may emit transition rows, expected call probabilities, expected pass/run EPA,
 Call Value, league-centered PCAE, repeatability/reliability diagnostics, environment model
-comparisons, leave-one-team-out predictions, residual components, and research manifests. All
-generated files belong under the ignored `research/coach_effect/outputs/`. No combined Coach
-Effect score is emitted.
+comparisons, rolling predictions, role-specific shrinkage diagnostics, residual components, and
+research manifests. All generated files belong under the ignored
+`research/coach_effect/outputs/`. No combined Coach Effect score is emitted.
 
 ## Reliability and uncertainty
 
-The repeated-QB-transition sample is too sparse for a stable universal PAE reliability weight.
-The historically documented PCAE one-season and two-season-average reliabilities were about
-0.4372 and 0.6084, but require exact reproduction from the missing caller table. Future results
-must report seasons, QBs, teams, play volume, repeatability, component reliability, uncertainty,
-and suppression. One season or one QB is insufficient for an unqualified ranking.
+The repeated-QB-transition sample does not support a stable universal Q weight. Final modern PCAE
+one-, two-, and observed multi-season reliability estimates are 0.293, 0.453, and 0.585. The
+expanded values are lower than the historically documented sparse estimates of about 0.437 and
+0.608. Research outputs report seasons, QBs, teams, play volume, uncertainty, evidence grade,
+and suppression. Confidence never multiplies an estimate, and all production rows are
+suppressed.
 
 ## Principal risks
 
@@ -82,10 +100,9 @@ prohibited, and documentation uses association language.
 
 ## Production release gate
 
-Production Coach Effect implementation is blocked until offensive-coordinator, quarterbacks-
+Production Coach Effect implementation remains blocked until offensive-coordinator, quarterbacks-
 coach, and play-caller assignments are comprehensively verified. Play callers require explicit
-evidence from a source and weekly/in-season intervals wherever applicable. Historical PCAE
-expansion, the play-count discrepancy, missing exact research inputs, expanded reliability
-testing, out-of-sample weight estimation, confidence/uncertainty rules, explicit
-suppression/evidence thresholds, and independent review must also be resolved. Until then, the
-framework remains exploratory and no production Coach Effect ranking is supportable.
+evidence from a source and weekly/in-season intervals wherever applicable. Recent full-cell and
+play coverage are 93.75% and 94.65%, below the 95% production minima. A stable OOS architecture,
+role-specific uncertainty, and production eligibility also remain unresolved. No production
+Coach Effect ranking is supportable.

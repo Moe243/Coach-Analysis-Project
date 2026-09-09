@@ -1,6 +1,24 @@
 # Coach Effect research narrative
 
-Status: checkpoint-ten research foundation; exploratory, non-causal, and not production-serving.
+Status: Checkpoint 12 research complete; exploratory, non-causal, and not production-serving.
+
+## Final Checkpoint 12 conclusion
+
+The final content-addressed rerun is `c12-final-0c746df0290c836c`. It uses 2020–2025 as the
+primary verified Play Caller window, reports 2010–2025 separately as historical sensitivity, and
+evaluates the independently approved 2021–2025 future folds.
+
+The result is **E — NO COMPOSITE COACH EFFECT APPROVED**. Q repeatability is near zero across HC,
+OC, QB-coach, and Play Caller roles. PCAE has moderate modern repeatability and different-QB
+stability, so it is preserved as a separate research-ready play-calling decision-value
+association. It does not predict future Q well enough to validate a combined signal. Models
+adding coach history do not improve practically over the no-coach baseline; learned Q/P weights
+change sign, and their bootstrap intervals include zero.
+
+Production Coach Effect remains **NO-GO**. No score, 0–100 transform, ranking, or production
+change was made. Checkpoint 12 research can close because the architecture question is answered;
+Phase II Checkpoint 13 is ready to begin only after separate approval. Full results and preserved
+failure evidence are in `CHECKPOINT_12_FINAL_COACH_EFFECT_RESEARCH.md`.
 
 This document preserves the sequence of experiments that motivated a possible Coach Effect
 framework. Numbers labeled **historically documented** came from the completed exploratory run
@@ -219,7 +237,8 @@ combination remains deliberately unestimated:
 
 `Coach Effect_c = Confidence_c × [w_Q × UniqueQB_c + w_P × UniquePCAE_c + w_S × SharedSignal_c]`
 
-No values are assigned to `w_Q`, `w_P`, or `w_S`.
+This was a historical conceptual proposal. Prompt 12 does not approve it: no values are assigned
+to `w_Q`, `w_P`, or `w_S`, and confidence must remain separate from any effect estimate.
 
 ### Next step
 
@@ -252,12 +271,12 @@ unqualified elite label.
 | Exact Kubiak/Schottenheimer examples | Historically documented | Original transition result rows are not committed. |
 | 2022–2025 PBP source | Available locally | Official cached Parquet exists; generated outputs remain ignored. |
 | `133,636` initial plays | Exactly reproduced and explained | The 2022–2025 regular-season run/pass sample has 134,138 rows; all 502 excluded rows are two-point conversions. `pcae-play-eligibility-v2` therefore yields 133,636. |
-| `32,813` 2025 plays | Eligibility reproduced; attribution not reproduced | The same rule yields exactly 32,813 eligible 2025 plays. Current verified weekly caller coverage attributes zero, so the historical label “attributed” depended on the absent comprehensive caller map. |
-| Historical PCAE | Limited current result | Expanding prior-season models and verified weekly attribution produce research rows for 2012, 2015, 2016, and 2020 only. All other analysis seasons remain unattributed. |
+| `32,813` 2025 plays | Eligibility reproduced; attribution corrected | The same rule yields exactly 32,813 eligible 2025 plays. Checkpoint Eleven initially attributed zero under the strict evidence contract; Prompts 8–10 later added only source-backed weekly intervals rather than recreating an unsupported comprehensive map. |
+| Historical PCAE | Reproduced for verified intervals | Prompt 10 produces 287 verified non-shared intervals, 278 coach-seasons, 105 callers, 14 seasons, and 226,266 attributed plays. Missing, shared, and unsupported duties remain unattributed. |
 | Phase 2 metrics, PCAE examples, repeatability | Historically documented | Exact weekly caller map and saved model outputs are absent. |
-| Phase 3 32-team environment results | Historically documented | Exact corrected 32-team input table is absent. |
+| Phase 3 environment sensitivity | Rebuilt under final chronology | Prompt 12 fits preseason-context adjustment within each target fold and reports estimate, rank, and sign stability; it does not recast context as score points. |
 | Earlier `coach_qb_equation_v0` environment test | Separate experiment | It used 582 QB-team-season rows and a different target/grain; its negative held-out R² must not be conflated with this 32-team PCAE test. |
-| Phase 4 paired correlations | Historically documented | Exact paired 2025 coach-level table is absent. |
+| Phase 4 paired correlations | Rebuilt on final common sample | Prompt 12 reports 206 modern and 269 historical common Q/P coach-seasons and rejects a composite after rolling validation. |
 
 No number was substituted to force reconciliation. The excluded records were identified from
 their nflverse `two_point_attempt` field before the historical total was compared.
@@ -268,7 +287,6 @@ Production Coach Effect implementation is **blocked** until offensive coordinato
 quarterbacks coaches, and play callers are comprehensively verified. Play-caller assignments
 must have explicit evidence and weekly or in-season intervals where duties changed, were shared,
 or cannot safely be represented as a season-long assignment. The current manual-review queue is
-evidence that this gate is not yet met. Production also requires historical PCAE expansion,
-reconciliation of the Phase 2 eligibility count, exact reruns, expanded reliability testing,
-out-of-sample weight estimation, explicit confidence/uncertainty rules, suppression/evidence
-thresholds, and approval of non-causal presentation.
+evidence that this gate is not yet met. Production also requires at least 95% recent full-cell and
+play coverage, a stable OOS architecture, role-specific uncertainty, and production eligibility.
+Prompt 12 found no defensible composite, so production remains NO-GO.
