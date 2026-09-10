@@ -1,6 +1,24 @@
 # Expected-quarterback-performance model card
 
-## Checkpoint 16 team-independent projection research
+## Current C16 calibration refinement
+
+Data `c16r-8c8063c5954e2a22`; model `qb-calibrated-8c8063c5954e2a22`.
+Preserve B2 EPA/M1 PAE family selection. Prior-OOS NONE/BIAS/LINEAR calibrators are compared on
+development history; BIAS wins for EPA and NONE remains selected for PAE. Original acceptance
+thresholds are unchanged, with an additional ≤1% accuracy-damage guard.
+
+EPA B2+BIAS is **RESEARCH-READY WITH LIMITATIONS**: validation RMSE 0.166105, MAE 0.125074,
+calibration slope 1.045820/intercept −0.002447; 50/80/95% coverage 45.04/78.02/95.17%.
+PAE M1+NONE stays **NOT SUPPORTED** (slope 1.917407). Linear PAE recalibration improves its slope
+but worsens MAE by 1.86% and was not selected. This retrospective follow-up is not a fresh holdout.
+
+A distinct candidate-state contract creates 57 entering-2026 states from qualified 2025 QB history,
+using C14 formulas without changing historical states. It generates 57 EPA rows labeled
+`TEAM-INDEPENDENT RESEARCH PROJECTIONS` and zero PAE rows. No 2026 roster, team, coach, or Scheme
+is inferred. Predictions are not live production outputs. Checkpoint 17 remains NOT READY.
+See [the refinement report](docs/CHECKPOINT_16_CALIBRATION_REFINEMENT.md).
+
+## Original Checkpoint 16 team-independent projection research
 
 Data version: `c16-c7cee27a36eb0445`; model version: `qb-projection-c7cee27a36eb0445`.
 This is a separate historical experiment, not a replacement for the production C5 model below.

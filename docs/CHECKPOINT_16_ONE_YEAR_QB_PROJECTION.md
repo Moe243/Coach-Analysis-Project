@@ -1,5 +1,9 @@
 # Checkpoint 16 — One-year QB projection: Player State baseline
 
+This is the preserved **original C16 result**. The subsequent
+[calibration/2026 candidate-state refinement](CHECKPOINT_16_CALIBRATION_REFINEMENT.md) records the
+current research approval without rewriting this run or its artifacts.
+
 Status: **COMPLETE — historical research evaluation; no live projection approval**.
 
 Data version: `c16-c7cee27a36eb0445`. Model version: `qb-projection-c7cee27a36eb0445`.

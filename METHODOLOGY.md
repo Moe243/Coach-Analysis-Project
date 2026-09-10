@@ -1,6 +1,27 @@
 # Methodology
 
-## Checkpoint 16 team-independent QB projection
+## C16 calibration and candidate-state follow-up
+
+Original model-family selection stays frozen at the 2018 development cutoff. Test only identity,
+intercept/bias correction, and linear actual-on-prediction calibration, each fit using the selected
+family's previous five seasons of OOS predictions. Require 100 observations/three prior seasons;
+use an explicitly flagged identity transformation before qualification. Pick the method only on
+qualified development folds using the declared MAE-gain/uncertainty and accuracy rules.
+
+Prediction intervals use each calibrator's own previously issued OOS residuals, not a retrospectively
+recalibrated fit sample. Existing acceptance thresholds remain unchanged. An additional validation
+guard rejects a >1% MAE or RMSE deterioration from the uncalibrated selected family. EPA's selected
+bias correction passes; PAE retains NONE and is unapproved. This is a retrospective research
+refinement, not a new untouched validation sample.
+
+The new 2026 universe is historical-information candidates, not active roster prediction: canonical
+QBs with ≥50 combined 2025 dropbacks. C14's same feature/prior/shrinkage/uncertainty functions consume
+frozen profiles through 2025, with target/as-of 2026/2026-08-31. No future status, team, coach, or
+Scheme enters. Only an approved outcome receives a forward projection; 57 EPA forecasts use the
+unchanged C5 B2 formula plus historical bias correction, and PAE remains unavailable. Details:
+[C16 refinement](docs/CHECKPOINT_16_CALIBRATION_REFINEMENT.md).
+
+## Original Checkpoint 16 team-independent QB projection
 
 One observation is `(player_id, target_season)`, drawn from the frozen C14 as-of state before
 outcomes are joined. Aggregate observed QB-team-season EPA totals and dropbacks across all stints

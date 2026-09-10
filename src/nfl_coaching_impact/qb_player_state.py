@@ -1214,14 +1214,19 @@ def build_state_features(
     *,
     data_version: str,
     source_hash: str,
+    target_seasons: tuple[int, ...] | None = None,
 ) -> pl.DataFrame:
+    """Reuse historical estimators for explicit research targets; defaults stay unchanged."""
+    targets = TARGET_SEASONS if target_seasons is None else target_seasons
+    if set(universe["target_season"].unique().to_list()) - set(targets):
+        raise ValueError("state universe contains an undeclared target season")
     lookup = {item.name: item for item in registry}
     profile_by = {
         (str(key[0]), str(key[1])): group.sort("season")
         for key, group in profiles.group_by("player_id", "feature_name", maintain_order=True)
     }
     prior_cache: dict[tuple[int, str], dict[str, float] | None] = {}
-    for target in TARGET_SEASONS:
+    for target in targets:
         for base_feature, (kind, _, _, _) in PROFILE_SPECS.items():
             reference = profiles.filter(
                 (pl.col("feature_name") == base_feature)

@@ -96,7 +96,8 @@ consumption. No `coach_effect`, composite score, fixed weights, or 0–100 featu
 ## Coverage, missingness, and outputs
 
 Historical backtest snapshots cover targets 2011–2025; a forward-ready 2026 snapshot is also
-created from 2025 sources. Shorter-window families appear only when their prior source season
+created from 2025 sources. This is a **team-feature snapshot**, not a 2026 QB Player State.
+Shorter-window families appear only when their prior source season
 exists. Missingness uses `SOURCE_NOT_AVAILABLE`, `INSUFFICIENT_SAMPLE`, `ROLE_NOT_VERIFIED`,
 `FEATURE_NOT_SUPPORTED_THAT_SEASON`, `ENTITY_NOT_PRESENT`, and `NOT_APPLICABLE`; null is never
 converted to zero.

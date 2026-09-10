@@ -1,6 +1,23 @@
 # Limitations
 
-## Checkpoint 16 projection limitations
+## Current C16 calibration/candidate-state limitations
+
+- Bias-calibrated EPA passes the unchanged research gates but is not uniformly better: validation
+  MAE improves in four of seven years. Its 50% interval covers 45.04%, inside the declared tolerance
+  but still undercoverage. Rank correlation does not improve. No causal or unconditional guarantee.
+- The calibration investigation was prompted by previously seen results. Chronological fitting
+  and development-only selection do not make this a prospectively untouched external test.
+- PAE remains unapproved; improved linear calibration does not compensate for worsened MAE.
+- The 57 candidate QBs are qualified 2025 historical participants, not an inferred 2026 roster.
+  No rookies without NFL history, inactive-2025 QBs, current teams, retirement decisions, or
+  availability predictions are fabricated. Outcomes were validated conditional on eventual
+  target-year volume; forward membership uses past volume, so selection/playing-time risk remains.
+- The new 2026 states are a separately versioned research extension, not evidence that the
+  previously absent historical-C14 forward artifact had existed. Original artifacts are preserved.
+- Environment/scenario validation is still missing. Checkpoint 15 remains data-limited and
+  Checkpoint 17 remains not ready. No production system or Coach Effect is changed.
+
+## Original Checkpoint 16 projection limitations (preserved run)
 
 - The historical Player-State-only experiment is complete but neither development-selected
   target passes every acceptance criterion. B2 EPA narrowly misses an intercept guardrail;

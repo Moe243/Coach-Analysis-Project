@@ -1,5 +1,32 @@
 # Data dictionary
 
+## C16 calibration refinement and research candidates
+
+Ignored outputs: `data/processed/qb_projection_refinement/c16r-8c8063c5954e2a22/`.
+Historical C14 and original C16 artifacts remain unchanged.
+
+| Artifact | Grain / contract |
+|---|---|
+| `original_selection_audit.csv` | Outcome/challenger development metrics and frozen original family choice |
+| `calibration_selection_audit.csv` | Outcome/method; qualified development folds, gain threshold, and eligibility |
+| `calibration_parameters.csv` | Outcome/method/target year; bias, slope, prior-OOS fit count/window, fallback status |
+| `calibrated_oos_predictions.parquet` | Canonical player/target year/outcome/method; point and predictive intervals from prior method-specific residuals |
+| `model_comparison.csv`, `fold_metrics.csv`, `interval_coverage.csv` | Before/after metrics, fold stability, and marginal coverage; NONE reproduces original |
+| `outcome_decisions.csv` | Unchanged acceptance checks, extra accuracy guard, selected method, separate outcome status |
+| `candidate_universe_2026.parquet` | One canonical 2025 QB with ≥50 historical dropbacks; no current-roster or team claim |
+| `candidate_player_states_2026.parquet` | One player/2026 state, C14 profile lineage, source cutoff, uncertainty, candidate-only label |
+| `candidate_feature_records_2026.parquet` | C14 feature-record contract with new source version and source/fit seasons ≤2025 |
+| `candidate_predictors_2026.parquet` | Existing 19-feature allowlist, one player/2026 row; no target-team/coach/Scheme fields |
+| `projections_2026.parquet` | Player/2026/approved outcome; point, 50/80/95 bounds, as-of, versions, calibration metadata, research label |
+| `forward_model_parameters.json` | Unchanged B2 extension and prior-OOS calibration parameters used for forward projections |
+| `forward_state_audit.json` | A/reporting-error classification; C13 team versus C14 historical-state distinction |
+| `leakage_audit.csv`, `MANIFEST.json` | Chronology/allowlist checks, captured input hashes, configuration/code/dependencies, atomic output checksums |
+
+`label = TEAM-INDEPENDENT RESEARCH PROJECTIONS`; `active_roster_claim = false`.
+2026 has 57 candidate states, 57 EPA projections, and no PAE forecasts. Missing candidate estimates
+remain null. A prediction interval is not a coefficient confidence interval, availability estimate,
+team assignment, ranking, or causal effect.
+
 ## Checkpoint 16 team-independent projection artifacts
 
 Ignored research outputs: `data/processed/qb_projection/c16-c7cee27a36eb0445/`.

@@ -49,11 +49,18 @@ Checkpoint 16 experiment. Original run
 Phase II Checkpoint 16 completes a **team-independent historical projection experiment** using
 813 eligible Player State/outcome pairs, without requiring preseason team assignments. Version
 `c16-c7cee27a36eb0445` retains B2 for EPA and selects Ridge M1 for PAE using development years
-only. Neither selected model passes the complete calibration acceptance checklist; no live or
-2026 projection is approved. The existing C14 Player State ends in 2025, so zero 2026 forecasts
-are generated. Scheme fit remains data-limited. See the
+only. In that original run neither selected model passed the complete calibration checklist,
+and no 2026 forecasts were generated because historical C14 Player State ends in 2025. See the
 [Checkpoint 16 report](docs/CHECKPOINT_16_ONE_YEAR_QB_PROJECTION.md). This research changes no
 production database, API, frontend, or deployment.
+
+The C16 [calibration refinement](docs/CHECKPOINT_16_CALIBRATION_REFINEMENT.md),
+`c16r-8c8063c5954e2a22`, preserves the original family choice and adds prior-OOS bias correction
+selected on development years only. EPA is **research-ready with limitations**; PAE remains
+**not supported**. A separate history-only candidate contract supports **57 team-independent
+entering-2026 EPA research projections**, without claiming current roster membership or assigning
+teams/coaches/Scheme. Original C14/C16 outputs remain intact. Scheme fit is still data-limited,
+Checkpoint 17 is not ready, and nothing is published to the live app.
 
 ## Football decision supported
 
