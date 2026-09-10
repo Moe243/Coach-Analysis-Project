@@ -80,6 +80,26 @@ new raw source asset are committed. A future official NFL/team transaction input
 exact date, source URL, source hash, event type, and verification status before it can enter the
 assignment contract.
 
+## Opening Week weekly-roster audit — 2026-09-10
+
+The separate [weekly_rosters release](https://github.com/nflverse/nflverse-data/releases/tag/weekly_rosters)
+was audited directly, not inferred from the cached season-level roster assets. Its Parquet index
+contains 2002–2026; the completed-season coverage pilot inspected 2011–2025. Collection was
+read-only HTTPS retrieval of published nflverse files, hashed and parsed in memory; no raw roster
+files or assignment records were retained or ingested. The published data repository specifies
+[CC BY 4.0](https://github.com/nflverse/nflverse-data/blob/main/LICENSE.md); attribution and upstream
+NFL provenance remain required. The roster-builder's MIT code license is not the data license.
+
+The release's Shield-only description is incomplete: pinned builder code uses NFL Data Exchange
+weekly records for 2002–2015 and NGS roster calls from 2016, with Shield/master enrichment.
+Older weekly `status` is replaced by season-level Shield status. Week labels are normalized and
+there is no retained historical evidence-availability timestamp; published historical corrections
+also exist. The useful candidate matches do not establish pregame availability. Decision:
+**CONDITIONAL — SOURCE USEFUL BUT TIMING/PROVENANCE NOT STRONG ENOUGH YET**. No Opening Week
+contract is approved. Checkpoint 14, the August 31 contract, and Checkpoints 15/16 statuses are
+unchanged. See [the audit](docs/OPENING_WEEK_ROSTER_AUDIT.md) for source-code pins, hashes, coverage,
+status sensitivity, limitations, and the proposed (unimplemented) timing rule.
+
 ## Checkpoint-four coaching sources
 
 Head-coach stints use the `home_coach` and `away_coach` fields in the already validated nflverse PBP assets. Their intervals are the first and last regular-season game weeks on which that coach is observed for the team. Formal offensive-coordinator and quarterback-coach designations use the corresponding season's NFL Record & Fact Book staff pages. Citation rows record the exact URL, access date (2026-08-27), evidence locator, source type, and evidence note. The source registry records a SHA-256 for every reviewed book and confirms that none of the raw PDFs is committed.
