@@ -40,10 +40,20 @@ future QB prediction. Corrected version `c15-c4d7c86f56238a49` classifies the in
 **not estimable / data-limited**: historical target-team evidence cannot be established by the
 August 31 cutoff for representative veteran rows before 2025, so M2 has no valid rolling-origin
 training fold. No Fit Score or interaction estimate is published. Negative M0/M1 association and
-calibration diagnostics in the narrow cohort leave Checkpoint 16 **not ready** pending a licensed,
-dated historical preseason player-team assignment contract. Original run
+calibration diagnostics in the narrow cohort did not approve a scheme-conditioned projection
+baseline. That historical restriction does not apply to the separately authorized team-independent
+Checkpoint 16 experiment. Original run
 `c15-2ac7553234223553` remains preserved. See the
 [Checkpoint 15 report](docs/CHECKPOINT_15_PLAYER_SCHEME_FIT.md).
+
+Phase II Checkpoint 16 completes a **team-independent historical projection experiment** using
+813 eligible Player State/outcome pairs, without requiring preseason team assignments. Version
+`c16-c7cee27a36eb0445` retains B2 for EPA and selects Ridge M1 for PAE using development years
+only. Neither selected model passes the complete calibration acceptance checklist; no live or
+2026 projection is approved. The existing C14 Player State ends in 2025, so zero 2026 forecasts
+are generated. Scheme fit remains data-limited. See the
+[Checkpoint 16 report](docs/CHECKPOINT_16_ONE_YEAR_QB_PROJECTION.md). This research changes no
+production database, API, frontend, or deployment.
 
 ## Football decision supported
 

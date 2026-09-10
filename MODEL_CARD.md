@@ -1,5 +1,33 @@
 # Expected-quarterback-performance model card
 
+## Checkpoint 16 team-independent projection research
+
+Data version: `c16-c7cee27a36eb0445`; model version: `qb-projection-c7cee27a36eb0445`.
+This is a separate historical experiment, not a replacement for the production C5 model below.
+Frozen C14 states yield 813 eligible player-seasons in 2010–2025; 13 rolling folds produce
+663 predictions per model/target. No preseason target-team assignment is required.
+
+B0 is a historical league baseline, B1 is qualified raw prior QB performance with an explicit
+B0 fallback, B2 is the existing career-performance expectation (zero for PAE), and M1 is a
+19-predictor Ridge model with training-only imputation, scaling, and chronological alpha tuning.
+2013–2018 development folds select **B2 EPA** and **M1 PAE** before 2019–2025 validation.
+The latter contains 373 QB-seasons. Selected EPA MAE/RMSE are 0.12704/0.17276; selected PAE
+MAE/RMSE are 0.11957/0.16011. EPA M1 is a promising challenger, but its later gains do not
+retroactively change model selection.
+
+Both selected outcomes are **NOT SUPPORTED for projection approval under the declared checklist**:
+B2 EPA narrowly fails the absolute calibration-intercept limit (−0.051098 versus 0.05), while
+M1 PAE fails the calibration-slope limit (1.917407 versus 1.5). Rolling OOS residual intervals
+have 50/80/95% validation coverage of 47.45/78.55/95.17% for EPA and 49.06/78.28/94.37% for PAE.
+These are predictive intervals with empirical coverage, not coefficient confidence intervals or
+unconditional guarantees. Source uncertainty remains separately visible, not an arbitrary score.
+
+The historical experiment is complete; Checkpoint 17 is not ready. There is no approved 2026
+Player State in the frozen source (which ends in 2025), and no forward predictions are generated.
+No Scheme, coach variable, Coach Effect, ranking, or production behavior was added. Full methods,
+selection rules, cohort accounting, limitations, and artifacts are in
+[the Checkpoint 16 report](docs/CHECKPOINT_16_ONE_YEAR_QB_PROJECTION.md).
+
 ## Checkpoint 15 Player × Scheme fit research
 
 Corrected version `c15-c4d7c86f56238a49` compares rolling-origin Ridge models: core Player State
@@ -14,9 +42,10 @@ preseason veteran target-team evidence begins in 2025, while prior years' immuta
 do not have prior NFL style histories. No standalone fit quantity, M2 coefficient, bootstrap
 interval, permutation result, or fit score is released. M0/M1 metrics are narrow-cohort research
 diagnostics and not a projection product. Their negative out-of-sample correlation and calibration
-evidence do not support a projection baseline, so Checkpoint 16 is `NOT READY` pending a licensed,
-dated historical preseason player-team assignment contract. It is explicitly forbidden from
-consuming interactions from this checkpoint. Original run `c15-2ac7553234223553` and its original
+evidence did not support a scheme-conditioned projection baseline. This is the historical C15
+readiness conclusion, not a target-team requirement for C16's independent Player State experiment.
+Projection work is still explicitly forbidden from consuming interactions from this checkpoint.
+Original run `c15-2ac7553234223553` and its original
 label remain preserved as historical output rather than being overwritten.
 
 ## Checkpoint 14 research representation

@@ -1,5 +1,37 @@
 # Data dictionary
 
+## Checkpoint 16 team-independent projection artifacts
+
+Ignored research outputs: `data/processed/qb_projection/c16-c7cee27a36eb0445/`.
+Model identity: `qb-projection-c7cee27a36eb0445`; state identity: `c14-43283062e788e686`.
+These are historical OOS research artifacts, not serving rows or approved live forecasts.
+
+| Artifact | Grain / meaning |
+|---|---|
+| `projection_feature_registry.csv` | Allowlisted CORE state/header predictor, source, and timing rule |
+| `state_predictors.parquet` | One independent frozen `(player_id, target_season)` state; no target environment |
+| `state_input_lineage.parquet` | Selected C14 feature records, including timing, raw/shrunk values, reliability, uncertainty, and missingness |
+| `projection_cohort.parquet` | State plus canonical all-stint outcome at player-season grain; 50-dropback evaluation eligibility |
+| `cohort_coverage.csv`, `missingness_coverage.csv` | Cohort reconciliation and per-season feature coverage, with nulls preserved |
+| `fold_assignments.csv` | Outcome/model/target-year fold, training season bounds and row counts, target count, tuning history, and calibration history; row membership follows cohort eligibility and year |
+| `baseline_comparison.csv`, `model_comparison.csv` | B0/B1/B2/M1 metrics, with development/validation/all-OOS scopes distinguished |
+| `oos_predictions.parquet` | One player-season/outcome/model point prediction, 50/80/95 interval bounds, calibration history, and explicit B1 fallback flag |
+| `selected_oos_projections.parquet` | Development-selected model rows with data/model/state identity, as-of date, approval status, and non-live use label |
+| `subgroup_diagnostics.csv` | Retrospective diagnostic population metrics; never predictors |
+| `interval_coverage.csv` | Model/outcome/scope/nominal-level observed coverage and available interval count |
+| `bootstrap_comparison.csv` | QB-cluster paired OOS MAE-gain uncertainty, not player prediction intervals |
+| `selected_model_parameters.json` | Selected models/cutoff, baseline definitions and source identity, per-fold training-only Ridge/preprocessing parameters; full rules reside in the manifest |
+| `leakage_audit.csv` | State, fit/tuning, and calibration chronology checks |
+| `checkpoint_decision.csv` | Selected target, calibration/acceptance results, research status |
+| `forward_readiness.csv` | Explicit absent 2026 state / zero-forward-projection status |
+| `MANIFEST.json` | Content identity, input hashes, configuration, code/dependencies, all output checksums |
+
+`outcome_epa` is summed QB EPA divided by summed dropbacks across team stints. `outcome_pae`
+subtracts the invariant existing preseason expectation; a missing stint expectation leaves PAE
+null without deleting EPA. Prediction intervals are null until 100 strictly historical same-model
+OOS residuals exist. Team labels and target outcomes are evaluation-only. No new team-assignment,
+Scheme, Coach Effect, ability score, or ranking field is introduced.
+
 ## Checkpoint 15 Player × Scheme fit artifacts
 
 Generated files live under ignored

@@ -1,5 +1,28 @@
 # Limitations
 
+## Checkpoint 16 projection limitations
+
+- The historical Player-State-only experiment is complete but neither development-selected
+  target passes every acceptance criterion. B2 EPA narrowly misses an intercept guardrail;
+  M1 PAE is under-dispersed according to its calibration slope. Positive correlation and later
+  M1 gains do not justify changing the selection rule after viewing validation results.
+- Frozen C14 feature development/classification and the inherited B2 specification were developed
+  in earlier research using this historical archive. Chronological fitting is enforced, but these
+  results are not a prospective untouched external test of the entire research process.
+- Evaluation is conditional on reaching 50 observed dropbacks; it does not predict playing time,
+  injuries, active-roster membership, or availability. The 41 participants outside the as-of state
+  universe remain excluded rather than backfilled. Small-volume errors are materially larger.
+- Rolling residual intervals are marginal, year/model-level calibrations. Repeated quarterbacks
+  and temporal drift prevent unconditional conformal coverage claims; subgroup coverage and
+  individual uncertainty are not guaranteed. The first 144 OOS rows lack sufficient calibration.
+- EPA and PAE models are separate targets, not a validated joint predictive distribution. The
+  paired-error bootstrap resamples QBs without refitting and does not capture shared season shocks.
+- Existing C14 Player State ends in 2025. No 2026 universe or forward projections are invented.
+  A separately approved forward state and an accepted/calibrated model are prerequisites.
+- Target-team evidence is unnecessary for this model but remains necessary for valid Scheme fit,
+  context assignment, and scenarios. Retrospective team-change subgroup labels are diagnostic
+  only and do not establish a preseason-known move. No Coach Effect or interaction is included.
+
 ## Checkpoint 15 Player × Scheme fit limitations
 
 - Pre-2025 roster and depth-chart assets are not timestamped, so they cannot establish a veteran's
@@ -20,9 +43,9 @@
   approved `PERMISSION REQUIRED BEFORE INGESTION` decision. Weekly/final rosters, legacy depth
   charts, and year-only contracts do not prove an August 31 assignment.
 - Scheme features describe prior team behavior. They are not causal coach ownership measures.
-- Checkpoint 16 is not ready: the narrow M0/M1 cohort has negative out-of-sample correlation and
-  calibration diagnostics. No fit score, M2 coefficient, interaction contribution, or projection
-  baseline is approved.
+- The narrow M0/M1 cohort did not approve a scheme-conditioned projection baseline. That historical
+  C15 readiness conclusion does not block a separate full-cohort Player State experiment. No fit
+  score, M2 coefficient, or interaction contribution is approved.
 
 ## Checkpoint 14 Player State limitations
 

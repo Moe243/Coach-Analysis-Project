@@ -1,5 +1,35 @@
 # Methodology
 
+## Checkpoint 16 team-independent QB projection
+
+One observation is `(player_id, target_season)`, drawn from the frozen C14 as-of state before
+outcomes are joined. Aggregate observed QB-team-season EPA totals and dropbacks across all stints
+before applying the 50-dropback evaluation minimum. Expected EPA must agree across stints;
+PAE remains actual aggregate EPA/dropback minus that expectation. Missing PAE excludes only the
+secondary target, never the independent EPA cohort. No target-team resolver is called.
+
+The Ridge model uses an allowlist of CORE state features and safe demographic/history headers,
+with uncertainty retained. It does not promote conditional situation splits, use Scheme or coach
+context, or rebuild Player State. The C13 feature definitions/leakage validator and C15 train-only
+preprocessor are reused, not C15's restricted cohort or target-team assumptions.
+
+Outer folds train on strictly earlier seasons. Inner chronological folds learn Ridge alpha;
+feature qualification, medians, missingness indicators, and scales are fit only on training rows.
+2013–2018 development folds choose the model family using a predeclared relative-gain/one-standard-
+error and fold-consistency rule. Selection is frozen before 2019–2025 validation. B2 is retained
+for EPA despite later M1 improvement; M1 is selected for PAE.
+
+Prediction intervals calibrate against the same model/target's previous five seasons of OOS
+absolute residuals. At least 100 residuals are required; the radius is order `ceil((n+1)*p)`
+for 50%, 80%, or 95%. No target-year residual enters its own calibration. Early unavailable
+intervals remain null. A separate deterministic QB-cluster bootstrap describes paired OOS MAE
+differences; those bootstrap intervals are not player predictive intervals.
+
+Both selected targets fail a declared point-calibration check even though interval coverage
+passes. Historical research outputs therefore carry non-live/unsupported approval labels.
+No 2026 state is fabricated, and no production model is changed. See
+[Checkpoint 16](docs/CHECKPOINT_16_ONE_YEAR_QB_PROJECTION.md) for exact thresholds and results.
+
 ## Checkpoint 15 Player × Scheme fit research
 
 Checkpoint 15 freezes one Checkpoint 14 Player State per `(player_id, target_season)` before
@@ -31,9 +61,11 @@ Corrected version `c15-c4d7c86f56238a49` has no estimable M2 fold because histor
 target-team snapshots before 2025 are undated. It therefore yields `NOT ESTIMABLE / DATA-LIMITED`,
 not a negative interaction result. It publishes no standalone fit quantity, interaction bootstrap
 interval, or permutation result. Because the narrow M0/M1 cohort has negative out-of-sample
-correlations and calibration slopes, Checkpoint 16 is `NOT READY` until a licensed, dated historical
-preseason player-team assignment contract provides representative veteran and team-change
-coverage. It cannot consume Player × Scheme interactions. The original
+correlations and calibration slopes, it did not approve a scheme-conditioned projection baseline.
+That historical conclusion does not impose a target-team requirement on the separately authorized
+team-independent C16 experiment. Scheme-conditioned research still requires licensed, dated
+historical preseason team evidence and cannot consume validated Player × Scheme interactions.
+The original
 `c15-2ac7553234223553` run remains unchanged. See
 `docs/CHECKPOINT_15_PLAYER_SCHEME_FIT.md` for the full cohort and results.
 
