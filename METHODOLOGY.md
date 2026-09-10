@@ -4,12 +4,17 @@
 
 Checkpoint 15 freezes one Checkpoint 14 Player State per `(player_id, target_season)` before
 attaching a target environment. A target team is eligible only through an immutable draft-season
-team fact or the most recent dated QB depth-chart snapshot on or before August 31. The target
+team fact, the most recent dated QB depth-chart snapshot on or before August 31, or a future
+approved exact-dated official NFL/team transaction input. The contract stores evidence type/date,
+date precision, source and hash, as-of date, and verification. Exact dated evidence supersedes the
+coarse draft-event bound; the latest date wins and same-date conflicts remain ambiguous. The target
 outcome is joined afterward on `(player_id, target_team_id, target_season)` and cannot determine
 state membership or team identity.
 
 M0 uses Checkpoint 14 CORE Player State fields. M1 adds Checkpoint 13 CORE prior-environment Scheme
-fields. M2 would add eight football-defined style/environment products; it is fit only when an
+fields: team `T` in target season `Y` receives only team `T`'s Scheme record from `Y-1`, through
+the Checkpoint 13 `AsOfFeatureStore`. M2 would add eight football-defined style/environment
+products; it is fit only when an
 earlier-season training window has at least 20 finite, varying observations for an interaction.
 Conditional Player State features and conditional expected-pass/PROE fields are separate
 challengers. Descriptive or predictively forbidden fields never enter a model. M3 is omitted
@@ -22,10 +27,14 @@ PAE, with a 50-dropback evaluation minimum. Missing values stay null in the coho
 median handling is permitted only with at least ten finite, varying training observations and is
 always paired with a missingness indicator.
 
-Version `c15-2ac7553234223553` has no estimable M2 fold because historical veteran target-team
-snapshots before 2025 are undated. This yields a `NOT SUPPORTED` interaction decision, no
-standalone fit quantity, no interaction bootstrap interval, and no permutation result. Checkpoint
-16 may benchmark M0/M1 but cannot consume Player × Scheme interactions. See
+Corrected version `c15-c4d7c86f56238a49` has no estimable M2 fold because historical veteran
+target-team snapshots before 2025 are undated. It therefore yields `NOT ESTIMABLE / DATA-LIMITED`,
+not a negative interaction result. It publishes no standalone fit quantity, interaction bootstrap
+interval, or permutation result. Because the narrow M0/M1 cohort has negative out-of-sample
+correlations and calibration slopes, Checkpoint 16 is `NOT READY` until a licensed, dated historical
+preseason player-team assignment contract provides representative veteran and team-change
+coverage. It cannot consume Player × Scheme interactions. The original
+`c15-2ac7553234223553` run remains unchanged. See
 `docs/CHECKPOINT_15_PLAYER_SCHEME_FIT.md` for the full cohort and results.
 
 ## Checkpoint 14 Player State

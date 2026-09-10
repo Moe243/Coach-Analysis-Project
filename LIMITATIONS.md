@@ -10,14 +10,19 @@
   NFL QB-seasons. M0/M1 backtest metrics are research diagnostics, not production projections.
 - There are no qualified historical interaction observations before 2025, so M2, interaction
   coefficient stability, bootstrap uncertainty, permutation evidence, and portability are not
-  estimable. Empty artifacts mean unavailable, not zero effect.
+  estimable. This is a data limitation, not evidence that Player × Scheme fit does not exist.
+  Empty artifacts mean unavailable, not zero effect.
 - The 16-row team-change subset is a small 2025-heavy proxy. It cannot establish generalization or
   verified coach/scheme-change effects.
 - Draft team is a known transaction fact, not proof of August 31 retention. Exact-key outcome
   joining prevents substitution of a later destination, and unmatched rows are excluded.
+- The audited nflverse trade asset is PFR-derived and cannot enter predictive/model work under the
+  approved `PERMISSION REQUIRED BEFORE INGESTION` decision. Weekly/final rosters, legacy depth
+  charts, and year-only contracts do not prove an August 31 assignment.
 - Scheme features describe prior team behavior. They are not causal coach ownership measures.
-- Checkpoint 16 may use only the M0/M1 research contracts; no fit score, M2 coefficient, or
-  interaction contribution is approved.
+- Checkpoint 16 is not ready: the narrow M0/M1 cohort has negative out-of-sample correlation and
+  calibration diagnostics. No fit score, M2 coefficient, interaction contribution, or projection
+  baseline is approved.
 
 ## Checkpoint 14 Player State limitations
 

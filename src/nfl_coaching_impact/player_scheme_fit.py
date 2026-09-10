@@ -30,10 +30,10 @@ from sklearn.linear_model import Ridge
 from .constants import TEAM_ALIAS_TO_CANONICAL
 from .predictive_foundation import AsOfFeatureStore
 
-CHECKPOINT_15_SPECIFICATION: Final = "checkpoint-15-player-scheme-fit-v1"
+CHECKPOINT_15_SPECIFICATION: Final = "checkpoint-15-player-scheme-fit-v1.1-data-contract-audit"
 FIT_FEATURE_VERSION: Final = "player-scheme-fit-features-v1"
 FIT_MODEL_VERSION: Final = "rolling-ridge-player-scheme-v1"
-COHORT_VERSION: Final = "preseason-known-target-environment-v1"
+COHORT_VERSION: Final = "preseason-known-target-environment-v1.1"
 TARGET_SEASONS: Final = tuple(range(2011, 2026))
 AS_OF_MONTH_DAY: Final = (8, 31)
 MIN_OUTCOME_DROPBACKS: Final = 50
@@ -174,9 +174,25 @@ VALID_MISSINGNESS: Final = {
     "NOT_IN_ASOF_STATE_UNIVERSE",
     "TARGET_TEAM_NOT_ESTABLISHED",
     "AMBIGUOUS_PRESEASON_TEAM",
+    "PRESEASON_NO_TEAM_KNOWN",
     "TARGET_TEAM_NO_OUTCOME",
     "BELOW_OUTCOME_DROPBACK_MINIMUM",
 }
+
+TARGET_TEAM_SOURCE_URLS: Final = {
+    "immutable_draft_team": (
+        "https://github.com/nflverse/nflverse-data/releases/download/players/players.parquet"
+    ),
+}
+DATED_TRANSACTION_EVENTS: Final = {
+    "TRADE",
+    "SIGNING",
+    "WAIVER_CLAIM",
+    "ROSTER_ASSIGNMENT",
+    "RELEASE",
+    "WAIVER",
+}
+NO_TEAM_EVENTS: Final = {"RELEASE", "WAIVER"}
 
 
 @dataclass(frozen=True)
@@ -314,6 +330,14 @@ def _safe_date(value: object) -> date | None:
         return None
 
 
+def _frame_hash(frame: pl.DataFrame) -> str:
+    """Return a deterministic fallback hash for in-memory fixture evidence."""
+
+    columns = sorted(frame.columns)
+    normalized = frame.select(columns).sort(columns, nulls_last=True) if columns else frame
+    return hashlib.sha256(normalized.write_csv().encode()).hexdigest()
+
+
 def _finite_values(series: pl.Series) -> np.ndarray:
     return np.asarray(
         [
@@ -426,10 +450,20 @@ def validate_requested_features(registry: pl.DataFrame, requested: tuple[str, ..
 def build_preseason_team_assignments(
     players: pl.DataFrame,
     dated_depth_charts: pl.DataFrame,
+    dated_transactions: pl.DataFrame | None = None,
+    *,
+    players_source_hash: str | None = None,
 ) -> pl.DataFrame:
-    """Resolve team only from draft-season facts or timestamped pre-cutoff QB evidence."""
+    """Resolve teams from immutable or explicitly dated, pre-cutoff evidence only.
+
+    Draft facts carry a conservative August 31 availability bound rather than a fabricated draft
+    date. Any exact dated evidence supersedes that coarse bound. Among exact records, the latest
+    date wins; contradictory teams (including a no-team release state) on that date remain
+    explicitly ambiguous.
+    """
 
     rows: list[dict[str, object]] = []
+    player_hash = players_source_hash or _frame_hash(players)
     for row in (
         players.filter((pl.col("position") == "QB") | (pl.col("position_group") == "QB"))
         .select("gsis_id", "draft_year", "draft_team")
@@ -444,8 +478,14 @@ def build_preseason_team_assignments(
                     "target_season": int(season),
                     "candidate_team_id": team,
                     "assignment_basis": "immutable_draft_team",
-                    "source_available_date": None,
-                    "evidence_sort_key": f"{season}-01-01",
+                    "evidence_type": "IMMUTABLE_DRAFT_TEAM",
+                    "evidence_date": f"{season}-08-31",
+                    "evidence_date_precision": "PRE_CUTOFF_EVENT_UPPER_BOUND",
+                    "evidence_stage": 0,
+                    "evidence_priority": 10,
+                    "source": TARGET_TEAM_SOURCE_URLS["immutable_draft_team"],
+                    "source_version_hash": player_hash,
+                    "verification_status": "VERIFIED_IMMUTABLE_FACT",
                     "source_availability_evidence": "IMMUTABLE_DRAFT_FACT_KNOWN_BY_CUTOFF",
                 }
             )
@@ -467,9 +507,74 @@ def build_preseason_team_assignments(
                     "target_season": season,
                     "candidate_team_id": team,
                     "assignment_basis": "dated_preseason_depth_chart",
-                    "source_available_date": str(available),
-                    "evidence_sort_key": str(available),
+                    "evidence_type": "DATED_PRESEASON_DEPTH_CHART",
+                    "evidence_date": str(available),
+                    "evidence_date_precision": "EXACT_SOURCE_DATE",
+                    "evidence_stage": 1,
+                    "evidence_priority": 30,
+                    "source": row.get("source") or "fixture://dated-depth-chart",
+                    "source_version_hash": row.get("source_version_hash")
+                    or _frame_hash(dated_depth_charts),
+                    "verification_status": "VERIFIED_DATED_SNAPSHOT",
                     "source_availability_evidence": "DATED_SNAPSHOT_ON_OR_BEFORE_CUTOFF",
+                }
+            )
+    if dated_transactions is not None and not dated_transactions.is_empty():
+        required = {
+            "player_id",
+            "target_season",
+            "team",
+            "event_type",
+            "evidence_date",
+            "source",
+            "source_version_hash",
+            "verification_status",
+        }
+        if not required <= set(dated_transactions.columns):
+            raise ValueError("dated transaction evidence lacks required lineage columns")
+        for row in dated_transactions.to_dicts():
+            season = row["target_season"]
+            available = _safe_date(row["evidence_date"])
+            event_type = str(row["event_type"]).upper()
+            verification = str(row["verification_status"]).upper()
+            if event_type not in DATED_TRANSACTION_EVENTS:
+                raise ValueError(f"unsupported target-team transaction event: {event_type}")
+            if verification != "VERIFIED":
+                continue
+            source = str(row["source"])
+            source_hash = str(row["source_version_hash"])
+            if not source.startswith("https://"):
+                raise ValueError("dated transaction source must use HTTPS")
+            if len(source_hash) != 64 or any(
+                character not in "0123456789abcdef" for character in source_hash.lower()
+            ):
+                raise ValueError("dated transaction source hash must be a SHA-256 digest")
+            if (
+                not row["player_id"]
+                or season not in TARGET_SEASONS
+                or available is None
+                or available.year != int(season)
+                or available > date(int(season), *AS_OF_MONTH_DAY)
+            ):
+                continue
+            team = _canonical_team(row["team"])
+            if event_type not in NO_TEAM_EVENTS and team is None:
+                raise ValueError(f"{event_type} evidence lacks a canonical receiving team")
+            rows.append(
+                {
+                    "player_id": str(row["player_id"]),
+                    "target_season": int(season),
+                    "candidate_team_id": team,
+                    "assignment_basis": "dated_official_transaction",
+                    "evidence_type": f"DATED_OFFICIAL_{event_type}",
+                    "evidence_date": str(available),
+                    "evidence_date_precision": "EXACT_SOURCE_DATE",
+                    "evidence_stage": 1,
+                    "evidence_priority": 40,
+                    "source": source,
+                    "source_version_hash": source_hash.lower(),
+                    "verification_status": "VERIFIED_DATED_TRANSACTION",
+                    "source_availability_evidence": "DATED_TRANSACTION_ON_OR_BEFORE_CUTOFF",
                 }
             )
     evidence = pl.DataFrame(rows, infer_schema_length=None)
@@ -484,40 +589,68 @@ def build_preseason_team_assignments(
                 "target_team_source_available_date": pl.String,
                 "target_team_source_availability_evidence": pl.String,
                 "candidate_team_count": pl.UInt32,
+                "evidence_type": pl.String,
+                "evidence_date": pl.String,
+                "evidence_date_precision": pl.String,
+                "source": pl.String,
+                "source_version_hash": pl.String,
+                "as_of_date": pl.String,
+                "verification_status": pl.String,
             }
         )
-    latest_evidence = evidence.join(
-        evidence.group_by("player_id", "target_season").agg(
-            pl.col("evidence_sort_key").max().alias("latest_evidence_sort_key")
-        ),
-        on=["player_id", "target_season"],
-        how="inner",
-        validate="m:1",
-    ).filter(pl.col("evidence_sort_key") == pl.col("latest_evidence_sort_key"))
-    grouped = latest_evidence.group_by("player_id", "target_season").agg(
-        pl.col("candidate_team_id").unique().sort().alias("candidate_teams"),
-        pl.col("candidate_team_id").n_unique().alias("candidate_team_count"),
-        pl.col("assignment_basis").unique().sort().str.join("|").alias("target_team_basis"),
-        pl.col("source_available_date").min().alias("target_team_source_available_date"),
-        pl.col("source_availability_evidence")
-        .unique()
-        .sort()
-        .str.join("|")
-        .alias("target_team_source_availability_evidence"),
-    )
-    return (
-        grouped.with_columns(
-            pl.when(pl.col("candidate_team_count") == 1)
-            .then(pl.col("candidate_teams").list.first())
-            .alias("target_team_id"),
-            pl.when(pl.col("candidate_team_count") == 1)
-            .then(pl.lit("PRESEASON_TARGET_TEAM_KNOWN"))
-            .otherwise(pl.lit("AMBIGUOUS_PRESEASON_TEAM"))
-            .alias("target_team_status"),
+    resolved: list[dict[str, object]] = []
+    for (player_id, target_season), group in evidence.group_by(
+        "player_id", "target_season", maintain_order=True
+    ):
+        candidates = group.to_dicts()
+        if any(int(row["evidence_stage"]) == 1 for row in candidates):
+            candidates = [row for row in candidates if int(row["evidence_stage"]) == 1]
+        latest_date = max(str(row["evidence_date"]) for row in candidates)
+        latest = [row for row in candidates if str(row["evidence_date"]) == latest_date]
+        distinct_teams = sorted({str(row["candidate_team_id"]) for row in latest})
+        primary = sorted(
+            latest,
+            key=lambda row: (
+                -int(row["evidence_priority"]),
+                str(row["assignment_basis"]),
+                str(row["source"]),
+                str(row["source_version_hash"]),
+            ),
+        )[0]
+        team = primary["candidate_team_id"] if len(distinct_teams) == 1 else None
+        status = (
+            "AMBIGUOUS_PRESEASON_TEAM"
+            if len(distinct_teams) > 1
+            else ("PRESEASON_NO_TEAM_KNOWN" if team is None else "PRESEASON_TARGET_TEAM_KNOWN")
         )
-        .drop("candidate_teams")
-        .sort("target_season", "player_id")
-    )
+        resolved.append(
+            {
+                "player_id": player_id,
+                "target_season": int(target_season),
+                "candidate_team_count": len(distinct_teams),
+                "target_team_basis": str(primary["assignment_basis"]),
+                "target_team_source_available_date": latest_date,
+                "target_team_source_availability_evidence": "|".join(
+                    sorted({str(row["source_availability_evidence"]) for row in latest})
+                ),
+                "target_team_id": team,
+                "target_team_status": status,
+                "evidence_type": "|".join(sorted({str(row["evidence_type"]) for row in latest})),
+                "evidence_date": latest_date,
+                "evidence_date_precision": "|".join(
+                    sorted({str(row["evidence_date_precision"]) for row in latest})
+                ),
+                "source": "|".join(sorted({str(row["source"]) for row in latest})),
+                "source_version_hash": "|".join(
+                    sorted({str(row["source_version_hash"]) for row in latest})
+                ),
+                "as_of_date": f"{target_season}-08-31",
+                "verification_status": "|".join(
+                    sorted({str(row["verification_status"]) for row in latest})
+                ),
+            }
+        )
+    return pl.DataFrame(resolved, infer_schema_length=None).sort("target_season", "player_id")
 
 
 def load_dated_depth_charts(historical_path: Path) -> tuple[pl.DataFrame, list[Path]]:
@@ -528,6 +661,12 @@ def load_dated_depth_charts(historical_path: Path) -> tuple[pl.DataFrame, list[P
         if "dt" not in schema:
             continue
         frame = pl.read_parquet(path)
+        season = int(path.parent.name.split("=")[1])
+        source = (
+            "https://github.com/nflverse/nflverse-data/releases/download/depth_charts/"
+            f"depth_charts_{season}.parquet"
+        )
+        source_hash = _sha256(path)
         for row in frame.to_dicts():
             rows.append(
                 {
@@ -535,6 +674,8 @@ def load_dated_depth_charts(historical_path: Path) -> tuple[pl.DataFrame, list[P
                     "position": row.get("pos_abb") or row.get("pos_grp"),
                     "team": row.get("team"),
                     "source_available_date": row.get("dt"),
+                    "source": source,
+                    "source_version_hash": source_hash,
                 }
             )
     if rows:
@@ -546,6 +687,8 @@ def load_dated_depth_charts(historical_path: Path) -> tuple[pl.DataFrame, list[P
                 "position": pl.String,
                 "team": pl.String,
                 "source_available_date": pl.String,
+                "source": pl.String,
+                "source_version_hash": pl.String,
             }
         ),
         paths,
@@ -949,10 +1092,13 @@ def validate_cohort_leakage(cohort: pl.DataFrame) -> pl.DataFrame:
         {
             "gate": "TARGET_TEAM_CUTOFF",
             "failure_count": cohort.filter(
-                pl.col("target_team_source_available_date").is_not_null()
-                & (
+                (
                     pl.col("target_team_source_available_date")
                     > (pl.col("target_season").cast(pl.String) + pl.lit("-08-31"))
+                )
+                | (
+                    pl.col("evidence_date").is_not_null()
+                    & (pl.col("evidence_date") > pl.col("as_of_date"))
                 )
             ).height,
         },
@@ -966,9 +1112,43 @@ def validate_cohort_leakage(cohort: pl.DataFrame) -> pl.DataFrame:
                 (pl.col("target_team_status") == "PRESEASON_TARGET_TEAM_KNOWN")
                 & (
                     ~pl.col("target_team_basis").is_in(
-                        ["immutable_draft_team", "dated_preseason_depth_chart"]
+                        [
+                            "immutable_draft_team",
+                            "dated_preseason_depth_chart",
+                            "dated_official_transaction",
+                        ]
                     )
                     | (pl.col("target_team_source_availability_evidence") == "NOT_APPLICABLE")
+                )
+            ).height,
+        },
+        {
+            "gate": "TARGET_TEAM_LINEAGE_COMPLETE",
+            "failure_count": cohort.filter(
+                (pl.col("target_team_status") != "TARGET_TEAM_NOT_ESTABLISHED")
+                & (
+                    pl.col("evidence_type").is_null()
+                    | pl.col("evidence_date").is_null()
+                    | pl.col("source").is_null()
+                    | pl.col("source_version_hash").is_null()
+                    | pl.col("as_of_date").is_null()
+                    | pl.col("verification_status").is_null()
+                    | ~pl.col("source").str.contains(r"^https://")
+                    | ~pl.col("source_version_hash").str.contains(
+                        r"^[0-9a-f]{64}(\|[0-9a-f]{64})*$"
+                    )
+                    | (
+                        pl.col("as_of_date")
+                        != (pl.col("target_season").cast(pl.String) + pl.lit("-08-31"))
+                    )
+                )
+            ).height,
+        },
+        {
+            "gate": "NO_OUTCOME_DERIVED_TARGET_TEAM",
+            "failure_count": cohort.filter(
+                pl.col("target_team_basis").is_in(
+                    ["target_season_pbp", "final_season_roster", "target_season_outcome"]
                 )
             ).height,
         },
@@ -1592,9 +1772,282 @@ def _coverage_report(cohort: pl.DataFrame) -> pl.DataFrame:
     return pl.DataFrame(rows, infer_schema_length=None).sort("feature_name")
 
 
+def build_target_team_coverage(
+    states: pl.DataFrame,
+    assignments: pl.DataFrame,
+    performance: pl.DataFrame,
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """Audit assignment coverage without using outcomes to construct an assignment."""
+
+    states = states.filter(pl.col("target_season").is_in(TARGET_SEASONS))
+    outcomes = performance.filter(
+        (pl.col("scope") == "analysis") & pl.col("season").is_in(TARGET_SEASONS)
+    ).select(
+        "player_id",
+        pl.col("season").alias("target_season"),
+        pl.col("team_id").alias("outcome_team_id"),
+        pl.col("dropbacks").alias("outcome_dropbacks"),
+    )
+    state_assignments = states.select("player_id", "target_season").join(
+        assignments,
+        on=["player_id", "target_season"],
+        how="left",
+        validate="1:1",
+    )
+    known = state_assignments.filter(
+        (pl.col("target_team_status") == "PRESEASON_TARGET_TEAM_KNOWN")
+        & pl.col("target_team_id").is_not_null()
+    )
+    matching = known.join(
+        outcomes,
+        left_on=["player_id", "target_season", "target_team_id"],
+        right_on=["player_id", "target_season", "outcome_team_id"],
+        how="inner",
+        validate="1:1",
+    )
+    participants = states.select("player_id", "target_season").join(
+        outcomes.select("player_id", "target_season").unique(),
+        on=["player_id", "target_season"],
+        how="inner",
+        validate="1:1",
+    )
+    season_rows: list[dict[str, object]] = []
+    for season in TARGET_SEASONS:
+        season_states = states.filter(pl.col("target_season") == season)
+        season_known = known.filter(pl.col("target_season") == season)
+        season_matching = matching.filter(pl.col("target_season") == season)
+        season_participants = participants.filter(pl.col("target_season") == season)
+        participant_known = season_participants.join(
+            season_known.select("player_id", "target_season"),
+            on=["player_id", "target_season"],
+            how="inner",
+            validate="1:1",
+        ).height
+        participant_matching = season_participants.join(
+            season_matching.select("player_id", "target_season").unique(),
+            on=["player_id", "target_season"],
+            how="inner",
+            validate="1:1",
+        ).height
+        season_rows.append(
+            {
+                "target_season": season,
+                "entering_state_rows": season_states.height,
+                "known_target_team_rows": season_known.height,
+                "known_target_team_coverage": (
+                    season_known.height / season_states.height if season_states.height else None
+                ),
+                "draft_team_rows": season_known.filter(
+                    pl.col("target_team_basis") == "immutable_draft_team"
+                ).height,
+                "dated_depth_chart_rows": season_known.filter(
+                    pl.col("target_team_basis") == "dated_preseason_depth_chart"
+                ).height,
+                "dated_transaction_rows": season_known.filter(
+                    pl.col("target_team_basis") == "dated_official_transaction"
+                ).height,
+                "retrospective_participant_states": season_participants.height,
+                "participants_with_any_assignment": participant_known,
+                "participants_with_matching_outcome_team": participant_matching,
+                "participant_matching_coverage": (
+                    participant_matching / season_participants.height
+                    if season_participants.height
+                    else None
+                ),
+                "eligible_evaluation_rows": season_matching.filter(
+                    pl.col("outcome_dropbacks") >= MIN_OUTCOME_DROPBACKS
+                ).height,
+            }
+        )
+
+    primary = (
+        outcomes.sort(
+            "player_id",
+            "target_season",
+            "outcome_dropbacks",
+            "outcome_team_id",
+            descending=[False, False, True, False],
+        )
+        .unique(["player_id", "target_season"], keep="first")
+        .select("player_id", "target_season", "outcome_team_id")
+    )
+    prior = primary.with_columns((pl.col("target_season") + 1).alias("target_season")).rename(
+        {"outcome_team_id": "prior_team_id"}
+    )
+    classified = (
+        primary.join(
+            states.select("player_id", "target_season", "is_rookie"),
+            on=["player_id", "target_season"],
+            how="inner",
+            validate="1:1",
+        )
+        .join(prior, on=["player_id", "target_season"], how="left", validate="m:1")
+        .join(
+            assignments.select(
+                "player_id", "target_season", "target_team_id", "target_team_status"
+            ),
+            on=["player_id", "target_season"],
+            how="left",
+            validate="1:1",
+        )
+        .with_columns(
+            pl.when(pl.col("is_rookie"))
+            .then(pl.lit("ROOKIE"))
+            .when(pl.col("prior_team_id").is_null())
+            .then(pl.lit("OTHER_NEW_ENTRANT"))
+            .when(pl.col("prior_team_id") != pl.col("outcome_team_id"))
+            .then(pl.lit("TEAM_CHANGER"))
+            .otherwise(pl.lit("RETURNING_VETERAN"))
+            .alias("evaluation_category")
+        )
+    )
+    matching_keys = (
+        matching.select("player_id", "target_season")
+        .unique()
+        .with_columns(pl.lit(True).alias("has_matching_outcome_team"))
+    )
+    eligible_keys = (
+        matching.filter(pl.col("outcome_dropbacks") >= MIN_OUTCOME_DROPBACKS)
+        .select("player_id", "target_season")
+        .unique()
+        .with_columns(pl.lit(True).alias("is_evaluation_eligible"))
+    )
+    classified = (
+        classified.join(
+            matching_keys,
+            on=["player_id", "target_season"],
+            how="left",
+            validate="1:1",
+        )
+        .join(
+            eligible_keys,
+            on=["player_id", "target_season"],
+            how="left",
+            validate="1:1",
+        )
+        .with_columns(
+            pl.col("has_matching_outcome_team").fill_null(False),
+            pl.col("is_evaluation_eligible").fill_null(False),
+        )
+    )
+    category_rows: list[dict[str, object]] = []
+    for category in ("RETURNING_VETERAN", "TEAM_CHANGER", "ROOKIE", "OTHER_NEW_ENTRANT"):
+        group = classified.filter(pl.col("evaluation_category") == category)
+        known_count = group.filter(
+            pl.col("target_team_status") == "PRESEASON_TARGET_TEAM_KNOWN"
+        ).height
+        matching_count = int(group["has_matching_outcome_team"].sum())
+        category_rows.append(
+            {
+                "evaluation_category": category,
+                "retrospective_participant_states": group.height,
+                "participants_with_any_assignment": known_count,
+                "participants_with_matching_outcome_team": matching_count,
+                "matching_coverage": matching_count / group.height if group.height else None,
+                "eligible_evaluation_rows": int(group["is_evaluation_eligible"].sum()),
+                "classification_uses_target_outcome_for_audit_only": True,
+            }
+        )
+
+    source_rows: list[dict[str, object]] = []
+    accepted = (
+        (
+            "immutable_draft_team",
+            "ACCEPTED",
+            "immutable draft fact; exact event date absent, conservative pre-cutoff bound",
+        ),
+        (
+            "dated_preseason_depth_chart",
+            "ACCEPTED",
+            "timestamped snapshot on or before August 31; observed only in 2025",
+        ),
+        (
+            "dated_official_transaction",
+            "CONTRACT_READY_NO_APPROVED_INPUT",
+            "requires an approved primary NFL/team source, exact date, hash, and verification",
+        ),
+    )
+    for basis, status, reason in accepted:
+        assigned = known.filter(pl.col("target_team_basis") == basis)
+        matched = matching.filter(pl.col("target_team_basis") == basis)
+        source_rows.append(
+            {
+                "source_family": basis,
+                "acceptance_status": status,
+                "coverage_added_to_state_rows": assigned.height,
+                "matching_outcome_rows": matched.height,
+                "eligible_evaluation_rows": matched.filter(
+                    pl.col("outcome_dropbacks") >= MIN_OUTCOME_DROPBACKS
+                ).height,
+                "reason": reason,
+            }
+        )
+    for family, reason in (
+        ("weekly_or_final_rosters", "week/final state does not prove availability by August 31"),
+        ("legacy_weekly_depth_charts", "pre-2025 rows have week but no source timestamp"),
+        ("injury_reports", "all dated QB records begin after the August 31 cutoff"),
+        ("historical_contracts", "year-only and season-history fields are not dated assignments"),
+        (
+            "nflverse_trades_via_pfr",
+            "rejected by approved PFR audit for predictive/model use without permission",
+        ),
+        ("target_season_participation", "PBP, stats, and game participation are outcomes"),
+    ):
+        source_rows.append(
+            {
+                "source_family": family,
+                "acceptance_status": "REJECTED",
+                "coverage_added_to_state_rows": 0,
+                "matching_outcome_rows": 0,
+                "eligible_evaluation_rows": 0,
+                "reason": reason,
+            }
+        )
+    return (
+        pl.DataFrame(season_rows, infer_schema_length=None).sort("target_season"),
+        pl.DataFrame(category_rows, infer_schema_length=None).sort("evaluation_category"),
+        pl.DataFrame(source_rows, infer_schema_length=None).sort("source_family"),
+    )
+
+
+def target_team_contract() -> pl.DataFrame:
+    return pl.DataFrame(
+        [
+            {
+                "evidence_family": "immutable_draft_team",
+                "date_contract": "PRE_CUTOFF_EVENT_UPPER_BOUND",
+                "precedence": 10,
+                "model_usable": True,
+                "required_lineage": "player_id|target_season|team_id|source|source_version_hash",
+            },
+            {
+                "evidence_family": "dated_preseason_depth_chart",
+                "date_contract": "EXACT_DATE_LE_AUGUST_31",
+                "precedence": 30,
+                "model_usable": True,
+                "required_lineage": (
+                    "player_id|target_season|team_id|evidence_date|source|source_version_hash"
+                ),
+            },
+            {
+                "evidence_family": "dated_official_transaction",
+                "date_contract": "EXACT_DATE_LE_AUGUST_31",
+                "precedence": 40,
+                "model_usable": True,
+                "required_lineage": (
+                    "player_id|target_season|team_or_no_team|event_type|evidence_date|source|"
+                    "source_version_hash|verification_status"
+                ),
+            },
+        ],
+        infer_schema_length=None,
+    ).sort("precedence")
+
+
 def _fit_decision(
     predictions: pl.DataFrame,
     bootstrap: pl.DataFrame,
+    comparison: pl.DataFrame,
 ) -> tuple[pl.DataFrame, str, str]:
     paired_epa = _paired_predictions(predictions, "next_season_epa_per_dropback")
     m2_rows = predictions.filter(pl.col("model") == "M2").height
@@ -1606,16 +2059,43 @@ def _fit_decision(
         and interval_high is not None
         and float(interval_high) < 0
     )
-    status = "VALIDATED FOR CHECKPOINT 16 USE" if validated else "NOT SUPPORTED"
-    readiness = "READY"
-    reason = (
-        "M2 improved EPA prediction with stable paired out-of-sample evidence."
-        if validated
-        else (
-            "No M2 rolling fold had pre-cutoff target-team training rows with qualified prior "
-            "player-style interactions; historical target-team snapshots are not dated."
-        )
+    baseline = comparison.filter(
+        (pl.col("outcome") == "next_season_epa_per_dropback") & pl.col("model").is_in(["M0", "M1"])
     )
+    baseline_predictive = bool(
+        baseline.height
+        and baseline.filter(
+            (pl.col("n") >= 100)
+            & (pl.col("pearson") > 0)
+            & (pl.col("spearman") > 0)
+            & (pl.col("calibration_slope") > 0)
+        ).height
+    )
+    if validated:
+        status = "VALIDATED FOR CHECKPOINT 16 USE"
+        readiness = "READY"
+        reason = "M2 improved EPA prediction with stable paired out-of-sample evidence."
+        blocker = None
+    elif m2_folds == 0:
+        status = "NOT ESTIMABLE / DATA-LIMITED"
+        readiness = "NOT READY"
+        reason = (
+            "M2 was never estimated: approved repository data lack leakage-safe historical "
+            "August 31 target-team assignments for returning veterans and team changers."
+        )
+        blocker = (
+            "A licensed, source-hashed historical preseason player-team assignment contract "
+            "with dates on or before August 31 and representative veteran/team-change coverage."
+        )
+    else:
+        status = "NOT SUPPORTED"
+        readiness = "READY" if baseline_predictive else "NOT READY"
+        reason = "M2 was estimated but did not meet the predeclared validation rule."
+        blocker = (
+            None
+            if baseline_predictive
+            else "M0/M1 require positive out-of-sample association and calibration evidence."
+        )
     return (
         pl.DataFrame(
             [
@@ -1627,7 +2107,11 @@ def _fit_decision(
                     "paired_m2_m1_epa_rows": paired_epa.height,
                     "standalone_fit_quantity_approved": validated,
                     "checkpoint_16_may_consume_interactions": validated,
-                    "checkpoint_16_allowed_baseline": "M2" if validated else "M0_M1_ONLY",
+                    "checkpoint_16_allowed_baseline": (
+                        "M2" if validated else ("M0_M1_ONLY" if readiness == "READY" else "NONE")
+                    ),
+                    "baseline_predictive_readiness_gate": baseline_predictive,
+                    "checkpoint_16_blocker": blocker,
                     "reason": reason,
                 }
             ],
@@ -1720,6 +2204,7 @@ def run_checkpoint_fifteen(
         "predictive_foundation_code": project_root
         / "src/nfl_coaching_impact/predictive_foundation.py",
         "team_constants_code": project_root / "src/nfl_coaching_impact/constants.py",
+        "historical_source_manifest": historical / "SOURCE_MANIFEST.json",
         "players": historical / "bronze/players/players.parquet",
         "performance": enhancement / "canonical_qb_team_season_performance.parquet",
         "pae": enhancement / "canonical_qb_pae.parquet",
@@ -1762,7 +2247,11 @@ def run_checkpoint_fifteen(
         + tuple(name for name, _, _, _ in INTERACTION_DEFINITIONS),
     )
     players = pl.read_parquet(paths["players"])
-    assignments = build_preseason_team_assignments(players, dated)
+    assignments = build_preseason_team_assignments(
+        players,
+        dated,
+        players_source_hash=inputs["players"],
+    )
     performance = pl.read_parquet(paths["performance"])
     pae = pl.read_parquet(paths["pae"])
     scheme = _scheme_matrix(store)
@@ -1779,6 +2268,11 @@ def run_checkpoint_fifteen(
     folds = build_fold_assignments(cohort)
     predictions, fold_metrics, coefficients, diagnostics = run_rolling_models(cohort)
     comparison = aggregate_model_comparison(predictions)
+    coverage_by_season, coverage_by_category, source_audit = build_target_team_coverage(
+        pl.read_parquet(paths["c14_states"]),
+        assignments,
+        performance,
+    )
     team_change = team_change_validation(predictions)
     environment_change = environment_change_validation(predictions)
     bootstrap_rows: list[pl.DataFrame] = []
@@ -1803,6 +2297,7 @@ def run_checkpoint_fifteen(
     decision, fit_status, readiness = _fit_decision(
         predictions,
         bootstrap.filter(pl.col("outcome") == "next_season_epa_per_dropback"),
+        comparison,
     )
     permutation = pl.DataFrame(
         [
@@ -1860,13 +2355,17 @@ def run_checkpoint_fifteen(
             },
             {
                 "gate": "M2_INTERACTIONS",
-                "status": "NOT_SUPPORTED",
-                "detail": "zero estimable folds",
+                "status": fit_status,
+                "detail": (
+                    "zero estimable folds; absence of a result is not evidence against fit"
+                    if predictions.filter(pl.col("model") == "M2").is_empty()
+                    else "evaluated under the predeclared validation rule"
+                ),
             },
             {
                 "gate": "CHECKPOINT_16",
                 "status": readiness,
-                "detail": "M0/M1 research may proceed; M2 interactions are forbidden",
+                "detail": str(decision["checkpoint_16_blocker"][0] or "approved baseline"),
             },
         ]
     )
@@ -1874,6 +2373,10 @@ def run_checkpoint_fifteen(
         "fit_feature_registry.csv": registry,
         "modeling_cohort.parquet": cohort,
         "preseason_target_team_assignments.parquet": assignments,
+        "target_team_contract.csv": target_team_contract(),
+        "target_team_source_audit.csv": source_audit,
+        "target_team_coverage_by_season.csv": coverage_by_season,
+        "target_team_coverage_by_category.csv": coverage_by_category,
         "rolling_fold_assignments.csv": folds,
         "model_comparison.csv": comparison,
         "rolling_fold_metrics.csv": fold_metrics,
@@ -1917,6 +2420,10 @@ def run_checkpoint_fifteen(
             "counts": {
                 "cohort_rows": cohort.height,
                 "eligible_rows": cohort.filter(pl.col("eligible_m1")).height,
+                "known_target_team_rows": coverage_by_season["known_target_team_rows"].sum(),
+                "retrospective_participant_states": coverage_by_season[
+                    "retrospective_participant_states"
+                ].sum(),
                 "prediction_rows": predictions.height,
                 "m2_prediction_rows": predictions.filter(pl.col("model") == "M2").height,
                 "fold_rows": fold_metrics.height,

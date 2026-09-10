@@ -2,17 +2,22 @@
 
 ## Checkpoint 15 Player × Scheme fit research
 
-Version `c15-2ac7553234223553` compares rolling-origin Ridge models: core Player State (M0), core
+Corrected version `c15-c4d7c86f56238a49` compares rolling-origin Ridge models: core Player State
+(M0), core
 Player State plus prior Scheme main effects (M1), and predeclared Player × Scheme interactions
 (M2). Conditional Checkpoint 13/14 features are challengers, not promoted into the primary
 specifications. Preprocessing and hyperparameter selection are fit inside each training window.
 
-The final status is `NOT SUPPORTED`. M2 has zero estimable historical folds because safely dated
+The final status is `NOT ESTIMABLE / DATA-LIMITED`. M2 has zero estimable historical folds because
+safely dated
 preseason veteran target-team evidence begins in 2025, while prior years' immutable draft-team rows
 do not have prior NFL style histories. No standalone fit quantity, M2 coefficient, bootstrap
 interval, permutation result, or fit score is released. M0/M1 metrics are narrow-cohort research
-diagnostics and not a projection product. Checkpoint 16 is ready to benchmark M0/M1 but is
-explicitly forbidden from consuming interactions from this checkpoint.
+diagnostics and not a projection product. Their negative out-of-sample correlation and calibration
+evidence do not support a projection baseline, so Checkpoint 16 is `NOT READY` pending a licensed,
+dated historical preseason player-team assignment contract. It is explicitly forbidden from
+consuming interactions from this checkpoint. Original run `c15-2ac7553234223553` and its original
+label remain preserved as historical output rather than being overwritten.
 
 ## Checkpoint 14 research representation
 

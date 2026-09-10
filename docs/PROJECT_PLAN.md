@@ -138,9 +138,11 @@ predeclared measurable Player × Scheme interactions without using target-season
 information as predictors. Keep target-team evidence outside Player State and require that it be
 known by the August 31 boundary.
 
-Exit criterion met: deterministic version `c15-2ac7553234223553` materializes the full 8,032-row
-entering-state cohort and a 130-row safely assigned evaluation cohort. It records a scientifically
-valid `NOT SUPPORTED` interaction decision because no pre-2025 fold has qualified prior player
-style and dated target-environment evidence. Checkpoint 16 may proceed with M0/M1 research only;
-it may not consume interactions. No projection product, simulator, Ask Anything feature,
+Corrected version `c15-c4d7c86f56238a49` preserves original run `c15-2ac7553234223553` and
+materializes the full 8,032-row entering-state cohort plus a 130-row safely assigned evaluation
+cohort. Because no pre-2025 fold has qualified prior player style and dated target-environment
+evidence, the proper interaction decision is `NOT ESTIMABLE / DATA-LIMITED`, not a negative
+result. Negative M0/M1 correlation and calibration diagnostics leave Checkpoint 16 `NOT READY`
+until a licensed, dated historical preseason player-team assignment contract exists. It may not
+consume interactions. No projection product, simulator, Ask Anything feature,
 college/rookie model, database/API/frontend change, migration, or deployment was added.

@@ -22,6 +22,7 @@ from nfl_coaching_impact.player_scheme_fit import (
     fit_feature_registry,
     run_checkpoint_fifteen,
     select_alpha,
+    target_team_contract,
     team_change_validation,
     validate_cohort_leakage,
     validate_requested_features,
@@ -54,6 +55,22 @@ def _dated(rows: list[tuple[str, str, str | None]]) -> pl.DataFrame:
     )
 
 
+def _transactions(rows: list[tuple[str, int, str | None, str, str]]) -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "player_id": [row[0] for row in rows],
+            "target_season": [row[1] for row in rows],
+            "team": [row[2] for row in rows],
+            "event_type": [row[3] for row in rows],
+            "evidence_date": [row[4] for row in rows],
+            "source": ["https://example.test/transaction"] * len(rows),
+            "source_version_hash": ["a" * 64] * len(rows),
+            "verification_status": ["VERIFIED"] * len(rows),
+        },
+        schema_overrides={"target_season": pl.Int64},
+    )
+
+
 def _hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -74,7 +91,9 @@ class PreseasonTeamContractTest(unittest.TestCase):
         dated = assignments.filter(pl.col("player_id") == "qb-dated").row(0, named=True)
         self.assertEqual(drafted["target_team_id"], "team_buf")
         self.assertEqual(drafted["target_team_basis"], "immutable_draft_team")
-        self.assertIsNone(drafted["target_team_source_available_date"])
+        self.assertEqual(drafted["target_team_source_available_date"], "2011-08-31")
+        self.assertEqual(drafted["evidence_date_precision"], "PRE_CUTOFF_EVENT_UPPER_BOUND")
+        self.assertEqual(len(drafted["source_version_hash"]), 64)
         self.assertEqual(
             drafted["target_team_source_availability_evidence"],
             "IMMUTABLE_DRAFT_FACT_KNOWN_BY_CUTOFF",
@@ -113,6 +132,77 @@ class PreseasonTeamContractTest(unittest.TestCase):
         row = assignments.filter(pl.col("player_id") == "qb-dated").row(0, named=True)
         self.assertEqual(row["target_team_status"], "AMBIGUOUS_PRESEASON_TEAM")
         self.assertIsNone(row["target_team_id"])
+
+    def test_verified_transaction_supersedes_draft_or_snapshot_without_hindsight(self) -> None:
+        assignments = build_preseason_team_assignments(
+            _players(),
+            _dated([("qb-draft", "BUF", "2011-08-01")]),
+            _transactions(
+                [
+                    ("qb-draft", 2011, "HOU", "TRADE", "2011-08-20"),
+                    ("qb-draft", 2011, "JAX", "TRADE", "2011-09-01"),
+                ]
+            ),
+        )
+        row = assignments.filter(pl.col("player_id") == "qb-draft").row(0, named=True)
+        self.assertEqual(row["target_team_id"], "team_hou")
+        self.assertEqual(row["target_team_basis"], "dated_official_transaction")
+        self.assertEqual(row["evidence_date"], "2011-08-20")
+        self.assertNotIn("2011-09-01", row["evidence_date"])
+
+    def test_release_and_same_day_conflicts_are_not_silently_resolved(self) -> None:
+        released = build_preseason_team_assignments(
+            _players(),
+            pl.DataFrame(),
+            _transactions([("qb-draft", 2011, None, "RELEASE", "2011-08-20")]),
+        ).row(0, named=True)
+        self.assertEqual(released["target_team_status"], "PRESEASON_NO_TEAM_KNOWN")
+        self.assertIsNone(released["target_team_id"])
+        conflict = build_preseason_team_assignments(
+            _players(),
+            pl.DataFrame(),
+            _transactions(
+                [
+                    ("qb-draft", 2011, "HOU", "TRADE", "2011-08-20"),
+                    ("qb-draft", 2011, "JAX", "SIGNING", "2011-08-20"),
+                ]
+            ),
+        ).row(0, named=True)
+        self.assertEqual(conflict["target_team_status"], "AMBIGUOUS_PRESEASON_TEAM")
+        self.assertIsNone(conflict["target_team_id"])
+
+    def test_assignment_precedence_is_deterministic_under_input_reordering(self) -> None:
+        transactions = _transactions(
+            [
+                ("qb-draft", 2011, "HOU", "TRADE", "2011-08-10"),
+                ("qb-draft", 2011, "JAX", "TRADE", "2011-08-20"),
+            ]
+        )
+        first = build_preseason_team_assignments(_players(), pl.DataFrame(), transactions)
+        second = build_preseason_team_assignments(
+            _players().reverse(), pl.DataFrame(), transactions.reverse()
+        )
+        self.assertEqual(first.to_dicts(), second.to_dicts())
+        self.assertEqual(first.row(0, named=True)["target_team_id"], "team_jax")
+
+    def test_transaction_lineage_must_be_verified_https_and_source_hashed(self) -> None:
+        invalid = _transactions([("qb-draft", 2011, "HOU", "TRADE", "2011-08-20")]).with_columns(
+            pl.lit("not-a-hash").alias("source_version_hash")
+        )
+        with self.assertRaisesRegex(ValueError, "SHA-256"):
+            build_preseason_team_assignments(_players(), pl.DataFrame(), invalid)
+
+    def test_contract_does_not_accept_pbp_or_final_roster_facts(self) -> None:
+        baseline = build_preseason_team_assignments(_players(), pl.DataFrame())
+        mutated_target_outcomes = pl.DataFrame(
+            {"player_id": ["qb-dated"], "team": ["HOU"], "target_season": [2025]}
+        )
+        self.assertEqual(
+            baseline.to_dicts(),
+            build_preseason_team_assignments(_players(), pl.DataFrame()).to_dicts(),
+        )
+        self.assertNotIn("target_outcome", target_team_contract()["evidence_family"].to_list())
+        self.assertEqual(mutated_target_outcomes.height, 1)
 
 
 class FeatureAndLeakageContractTest(unittest.TestCase):
@@ -212,6 +302,12 @@ class FeatureAndLeakageContractTest(unittest.TestCase):
                 "target_team_status": ["PRESEASON_TARGET_TEAM_KNOWN"],
                 "target_team_basis": ["dated_preseason_depth_chart"],
                 "target_team_source_availability_evidence": ["DATED_SNAPSHOT_ON_OR_BEFORE_CUTOFF"],
+                "evidence_type": ["DATED_PRESEASON_DEPTH_CHART"],
+                "evidence_date": ["2020-08-31"],
+                "source": ["https://example.test/depth"],
+                "source_version_hash": ["a" * 64],
+                "as_of_date": ["2020-08-31"],
+                "verification_status": ["VERIFIED_DATED_SNAPSHOT"],
                 "modeling_exclusion_reason": [None],
             }
         )
@@ -358,8 +454,35 @@ class UncertaintyAndDeterminismTest(unittest.TestCase):
             decision = pl.read_csv(first.output_path / "fit_approval_decision.csv").row(
                 0, named=True
             )
-            self.assertEqual(decision["decision"], "NOT SUPPORTED")
+            self.assertEqual(decision["decision"], "NOT ESTIMABLE / DATA-LIMITED")
+            self.assertEqual(decision["checkpoint_16_readiness"], "NOT READY")
             self.assertFalse(decision["checkpoint_16_may_consume_interactions"])
+            self.assertEqual(decision["checkpoint_16_allowed_baseline"], "NONE")
+            self.assertIn("player-team assignment", decision["checkpoint_16_blocker"])
+            coverage = pl.read_csv(first.output_path / "target_team_coverage_by_season.csv")
+            self.assertEqual(int(coverage["entering_state_rows"].sum()), 8032)
+            self.assertEqual(int(coverage["known_target_team_rows"].sum()), 265)
+            self.assertEqual(int(coverage["eligible_evaluation_rows"].sum()), 130)
+            sources = pl.read_csv(first.output_path / "target_team_source_audit.csv")
+            pfr_trades = sources.filter(pl.col("source_family") == "nflverse_trades_via_pfr").row(
+                0, named=True
+            )
+            self.assertEqual(pfr_trades["acceptance_status"], "REJECTED")
+            self.assertEqual(pfr_trades["coverage_added_to_state_rows"], 0)
+            assignment_contract = pl.read_parquet(
+                first.output_path / "preseason_target_team_assignments.parquet"
+            )
+            self.assertTrue(
+                {
+                    "evidence_type",
+                    "evidence_date",
+                    "source",
+                    "source_version_hash",
+                    "as_of_date",
+                    "verification_status",
+                }
+                <= set(assignment_contract.columns)
+            )
             cohort = pl.read_parquet(first.output_path / "modeling_cohort.parquet")
             large_changes = cohort.filter(pl.col("eligible_m1") & pl.col("large_scheme_change"))
             self.assertEqual(large_changes.height, 16)
@@ -372,7 +495,9 @@ class UncertaintyAndDeterminismTest(unittest.TestCase):
             self.assertTrue(
                 cohort.filter(pl.col("scheme_feature_max_source_season").is_not_null())
                 .select(
-                    (pl.col("scheme_feature_max_source_season") < pl.col("target_season")).all()
+                    (
+                        pl.col("scheme_feature_max_source_season") == pl.col("target_season") - 1
+                    ).all()
                 )
                 .item()
             )

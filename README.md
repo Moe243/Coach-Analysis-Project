@@ -36,10 +36,13 @@ file-based research layer and changes no live product behavior. See the
 [QB state feature dictionary](docs/QB_STATE_FEATURE_DICTIONARY.md).
 
 Phase II Checkpoint 15 tests whether predeclared, measurable Player × Scheme interactions improve
-future QB prediction. Version `c15-2ac7553234223553` finds the interaction block **not supported**:
-historical target-team evidence cannot be established by the August 31 cutoff for veteran rows
-before 2025, so M2 has no valid rolling-origin training fold. No Fit Score or interaction estimate
-is published. Checkpoint 16 may continue with M0/M1 research only. See the
+future QB prediction. Corrected version `c15-c4d7c86f56238a49` classifies the interaction block
+**not estimable / data-limited**: historical target-team evidence cannot be established by the
+August 31 cutoff for representative veteran rows before 2025, so M2 has no valid rolling-origin
+training fold. No Fit Score or interaction estimate is published. Negative M0/M1 association and
+calibration diagnostics in the narrow cohort leave Checkpoint 16 **not ready** pending a licensed,
+dated historical preseason player-team assignment contract. Original run
+`c15-2ac7553234223553` remains preserved. See the
 [Checkpoint 15 report](docs/CHECKPOINT_15_PLAYER_SCHEME_FIT.md).
 
 ## Football decision supported

@@ -3,13 +3,18 @@
 ## Checkpoint 15 Player × Scheme fit artifacts
 
 Generated files live under ignored
-`data/processed/player_scheme_fit/c15-2ac7553234223553/`.
+`data/processed/player_scheme_fit/c15-c4d7c86f56238a49/`; original run
+`c15-2ac7553234223553` remains preserved.
 
 | Artifact | Grain / contract |
 |---|---|
 | `fit_feature_registry.csv` | One registered Player State, Scheme, or predeclared interaction feature |
 | `modeling_cohort.parquet` | One entering state per `(player_id, target_season, cohort_version)`; target team and outcome remain separately sourced |
-| `preseason_target_team_assignments.parquet` | One resolved/ambiguous player-target-season assignment from latest valid as-of evidence |
+| `preseason_target_team_assignments.parquet` | One resolved/ambiguous player-target-season assignment with evidence type/date/precision, source hash, as-of date, and verification |
+| `target_team_contract.csv` | One accepted evidence-family contract with date rule, precedence, and required lineage |
+| `target_team_source_audit.csv` | One audited source family with acceptance decision and additive coverage |
+| `target_team_coverage_by_season.csv` | One target season with state, safe-assignment, retrospective-participant, matching-team, and eligibility coverage |
+| `target_team_coverage_by_category.csv` | One evaluation-only returning-veteran, team-changer, rookie, or other/new-entrant coverage row |
 | `rolling_fold_assignments.csv` | One player-state fold membership; training season is always earlier than fold season |
 | `model_comparison.csv` | One outcome-model aggregate over rolling out-of-sample predictions |
 | `rolling_fold_metrics.csv` | One outcome-model-fold metric row |
@@ -31,10 +36,10 @@ Generated files live under ignored
 
 Player uncertainty columns retain feature-specific reliability, missingness, shrinkage weight,
 standard error, and interval. Scheme metadata retains feature status, predictive permission,
-sample size, and missingness. `target_team_source_available_date` is populated only for dated
-evidence; immutable draft facts retain an explicit availability-evidence label without inventing
-an exact source date. `outcome_pae` is always actual minus expected EPA/dropback on the complete
-player-team-season key.
+sample size, and missingness. Exact dated evidence stores its source date. Immutable draft facts
+store August 31 only as a conservative pre-cutoff availability upper bound and label the precision
+accordingly; it is not represented as the actual draft date. `outcome_pae` is always actual minus
+expected EPA/dropback on the complete player-team-season key.
 
 ## Checkpoint 14 QB Player State artifacts
 

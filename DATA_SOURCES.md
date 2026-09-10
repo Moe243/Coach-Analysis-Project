@@ -14,6 +14,7 @@ This register records planned and audited sources. Coverage describes the source
 | nflverse injuries | https://nflreadr.nflverse.com/reference/load_injuries.html | Weekly report/practice status and injury labels | Documented since 2009; 2010 and 2025 assets verified; sampled 2025 file had 6,068 rows and 16 columns | `nflreadpy.load_injuries` | Record upstream provenance; use only football-relevant fields | Reports measure listed status, not severity; documentation previously lagged 2025 asset availability |
 | nflverse depth charts | https://nflreadr.nflverse.com/reference/load_depth_charts.html | Team, position, depth order, player ID | Documented since 2001; 2010 and 2025 assets verified | `nflreadpy.load_depth_charts` | Record source change and access time | From 2025, snapshots use timestamps rather than a weekly field |
 | nflverse snap counts | https://nflreadr.nflverse.com/reference/load_snap_counts.html | Offensive, defensive, and special-teams snaps | 2012 onward; 2010 returned 404 and 2012 returned 200 on 2026-08-25 | `nflreadpy.load_snap_counts` | Upstream is Pro Football Reference; do not scrape PFR directly and document downstream usage concern | Missing for 2010-2011 and occasionally incomplete players/games |
+| nflverse trades | https://nflreadr.nflverse.com/reference/load_trades.html | Dated team-to-team trades | Source begins in 2010 | Audited only; not ingested or used by a model | Upstream is Pro Football Reference; approved PFR audit requires permission before predictive use | Does not cover signings, releases, waivers, or unchanged-team retention and therefore is not a complete August 31 assignment ledger |
 | NFL Next Gen Stats via nflverse | https://nflreadr.nflverse.com/reference/load_nextgen_stats.html | CPOE, expected completion, time to throw, air-yards measures, aggressiveness | 2016 onward | `nflreadpy.load_nextgen_stats` | Attribute NFL Next Gen Stats via nflverse | Minimum-volume filters omit small samples; not available for 2010-2015 |
 | Participation via nflverse | https://nflreadr.nflverse.com/reference/load_participation.html | Players on field, personnel, formation, pass rushers, coverage fields when present | 2016 onward; source changes beginning in 2023 | `nflreadpy.load_participation` | Attribute NFL NGS via nflverse through 2022 and FTN via nflverse from 2023 | Historical fields differ; post-2023 data arrives after postseason completion |
 | FTN charting via nflverse | https://nflreadr.nflverse.com/reference/load_ftn_charting.html | Motion, play action, screen/RPO, blitzers, QB-fault sack and charted pass traits | 2022 onward | `nflreadpy.load_ftn_charting` | CC BY-SA 4.0; attribution to FTN Data via nflverse is required | Not available for most of the analysis window; charting is human-generated |
@@ -66,6 +67,18 @@ The official full-history run `c3-f6c1aa118ff43b90` validated 140 Parquet assets
 PBP, rosters, and player statistics are expected for 1999-2025. Depth charts are expected from 2001, injuries from 2009, and snap counts from 2012. The 25 earlier dataset-season combinations are recorded as `expected_gap`, not requested and not treated as failures. The official 2012 snap-count asset exists and passes its schema contract but contains zero rows, so it is recorded separately as `ingested_empty`. The 2025 depth-chart schema differs materially from prior seasons; Silver remains partitioned by source season so upstream fields are preserved without coercing incompatible schemas.
 
 Preflight uses cached sizes or HTTPS HEAD responses before any download. The final checkpoint-three run found all 540,760,962 source bytes in the verified cache and required 1,215,739,652 free bytes. Deterministic source manifests retain exact URLs, schemas, row counts, byte sizes, validation status, and SHA-256 values. Execution timestamps, cache status, HTTP retrieval headers, preflight measurements, and reuse status are separated into mutable `data/processed/historical/EXECUTION_LOG.json` outside the content-addressed version directory.
+
+## Checkpoint 15 target-team evidence audit
+
+The corrected Checkpoint 15 audit accepts immutable draft-team facts and exact-dated depth-chart
+snapshots on or before August 31. Pre-2025 depth charts and weekly/final rosters lack a qualifying
+source timestamp; dated injury-report rows begin after the cutoff; historical contracts contain
+year-only or hindsight season histories; and PBP/player statistics are outcomes. The nflverse
+trades family was identified but rejected before model use because it is PFR-derived and the
+approved PFR decision remains `PERMISSION REQUIRED BEFORE INGESTION`. No trade rows, PFR rows, or
+new raw source asset are committed. A future official NFL/team transaction input must provide an
+exact date, source URL, source hash, event type, and verification status before it can enter the
+assignment contract.
 
 ## Checkpoint-four coaching sources
 
