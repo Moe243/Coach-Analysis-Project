@@ -1,5 +1,24 @@
 # Production deployment
 
+## Phase II / Ask Anything release preparation
+
+The integrated C19 product is **READY WITH CONFIGURATION STEPS**, not deployed by this
+closeout. See [Phase II closeout](PHASE_II_CLOSEOUT.md) for the exact snapshot hashes,
+Render settings, local release results and supported/refused capabilities.
+
+C19 requires the private `c19-62010b4bfffeb4af` Ask bundle and manifest in `ASK_DATA_DIR` on
+the API filesystem. Git/build dependencies and the existing database alone do not supply it.
+The bundle includes all 57 approved team-independent 2026 EPA research projections. Restore
+and validate it during each build; no runtime model fitting or public raw-data download is
+needed. The artifact transport/location still needs configuration at deployment time.
+
+Keep the existing CORS/frontend API origins and SPA rewrite. C19 needs no new migration or
+Neon publication. `/health` checks only the DB, so separately test `POST /ask` before declaring
+the release healthy. Missing/incompatible Ask data produce sanitized 503 responses.
+
+The checkpoint-nine sequence below is historical deployment guidance; its migration/reload
+steps do not mean C19 requires a new database change. No provider settings were changed here.
+
 Verified production endpoints:
 
 - Frontend: `https://nfl-coaching-impact-engine.onrender.com`

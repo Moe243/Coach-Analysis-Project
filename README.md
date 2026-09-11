@@ -305,6 +305,11 @@ Original code and documentation are available under the [MIT License](LICENSE). 
 
 ## Interpretation standard
 
+Phase II is closed through C20, with C18 explicitly NOT READY / NOT IMPLEMENTED.
+The [Phase II closeout](docs/PHASE_II_CLOSEOUT.md) preserves the data-limited and unsupported
+research findings and documents C19's **READY WITH CONFIGURATION STEPS** release decision.
+Ask Anything still requires its private snapshot and Render configuration before deployment.
+
 Checkpoint 20 completes a research source/cohort audit with status **NOT ESTIMABLE /
 DATA-LIMITED**. It preserves 304 drafted QBs across 1999–2025, including missing/low-volume
 NFL outcomes, but has no verified college histories. No rookie model or forecasts were fitted;

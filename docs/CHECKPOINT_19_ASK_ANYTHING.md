@@ -53,7 +53,7 @@ it cannot select a different model, generate estimates or override a refusal.
 | `PCAE_RESEARCH` | Frozen C12 verified, non-shared caller interval research evidence |
 | `PLAYER_TEAM_SCENARIO` | Refuse: C17 did not validate environment-response estimates |
 | `CAREER_COUNTERFACTUAL` | Refuse: C18 has no validated multi-year response mechanism |
-| `ROOKIE_PROJECTION` | Refuse: C20 is not implemented |
+| `ROOKIE_PROJECTION` | Refuse: C20 completed its source gate as DATA-LIMITED; no rookie model was implemented or validated |
 | `COACH_EFFECT` | Refuse: no composite Coach Effect or causal coach-improvement number |
 | `UNKNOWN` | Clarify; no analytical fallback |
 
