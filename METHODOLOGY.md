@@ -1,5 +1,31 @@
 # Methodology
 
+## Checkpoint 17 conditional destination evaluation
+
+An externally supplied team changes the estimand from unconditional preseason forecasting to
+conditional QB-team-season performance given destination and inherited scheme. It does not
+establish a causal move, resolve selection into a team/playing-time threshold, or retrospectively
+prove an August 31 assignment. Keep C14 Player State independent and reuse C13 validated prior
+raw scheme records. Preserve all eligible stints; do not choose a dominant target-season team.
+
+Fit the stint outcome minus the exact prior-issued C16 B2+bias baseline. M1 uses ten
+train-centered scheme main effects, Ridge without an intercept. M2 adds C15's eight centered
+style/environment products orthogonalized against training player/scheme main effects plus
+intercept, then train-scaled. SVD relative rank tolerance 1e-8 handles near-dependent
+compositional depth rates; no statistical acceptance threshold is changed. Missing raw
+measurements stay null; training medians/indicators and observed-product masks are explicit.
+
+Three development folds end in 2018; seven fixed validation folds cover 2019–2025. Every outer
+and inner fit, transformation, tuning decision and interval residual window excludes its target
+season. All three models use the same stints. Direction accuracy refers to above/below zero EPA,
+not the direction of a causal environment effect. Separate QB and team-season clustered paired
+error bootstraps describe fixed-OOS comparison uncertainty; neither is a jointly crossed bootstrap.
+Single-team, >=200-dropback and reliable-state **evaluation subsets** are diagnostics, not newly
+refitted or selected model families. Model-specific prediction intervals recalibrate from prior
+stint residuals and do not promise coverage for hypothetical new pairings. C17 rejects both
+environment additions, retains zero forward scenarios and leaves C18 NOT READY. See the
+[predeclared gates and results](docs/CHECKPOINT_17_SCENARIO_SIMULATOR.md).
+
 ## C16 calibration and candidate-state follow-up
 
 Original model-family selection stays frozen at the 2018 development cutoff. Test only identity,

@@ -1,5 +1,22 @@
 # Expected-quarterback-performance model card
 
+## Checkpoint 17 conditional destination research
+
+Data `c17-9f582e4ac18d8cd6`; model `qb-scenario-9f582e4ac18d8cd6`.
+Scenario status **NOT SUPPORTED**; research checkpoint complete; C18 **NOT READY**.
+EPA only. M0 is the exact frozen C16 B2+bias point projection. M1 adds centered, prior-season
+destination scheme main effects. M2 adds eight train-orthogonalized style/environment products.
+Ridge preprocessing and alpha tuning are chronological. Destination is an explicit condition,
+not a predicted or proven preseason assignment. Stint outcomes never enter predictors.
+
+2019–2025 validation: 375 stints / 119 QBs. MAE/RMSE: M0 0.125335/0.166303;
+M1 0.125714/0.167243; M2 0.126041/0.167470. Both challengers fail development selection,
+validation accuracy/stability and bootstrap/portability gates. The 72-stint, 43-QB changer
+sample also worsens. Marginal interval coverage passes but cannot rescue poor predictions.
+No environment adjustment is approved or exported for 2026. Historical OOS adjustments are
+diagnostics, not an approved fit quantity, causal effect, or ranking. Full specifications,
+selection limits, uncertainty and artifacts: [C17 report](docs/CHECKPOINT_17_SCENARIO_SIMULATOR.md).
+
 ## Current C16 calibration refinement
 
 Data `c16r-8c8063c5954e2a22`; model `qb-calibrated-8c8063c5954e2a22`.
@@ -15,7 +32,8 @@ but worsens MAE by 1.86% and was not selected. This retrospective follow-up is n
 A distinct candidate-state contract creates 57 entering-2026 states from qualified 2025 QB history,
 using C14 formulas without changing historical states. It generates 57 EPA rows labeled
 `TEAM-INDEPENDENT RESEARCH PROJECTIONS` and zero PAE rows. No 2026 roster, team, coach, or Scheme
-is inferred. Predictions are not live production outputs. Checkpoint 17 remains NOT READY.
+is inferred. Predictions are not live production outputs. That follow-up left C17 NOT READY;
+the separate C17 conditional experiment above does not change the approved C16 baseline.
 See [the refinement report](docs/CHECKPOINT_16_CALIBRATION_REFINEMENT.md).
 
 ## Original Checkpoint 16 team-independent projection research

@@ -1,5 +1,33 @@
 # Data dictionary
 
+## Checkpoint 17 conditional scenario research
+
+Ignored root: `data/processed/qb_scenario/c17-9f582e4ac18d8cd6/`. Model
+`qb-scenario-9f582e4ac18d8cd6`; approved C16 anchor `c16r-8c8063c5954e2a22`.
+
+| Artifact | Grain / contract |
+|---|---|
+| `feature_registry.csv`, `interaction_definitions.csv` | Ten prior scheme measures, six player style measures, eight predeclared interaction families |
+| `modeling_cohort.parquet` | `(player_id, team_id, target_season)`; condition basis, state identity/cutoff, scheme cutoff, raw nullable features, stint EPA/dropbacks, exclusions, diagnostic prior-team-change and multi-team flags |
+| `player_feature_lineage.parquet` | Unchanged C14 style records including samples, raw/shrunk values, qualification, reliability, uncertainty and source lineage |
+| `scheme_feature_lineage.parquet`, `destination_scheme.parquet` | Validated C13 prior-source records and raw team/target-year matrix; raw units are train-standardized, not target-year realized behavior |
+| `rolling_folds.csv`, `hyperparameter_audit.csv` | Model/outer-year train bounds/counts; model/outer/inner/alpha training-only MAE and cutoff |
+| `oos_predictions.parquet` | Stint/model; actual, exact C16 `base_epa`, diagnostic `adjustment`, `prediction = base_epa + adjustment`, empirical 50/80/95 bounds and prior calibration window/count |
+| `model_comparison.csv`, `fold_metrics.csv` | Model/development-validation-all/diagnostic subset and year; n, QBs, folds, MAE/RMSE, correlations, direction, calibration |
+| `interaction_coefficients.csv` | Model/year/transformed predictor coefficient in EPA/DB per training standard deviation; missingness terms explicitly suffixed; not a causal effect |
+| `interval_coverage.csv` | Model/nominal interval level; validation coverage, available/missing n |
+| `cluster_bootstrap.csv`, `placebo_results.csv` | Candidate/comparator/subset/cluster fixed-OOS error uncertainty and descriptive QB sign-flip diagnostics |
+| `scenario_decisions.csv` | Explicit approval booleans, status and failed predeclared gates; both M1/M2 NOT SUPPORTED |
+| `missingness.csv`, `leakage_audit.csv` | Null counts on eligible stints; chronology/assignment-claim gates |
+| `hypothetical_scenarios_2026.parquet` | **Zero rows** because no response model passed. Typed empty artifact, not zero-valued fitted effects |
+| `MANIFEST.json`, family `LATEST` | All captured input hashes, configs, code, dependencies, decisions and output checksums; atomic content-addressed publication |
+
+`team_change` means current conditioned team absent from the player's >=50-dropback prior-season
+teams; no qualifying prior season leaves it null. It is a retrospective diagnostic only.
+`observed_team_count` counts all recorded target-year stints before the evaluation volume filter.
+`preseason_assignment_claim = false` always. No PAE, coach-identity or Coach Effect feature enters.
+OOS adjustments remain diagnostic and must not be presented as approved scenario estimates.
+
 ## C16 calibration refinement and research candidates
 
 Ignored outputs: `data/processed/qb_projection_refinement/c16r-8c8063c5954e2a22/`.

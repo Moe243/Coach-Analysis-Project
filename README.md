@@ -59,8 +59,17 @@ The C16 [calibration refinement](docs/CHECKPOINT_16_CALIBRATION_REFINEMENT.md),
 selected on development years only. EPA is **research-ready with limitations**; PAE remains
 **not supported**. A separate history-only candidate contract supports **57 team-independent
 entering-2026 EPA research projections**, without claiming current roster membership or assigning
-teams/coaches/Scheme. Original C14/C16 outputs remain intact. Scheme fit is still data-limited,
-Checkpoint 17 is not ready, and nothing is published to the live app.
+teams/coaches/Scheme. Original C14/C16 outputs remain intact. That follow-up did not approve an
+environment-response model, and nothing is published to the live app.
+
+Phase II [Checkpoint 17](docs/CHECKPOINT_17_SCENARIO_SIMULATOR.md) tests a different, explicitly
+conditional destination question. Version `c17-9f582e4ac18d8cd6` is **complete research with a
+NOT SUPPORTED scenario model**: neither destination main effects nor the eight predeclared
+Player × Scheme interactions improve the approved C16 baseline in 375 validation stints.
+Among 72 team-changing stints, both additions also worsen error. Zero hypothetical 2026 scenarios
+are generated. The 57 C16 team-independent EPA projections remain intact; C15's unconditional
+assignment limitation is unchanged. **Checkpoint 18 is NOT READY.** Run locally with
+`PYTHONPATH=src:. python scripts/run_checkpoint_seventeen.py`; no live service is changed.
 
 ## Football decision supported
 

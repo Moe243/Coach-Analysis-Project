@@ -1,5 +1,28 @@
 # Limitations
 
+## Checkpoint 17 conditional-scenario limitations
+
+- The conditional experiment is estimable but does **not** validate environment response. Both
+  main-effect and interaction additions worsen validation error and performance among team
+  changers. No 2026 scenario adjustment is approved; C18 remains NOT READY.
+- Destination assignment and attaining 50 target-season stint dropbacks are selected events.
+  Conditioning on them is not proof of an unconditional forecast or an intervention effect.
+  Transfers can depend on performance/injury; absent/unplayed pairings have no observed labels.
+- Prior team behavior partly reflects its prior quarterback, personnel and staff. It can change
+  when the QB or staff changes; it is not a fixed scheme or a causal coach property. Changer
+  results test some transport but cannot establish support for every candidate/team pairing.
+- Validation reuses an archive already inspected for C13/C14/C16 development. It is chronological
+  at the parameter level, not a fresh prospective experiment for the entire research process.
+- Equal stint weights and two separate cluster bootstraps do not jointly resolve repeated-QB,
+  team and season dependence. The fixed-prediction bootstrap omits model-refitting uncertainty;
+  sign-flip tail fractions are descriptive, not exact randomized-assignment p-values.
+- Predictive intervals have measured marginal coverage only. They are not uncertainty intervals
+  for a QB-specific environment effect, nor causal, conditional or shift-robust guarantees.
+- Many players lack qualified prior style: 234/667 eligible stints lack depth/air-yard estimates;
+  192/667 lack scramble/shotgun estimates. Train-only imputation is not an observed value.
+- Stable coefficient signs do not establish useful fit: these interactions fail incremental
+  prediction tests. No arbitrary score, Coach Effect, PAE forecast or production output is added.
+
 ## Current C16 calibration/candidate-state limitations
 
 - Bias-calibrated EPA passes the unchanged research gates but is not uniformly better: validation
@@ -14,8 +37,9 @@
   target-year volume; forward membership uses past volume, so selection/playing-time risk remains.
 - The new 2026 states are a separately versioned research extension, not evidence that the
   previously absent historical-C14 forward artifact had existed. Original artifacts are preserved.
-- Environment/scenario validation is still missing. Checkpoint 15 remains data-limited and
-  Checkpoint 17 remains not ready. No production system or Coach Effect is changed.
+- The C16 follow-up itself supplied no environment validation. C15 remains data-limited;
+  the separate C17 experiment above is now complete but unsupported. No production system
+  or Coach Effect is changed.
 
 ## Original Checkpoint 16 projection limitations (preserved run)
 
