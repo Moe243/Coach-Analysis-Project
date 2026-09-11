@@ -1,6 +1,26 @@
 # Data sources
 
-Last updated: 2026-08-27
+Last updated: 2026-09-11
+
+## Checkpoint 20 college-source gate
+
+The 2026-09-10 audit found no cached college-production corpus or configured `CFBD_API_KEY`.
+[CFBD terms](https://collegefootballdata.com/terms), effective 2026-08-12, permit private
+analysis/model training and derived outputs, with raw-redistribution and credential limits.
+[Coverage documentation](https://api.collegefootballdata.com/data-availability) lists player
+season statistics/rosters from 2004; actual completeness and college-to-GSIS mapping remain
+untested. Authenticated private ingestion is a possible future route.
+
+[cfbfastR's dataset repository](https://github.com/sportsdataverse/cfbfastR-data) identifies
+ESPN as upstream. Software MIT licensing does not resolve upstream modeling rights under
+[Disney/ESPN terms](https://disneytermsofuse.com/english/); no college records were ingested.
+The approved PFR permission requirement remains unchanged. C20 reuses only existing
+hash-verified nflverse player facts and NFL evaluation outcomes, with all college profiles
+explicitly missing. See [C20 report](docs/CHECKPOINT_20_COLLEGE_TO_NFL_ROOKIE_PROJECTION.md)
+and `research/rookie_projection/source_audit.json` for URLs, versions, dates and decisions.
+
+C20 status: **NOT ESTIMABLE / DATA-LIMITED**. This is an access/coverage gate, not a finding
+that college information lacks predictive value.
 
 This register records planned and audited sources. Coverage describes the source, not a guarantee that every row or field is complete. Each ingestion run records its exact asset URL, retrieval timestamp, SHA-256 digest, byte and row counts, and observed schema.
 

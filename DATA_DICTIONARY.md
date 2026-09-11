@@ -1,5 +1,23 @@
 # Data dictionary
 
+## Checkpoint 20 rookie research audit
+
+Ignored C20 artifacts use one canonical drafted QB per `(player_id, target_season)`, with
+target season equal to draft year (1999–2025). `rookie_state_universe.parquet` is cohort
+membership only; it is not a projected Player State. NFL outcomes never determine membership.
+`historical_rookie_cohort.parquet` left-joins draft-year team stints and divides summed EPA,
+successes and covered CPOE totals by their summed denominators. Missing outcomes remain null.
+`outcome_status` distinguishes 100+ DB evaluation eligibility, insufficient sample, no recorded
+draft-year QB outcome, and unresolved rookie-year metadata. All `model_eligible` values are
+false because the college source gate failed.
+
+`college_qb_profiles.parquet` reserves null college volume, efficiency, mobility, experience
+and school/context fields with `SOURCE_NOT_AVAILABLE`. The identity crosswalk preserves
+GSIS IDs but has no verified college IDs. `fold_assignments.parquet` contains planned earlier
+year/test-year partitions explicitly labeled `NOT_RUN_SOURCE_GATE`. Comparison and coverage
+tables report zero fitted/predicted rows with null metrics, never zero performance.
+See [C20 report](docs/CHECKPOINT_20_COLLEGE_TO_NFL_ROOKIE_PROJECTION.md) for exact definitions.
+
 ## Checkpoint 19 analytical lookup contract
 
 `POST /ask` returns a versioned `ask-v1` structured response, not a new model

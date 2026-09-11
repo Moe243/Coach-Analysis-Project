@@ -1,0 +1,57 @@
+{
+  "audit_date": "2026-09-10",
+  "gate": "NOT ESTIMABLE / DATA-LIMITED",
+  "college_histories_ingested": false,
+  "cfbd_environment_key_available_at_audit": false,
+  "sources": [
+    {
+      "source": "approved_nflverse_player_master",
+      "url": "https://nflreadr.nflverse.com/articles/dictionary_players.html",
+      "version": "c3-f6c1aa118ff43b90",
+      "coverage": "Observed canonical QB draft facts for 1999-2025; not independently a complete draft ledger",
+      "fields": "GSIS ID, name, birth date, draft year/round/pick; rookie season for consistency audit only",
+      "decision": "REUSE_EXISTING_COHORT_FACTS_ONLY",
+      "reuse_notes": "Existing approved nflverse artifact; retain exact hash. No new PFR draft or combine collection. School strings and NFL ESPN IDs are not college histories or verified college-ID matches."
+    },
+    {
+      "source": "approved_nflverse_qb_outcomes",
+      "url": "https://github.com/nflverse/nflverse-data/releases/tag/pbp",
+      "version": "enh-04254065cafd92ba",
+      "coverage": "1999-2025 canonical QB-team-season facts",
+      "fields": "dropbacks, total QB EPA, positive EPA dropbacks, covered CPOE attempts and total CPOE",
+      "decision": "REUSE_EVALUATION_ONLY",
+      "reuse_notes": "nflverse attribution retained; aggregate additive totals across team stints. Never use these NFL outcomes as college predictors."
+    },
+    {
+      "source": "CFBD",
+      "url": "https://api.collegefootballdata.com/getting-started",
+      "terms_url": "https://collegefootballdata.com/terms",
+      "coverage_url": "https://api.collegefootballdata.com/data-availability",
+      "version": "Terms effective 2026-08-12; coverage verified by provider 2026-09-03",
+      "coverage": "Player season stats/rosters 2004-present; draft 1967-latest except 1988/1996; enriched passing/rushing 2025-present",
+      "fields": "college passing/rushing production, roster and draft linkage candidates",
+      "decision": "AUTHENTICATED_ACCESS_NOT_CONFIGURED",
+      "reuse_notes": "Terms permit private caching, analysis and model training; prohibit raw bulk redistribution and exposed/shared keys. No CFBD_API_KEY in execution environment and no cached college corpus. Do not bypass authentication. Field/identity completeness remains untested; these are documented, not observed, ranges."
+    },
+    {
+      "source": "SportsDataverse_cfbfastR",
+      "url": "https://github.com/sportsdataverse/cfbfastR-data",
+      "terms_url": "https://github.com/sportsdataverse/sportsdataverse-data/blob/main/LICENSE",
+      "upstream_terms_url": "https://disneytermsofuse.com/english/",
+      "version": "Repository documentation inspected 2026-09-10; upstream terms dated 2024-05-24",
+      "coverage": "Public ESPN-derived college datasets; actual assets not ingested or schema-validated",
+      "fields": "player box scores, rosters and PBP candidates",
+      "decision": "UPSTREAM_REUSE_NOT_ESTABLISHED",
+      "reuse_notes": "Repository identifies ESPN as upstream. MIT software license does not establish upstream statistical-data/modeling permission. Disney/ESPN terms restrict automated extraction and AI/ML use; no separate applicable permission established. Project gate declines ingestion, not a universal legal conclusion about factual data."
+    },
+    {
+      "source": "Sports_Reference_college_or_draft",
+      "url": "https://www.sports-reference.com/data_use.html",
+      "version": "Existing approved PFR feasibility decision",
+      "coverage": "Not collected",
+      "fields": "potential college histories or draft ledger",
+      "decision": "PERMISSION_REQUIRED_BEFORE_INGESTION",
+      "reuse_notes": "Approved project source policy remains binding. No scraping, bulk export, new derived source download or model ingestion."
+    }
+  ]
+}

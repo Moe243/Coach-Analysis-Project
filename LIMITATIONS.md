@@ -1,5 +1,19 @@
 # Limitations
 
+## Checkpoint 20 rookie projection is data-limited
+
+No college histories or canonical college ID mappings are available in the approved inputs.
+C20 therefore estimates no rookie model and emits no predictions, intervals or rookie state.
+The existing NFL master is not an exhaustive draft ledger: absent identities, position changes
+and undrafted players can create coverage gaps. Retaining 108 QBs without draft-year QB
+outcomes reduces observed-outcome selection within this cohort but does not eliminate that
+coverage problem or the selection into NFL playing time. Five inconsistent entry-year records
+are explicitly unresolved. The 100-dropback evaluation screen must be sensitivity-tested if
+modeling later becomes possible. Zero college matches means unavailable inputs, not zero
+college quality. CFBD authenticated private research is a potential route; no key is configured.
+Upstream reuse rights for alternative ESPN-derived college data remain unestablished here.
+See [C20 report](docs/CHECKPOINT_20_COLLEGE_TO_NFL_ROOKIE_PROJECTION.md).
+
 ## Checkpoint 19 interface limitations
 
 - The deterministic router covers declared football question patterns, not arbitrary language

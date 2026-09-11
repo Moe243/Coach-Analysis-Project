@@ -1,5 +1,15 @@
 # Expected-quarterback-performance model card
 
+## Checkpoint 20 rookie research status
+
+Version `c20-4b0f9b23785508dc` is a source/cohort audit, not a fitted model.
+**NOT ESTIMABLE / DATA-LIMITED**: 304 canonical drafted QBs (1999–2025), 191 recorded
+timing-consistent rookie outcomes, 110 with at least 100 dropbacks, and zero verified college
+histories. B0/B1/B2/M1/M2 were not fitted after the college-source gate failed. No validation
+metrics, calibrated intervals, style translations, rookie Player States or forecasts exist.
+C19 rookie support and C18 remain NOT READY. Existing production models are unchanged.
+See [C20 report](docs/CHECKPOINT_20_COLLEGE_TO_NFL_ROOKIE_PROJECTION.md).
+
 ## Checkpoint 17 conditional destination research
 
 Data `c17-9f582e4ac18d8cd6`; model `qb-scenario-9f582e4ac18d8cd6`.

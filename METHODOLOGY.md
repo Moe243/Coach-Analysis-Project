@@ -1,5 +1,20 @@
 # Methodology
 
+## Checkpoint 20 college-to-NFL source gate
+
+C20 stops before modeling because no approved accessible historical college corpus and
+canonical college-to-GSIS crosswalk are available. Its drafted-QB universe uses immutable
+draft facts independently of NFL participation. Draft-year NFL outcomes are evaluation-only
+left joins. Multi-team EPA/success/CPOE are ratios of additive totals; no later season is
+substituted for missing rookie performance. Five draft/rookie-year discrepancies remain
+excluded pending evidence. A 100-dropback screen labels the evaluation sample without removing
+low-volume or missing-outcome QBs from the cohort. All model eligibility remains false.
+
+The C13 boundary, registry and lineage/timing validator are reused. Planned chronological
+partitions do not imply fitted folds. Missing college profiles, comparisons and interval
+coverage remain null with explicit status. No draft-only or college model, preprocessing,
+tuning, projection or Player State was fitted. See the [C20 report](docs/CHECKPOINT_20_COLLEGE_TO_NFL_ROOKIE_PROJECTION.md).
+
 ## Checkpoint 19 evidence lookup and explanation
 
 Ask Anything performs deterministic intent/entity resolution and reads frozen approved

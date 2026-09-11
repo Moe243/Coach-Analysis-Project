@@ -305,6 +305,13 @@ Original code and documentation are available under the [MIT License](LICENSE). 
 
 ## Interpretation standard
 
+Checkpoint 20 completes a research source/cohort audit with status **NOT ESTIMABLE /
+DATA-LIMITED**. It preserves 304 drafted QBs across 1999–2025, including missing/low-volume
+NFL outcomes, but has no verified college histories. No rookie model or forecasts were fitted;
+C19 rookie support and C18 remain NOT READY. Build ignored deterministic artifacts with
+`PYTHONPATH=src:. python scripts/run_checkpoint_twenty.py`. See the
+[C20 report](docs/CHECKPOINT_20_COLLEGE_TO_NFL_ROOKIE_PROJECTION.md).
+
 Coach estimates will be described as adjusted associations. They can be affected by hiring and firing decisions, coach-quarterback matching, roster construction, overlapping staff responsibilities, injuries, schedule, measurement error, and small samples. The application will show uncertainty and supporting evidence rather than a single context-free leaderboard.
 
 Checkpoint ten preserves an unweighted, research-only Coach Effect framework without changing
