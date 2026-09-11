@@ -2,6 +2,11 @@
 
 ## Phase II / Ask Anything release preparation
 
+The subsequent [Phase II deployment runbook](PHASE_II_DEPLOYMENT_RUNBOOK.md) supplies the
+private GitHub Release transport and fail-closed `release_snapshot` build/start commands.
+That preparation still requires the user's private asset upload and Render configuration;
+the settings below and `render.yaml` remain historical defaults, not the new manual overrides.
+
 The integrated C19 product is **READY WITH CONFIGURATION STEPS**, not deployed by this
 closeout. See [Phase II closeout](PHASE_II_CLOSEOUT.md) for the exact snapshot hashes,
 Render settings, local release results and supported/refused capabilities.
