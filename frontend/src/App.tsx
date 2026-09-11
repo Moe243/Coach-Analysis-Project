@@ -4,6 +4,9 @@ import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/DataState";
 import { StatisticsPage } from "./pages/StatisticsPage";
 
+const AskPage = lazy(() =>
+  import("./pages/AskPage").then((module) => ({ default: module.AskPage })),
+);
 const CoachDetailPage = lazy(() =>
   import("./pages/CoachDetailPage").then((module) => ({
     default: module.CoachDetailPage,
@@ -31,6 +34,14 @@ export function App() {
       <Route element={<AppShell />}>
         <Route index element={<Navigate to="/statistics" replace />} />
         <Route path="statistics" element={<StatisticsPage />} />
+        <Route
+          path="ask"
+          element={
+            <Suspense fallback={<LoadingState label="Loading Ask Anything" />}>
+              <AskPage />
+            </Suspense>
+          }
+        />
         <Route
           path="network"
           element={

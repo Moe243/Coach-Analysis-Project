@@ -14,6 +14,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict
 
+from .ask_api import router as ask_router
 from .serving import API_CONTRACT_VERSION, SCHEMA_VERSION
 
 
@@ -220,6 +221,7 @@ app = FastAPI(
         "coach-impact outputs. Suppression and identification labels are preserved."
     ),
 )
+app.include_router(ask_router)
 
 
 def _cors_origins() -> list[str]:
@@ -238,7 +240,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["Accept", "Content-Type"],
 )
 

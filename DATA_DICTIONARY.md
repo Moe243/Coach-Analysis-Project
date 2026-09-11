@@ -1,5 +1,18 @@
 # Data dictionary
 
+## Checkpoint 19 analytical lookup contract
+
+`POST /ask` returns a versioned `ask-v1` structured response, not a new model
+estimate. `metrics` contains approved source records; `uncertainty` preserves the
+source interval/reliability contract, and `source_artifacts` supplies logical IDs,
+versions and hashes. `data_version` identifies the immutable C19 bundle, while
+`model_version` identifies a single original source model when applicable.
+Historical QB records retain `(player_id, team_id, season)` and exact frozen source
+lineage. Profile records retain `(player_id, target_season, feature_name)`; caller
+PCAE retains `(coach_id, team_id, season, start_week, end_week)`. Unsupported answers
+contain no estimates. See [C19](docs/CHECKPOINT_19_ASK_ANYTHING.md) for all statuses,
+grains, limitations and lookup sources. No existing analytical definition changes.
+
 ## Checkpoint 17 conditional scenario research
 
 Ignored root: `data/processed/qb_scenario/c17-9f582e4ac18d8cd6/`. Model

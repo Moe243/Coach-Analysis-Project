@@ -8,6 +8,13 @@ The project will follow NFL quarterbacks across seasons, teams, and coaching sta
 
 ## Project status
 
+Checkpoint 19 adds an isolated, **not deployed** Ask Anything interface to approved
+history, C14 state/style, C13 scheme, C16 team-independent research projections and
+separate PCAE evidence. It explicitly refuses unsupported transfer, counterfactual,
+rookie and universal Coach Effect estimates. No external LLM credential is required.
+See [the C19 contract and local setup](docs/CHECKPOINT_19_ASK_ANYTHING.md).
+C17's negative scenario result is integrated; C18 remains NOT READY.
+
 All nine release checkpoints are complete. Checkpoint Eleven-B finalized the evidence overlay for formal OC/QB-coach titles, verified absences of separately designated roles, and leakage-safe historical PCAE readiness without rewriting frozen named assignments. This release hotfix publishes that completeness evidence as status and provenance only: it creates no synthetic coach, assignment, or graph edge. The final matrix contains 488 verified-person and 24 verified-no-designated-role OC cells; 496 verified-person and 16 verified-no-designated-role QB-coach cells; and 119 verified, one partial, 125 provisional, and 267 unresolved play-caller cells. The November 2017 all-team caller source is bounded through Week 10 rather than extrapolated through season end. Neither the interface nor the serving data turns same-team-season context into exact weekly overlap or causal coach attribution.
 
 - [Live application](https://nfl-coaching-impact-engine.onrender.com)

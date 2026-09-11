@@ -1,5 +1,15 @@
 # Methodology
 
+## Checkpoint 19 evidence lookup and explanation
+
+Ask Anything performs deterministic intent/entity resolution and reads frozen approved
+records. It does not fit, residualize, shrink or combine new estimates. C14 entering-season
+traits remain separate from observed recent performance; C13 observed scheme is historical
+team behavior, not coach ownership. Forward answers are limited to C16's 57 EPA-only 2026
+team-independent research rows. Unsupported scenarios, career/rookie forecasts and composite
+Coach Effect estimates return structured refusals without numbers. See the
+[C19 contract](docs/CHECKPOINT_19_ASK_ANYTHING.md). All existing model formulas are unchanged.
+
 ## Checkpoint 17 conditional destination evaluation
 
 An externally supplied team changes the estimand from unconditional preseason forecasting to

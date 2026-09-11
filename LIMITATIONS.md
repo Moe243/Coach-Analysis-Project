@@ -1,5 +1,21 @@
 # Limitations
 
+## Checkpoint 19 interface limitations
+
+- The deterministic router covers declared football question patterns, not arbitrary language
+  or multi-turn pronoun resolution. Ambiguous entities require canonical confirmation.
+- Default style is entering 2025 C14 state, not a live ability or roster claim. Scheme answers
+  describe observed seasons. Forward estimates are frozen 2026 team-independent research only.
+- Coaching history uses verified serving Eleven-B evidence; separately versioned final C12 PCAE
+  evidence may have broader play-caller coverage. Neither silently updates the other snapshot.
+  Same-team-season QB relationships are not proof of exact weekly exposure.
+- PCAE caller-interval uncertainty is unavailable in the source and is not invented. Missing
+  numerical inputs remain null. Unverified duties are not assigned individual PCAE.
+- C17 does not support numerical transfer scenarios; C18 and C20 remain unimplemented. No
+  universal Coach Effect or arbitrary style/fit grade exists in Ask Anything.
+- The immutable local bundle must be built/configured separately. A missing or incompatible
+  bundle fails with HTTP 503. C19 is not deployed and adds no external LLM dependency.
+
 ## Checkpoint 17 conditional-scenario limitations
 
 - The conditional experiment is estimable but does **not** validate environment response. Both

@@ -1,4 +1,10 @@
-import { Activity, BookOpen, Network, TableProperties } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  Network,
+  TableProperties,
+  MessageSquare,
+} from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "../api/client";
@@ -35,6 +41,9 @@ export function AppShell() {
           </NavLink>
           <NavLink to="/network">
             <Network aria-hidden="true" /> Relationship Explorer
+          </NavLink>
+          <NavLink to="/ask">
+            <MessageSquare aria-hidden="true" /> Ask Anything
           </NavLink>
         </nav>
         <NavLink className="method-link" to="/methodology">

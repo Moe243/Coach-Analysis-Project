@@ -1,5 +1,16 @@
 # Checkpoint-eight frontend
 
+## Checkpoint 19 — isolated Ask Anything addition
+
+The new `/ask` route calls `POST /ask` through the existing API base URL. It displays
+approved analytical records, source/uncertainty metadata, canonical clarification candidates
+and explicit unsupported answers. It performs no model arithmetic and requires no LLM key.
+Existing Statistics and Relationship Explorer routes are unchanged. C19 is **not deployed**.
+For local use, first build/configure the backend's immutable `ASK_DATA_DIR` snapshot as
+described in [the C19 report](../docs/CHECKPOINT_19_ASK_ANYTHING.md). A missing snapshot is an
+error, never a trigger for fixture data. `e2e/checkpoint-nineteen.spec.ts` exercises the real
+configured local API; it does not intercept numerical responses.
+
 This package is the React/TypeScript interface for the NFL Coaching Impact Engine. The production site is [live on Render](https://nfl-coaching-impact-engine.onrender.com). It reads the FastAPI contract and contains no embedded production data, database credentials, or model calculations.
 
 ## Local setup

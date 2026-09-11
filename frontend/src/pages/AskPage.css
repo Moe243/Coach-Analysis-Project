@@ -1,0 +1,96 @@
+.ask-page {
+  max-width: 1100px;
+}
+.ask-page form {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.ask-page textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 1rem;
+  color: inherit;
+  background: var(--surface, #fff);
+  border: 1px solid #9ba6b3;
+  border-radius: 0.5rem;
+  font: inherit;
+  resize: vertical;
+}
+.ask-page form .button {
+  justify-self: start;
+}
+.ask-page details {
+  padding: 0.8rem 0;
+}
+.ask-page summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.ask-page pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  margin: 0;
+}
+.ask-page button {
+  cursor: pointer;
+}
+.ask-examples li {
+  margin: 0.5rem 0;
+}
+.ask-examples button {
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+  font: inherit;
+}
+.ask-answer {
+  margin-top: 2rem;
+  overflow-wrap: anywhere;
+}
+.ask-records {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 1rem;
+}
+.ask-record {
+  border: 1px solid #d4dae0;
+  border-radius: 0.6rem;
+  padding: 1rem;
+  min-width: 0;
+}
+.ask-record dl {
+  margin: 0;
+}
+.ask-record dl > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  padding: 0.3rem 0;
+}
+.ask-record dt {
+  text-transform: capitalize;
+  color: #586575;
+}
+.ask-record dd {
+  margin: 0;
+}
+.ask-links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+.ask-caution {
+  margin-top: 2rem;
+  color: #586575;
+}
+@media (max-width: 600px) {
+  .ask-record dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
