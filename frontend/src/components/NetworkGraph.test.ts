@@ -23,6 +23,49 @@ vi.mock("cytoscape", async (importOriginal) => {
 });
 
 describe("applyGraphSelection", () => {
+  it("uses restrained node colors and retains non-color evidence and selection cues", async () => {
+    let activeCore: cytoscape.Core | null = null;
+    const view = render(
+      createElement(NetworkGraph, {
+        selected: null,
+        onSelect: vi.fn(),
+        register: (core: cytoscape.Core | null) => {
+          activeCore = core;
+        },
+        elements: [
+          { data: { id: "coach:a", kind: "coach", label: "Coach A" } },
+          { data: { id: "qb:a", kind: "quarterback", label: "QB A" } },
+          { data: { id: "team:one", kind: "team_season", label: "Team One" } },
+          {
+            data: {
+              id: "assignment",
+              source: "coach:a",
+              target: "team:one",
+              provisional: "true",
+            },
+          },
+          { data: { id: "qb-season", source: "qb:a", target: "team:one" } },
+        ],
+      }),
+    );
+    await waitFor(() => expect(activeCore).not.toBeNull());
+    const core = activeCore!;
+    expect(core.$id("coach:a").style("background-color")).toBe(
+      "rgb(200,107,50)",
+    );
+    expect(core.$id("qb:a").style("background-color")).toBe("rgb(214,179,106)");
+    expect(core.$id("team:one").style("background-color")).toBe(
+      "rgb(126,155,118)",
+    );
+    expect(core.$id("assignment").style("line-style")).toBe("dashed");
+    applyGraphSelection(core, "qb:a");
+    expect(core.$id("assignment").style("line-color")).toBe("rgb(200,107,50)");
+    expect(core.$id("assignment").style("line-style")).toBe("dashed");
+    expect(core.$id("qb:a").style("border-width")).toBe("4px");
+    expect(core.$id("qb:a").style("overlay-opacity")).toBe("0");
+    view.unmount();
+  });
+
   function branchCore() {
     return cytoscape({
       headless: true,

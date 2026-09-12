@@ -127,6 +127,7 @@ export function AskPage() {
           submit(question.trim());
         }}
       >
+        <h2>Query the analytics system</h2>
         <label htmlFor="analytical-question">Your football question</label>
         <textarea
           id="analytical-question"
@@ -135,7 +136,7 @@ export function AskPage() {
           minLength={3}
           maxLength={1000}
           required
-          rows={3}
+          rows={2}
         />
         <button
           className="button button-primary"

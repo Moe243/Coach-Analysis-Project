@@ -3,7 +3,7 @@ import {
   BookOpen,
   Network,
   TableProperties,
-  MessageSquare,
+  Search,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -43,11 +43,11 @@ export function AppShell() {
             <Network aria-hidden="true" /> Relationship Explorer
           </NavLink>
           <NavLink to="/ask">
-            <MessageSquare aria-hidden="true" /> Ask Anything
+            <Search aria-hidden="true" /> Ask Anything
           </NavLink>
         </nav>
         <NavLink className="method-link" to="/methodology">
-          <BookOpen aria-hidden="true" /> How to read this
+          <BookOpen aria-hidden="true" /> Methodology
         </NavLink>
       </header>
       <main id="main-content" tabIndex={-1}>
