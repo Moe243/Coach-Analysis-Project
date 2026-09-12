@@ -38,6 +38,12 @@ class ReleaseError(ValueError):
     """Only fixed, credential-free messages may reach the CLI."""
 
 
+def _http_status(response: httpx.Response, stage: str) -> None:
+    # Stage labels are fixed call-site literals, never URLs, headers or response bodies.
+    if not response.is_success:
+        raise ReleaseError(f"{stage}: HTTP {response.status_code}")
+
+
 def validate(directory: Path) -> AnalyticalService:
     for name, (size, checksum) in FILES.items():
         path = directory / name
@@ -93,7 +99,7 @@ def _asset(
             ):
                 raise ReleaseError("Unexpected artifact redirect")
             return _asset(client, str(location), {}, size, redirected=True)
-        r.raise_for_status()
+        _http_status(r, "asset CDN download" if redirected else "release asset download")
         content = bytearray()
         for chunk in r.iter_bytes():
             content.extend(chunk)
@@ -119,12 +125,14 @@ def restore(directory: Path) -> None:
         "X-GitHub-Api-Version": "2022-11-28",
     }
     with httpx.Client(timeout=120, follow_redirects=False, trust_env=False) as client:
+        print("C19 restore: checking private repository access", flush=True)
         metadata = client.get(base, headers=headers)
-        metadata.raise_for_status()
+        _http_status(metadata, "private repository lookup")
         if metadata.json().get("private") is not True:
             raise ReleaseError("Artifact repository must be private")
+        print("C19 restore: checking pinned release", flush=True)
         release = client.get(f"{base}/releases/tags/{VERSION}", headers=headers)
-        release.raise_for_status()
+        _http_status(release, "pinned release lookup")
         record = release.json()
         if record.get("tag_name") != VERSION or record.get("draft") is not False:
             raise ReleaseError("Pinned published release required")
@@ -139,8 +147,10 @@ def restore(directory: Path) -> None:
                 asset_id = matches[0]["id"]
                 if type(asset_id) is not int or asset_id <= 0:
                     raise ReleaseError("Invalid asset identifier")
+                print("C19 restore: downloading pinned asset", flush=True)
                 content = _asset(client, f"{base}/releases/assets/{asset_id}", headers, size)
                 (stage / name).write_bytes(content)
+            print("C19 restore: validating pinned snapshot", flush=True)
             validate(stage)
             stage.rename(directory)  # Atomic, same filesystem; no partial publication.
 
@@ -174,6 +184,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except ReleaseError as error:
         print(f"C19 release gate failed: {error}. API was not started.", file=sys.stderr)
+        return 1
+    except httpx.RequestError:
+        print(
+            "C19 release gate failed: artifact transport request failed. "
+            "Check network access and token header format; API was not started.",
+            file=sys.stderr,
+        )
         return 1
     except Exception:
         # HTTP exceptions can contain authenticated URLs; never emit exception text/tracebacks.

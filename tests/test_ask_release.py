@@ -191,3 +191,67 @@ def test_http_failure_does_not_log_credentials(monkeypatch, tmp_path, capsys):
     with patch.object(release, "restore", side_effect=ValueError("sensitive-test-token")):
         assert release.main(["restore"]) == 1
     assert "sensitive-test-token" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 429, 500])
+@pytest.mark.parametrize("stage", ["repository", "release", "asset", "cdn"])
+def test_http_diagnostics_are_sanitized_and_fail_closed(
+    monkeypatch, tmp_path, capsys, status, stage
+):
+    monkeypatch.setenv("ASK_DATA_DIR", str(tmp_path / release.VERSION))
+    monkeypatch.setenv("ASK_ARTIFACT_REPOSITORY", "owner/private-artifacts")
+    monkeypatch.setenv("ASK_ARTIFACT_TOKEN", "sensitive-test-token")
+
+    def respond(request):
+        if request.url.host == "release-assets.githubusercontent.com":
+            return httpx.Response(status, text="sensitive-response-body")
+        if request.url.path.endswith("private-artifacts"):
+            if stage == "repository":
+                return httpx.Response(status, text="sensitive-response-body")
+            return httpx.Response(200, json={"private": True})
+        if "/tags/" in request.url.path:
+            if stage == "release":
+                return httpx.Response(status, text="sensitive-response-body")
+            return httpx.Response(
+                200,
+                json={
+                    "tag_name": release.VERSION,
+                    "draft": False,
+                    "assets": [{"id": 1, "name": "MANIFEST.json", "size": 5273}],
+                },
+            )
+        if stage == "cdn":
+            return httpx.Response(
+                302,
+                headers={
+                    "Location": "https://release-assets.githubusercontent.com/pinned?sig=sensitive-signature"
+                },
+            )
+        return httpx.Response(status, text="sensitive-response-body")
+
+    client = httpx.Client(transport=httpx.MockTransport(respond))
+    with patch.object(release.httpx, "Client", return_value=client):
+        assert release.main(["restore"]) == 1
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert f"HTTP {status}" in output
+    expected = {
+        "repository": "private repository lookup",
+        "release": "pinned release lookup",
+        "asset": "release asset download",
+        "cdn": "asset CDN download",
+    }
+    assert expected[stage] in output
+    for forbidden in ("sensitive-", "https://", "Authorization", "Traceback"):
+        assert forbidden not in output
+    assert not (tmp_path / release.VERSION).exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_request_failure_sanitized(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("ASK_DATA_DIR", str(tmp_path / release.VERSION))
+    with patch.object(release, "restore", side_effect=httpx.ConnectError("sensitive-url-token")):
+        assert release.main(["restore"]) == 1
+    error = capsys.readouterr().err
+    assert "transport request failed" in error
+    assert "sensitive" not in error

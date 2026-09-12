@@ -92,6 +92,12 @@ pip install -r requirements.lock && pip install --no-deps -e . && PYTHONPATH=src
 ```
 
 Restore occurs during **every build**, not in a paid pre-deploy step or ad hoc runtime upload.
+The loader reports fixed operation labels and HTTP status codes without printing tokens,
+URLs or upstream response bodies. A repository/release/asset 401 means authentication was
+rejected; 403 means access was denied (permissions or rate limits); 404 may mean an absent
+resource or inaccessible private content. Check the scoped token and selected private
+repository in provider settings, never by printing the token. Transport errors remain
+sanitized. All failures still block publication/startup.
 Render Free storage is ephemeral; build-time restoration is required after clean rebuilds.
 The gate checks both file hashes, manifest/version/code identity, 57 distinct approved C16
 2026 EPA projections and the pinned unsupported-question metadata/behavior. It fits nothing.
