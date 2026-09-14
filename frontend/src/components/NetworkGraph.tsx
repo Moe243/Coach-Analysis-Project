@@ -195,6 +195,9 @@ export function NetworkGraph({
   return (
     <div
       className="network-canvas"
+      data-compact={
+        elements.filter((element) => !element.data.source).length <= 20
+      }
       ref={container}
       role="img"
       aria-label="Interactive Relationship Explorer. The relationship explorer list below provides the same entities, evidence, and actions."

@@ -70,6 +70,14 @@ for (const view of [
       await expect(page.locator(".ask-record")).toHaveCount(1);
     }
     if (view.name === "relationship-tree") {
+      await expect(page.locator(".network-canvas")).toHaveAttribute(
+        "data-compact",
+        "true",
+      );
+      await expect(page.locator(".network-canvas")).toHaveCSS(
+        "height",
+        "360px",
+      );
       const entity = page.locator(".accessible-entity-list article").first();
       await entity.getByRole("button", { name: "Select", exact: true }).click();
       await expect(entity).toHaveClass(/is-selected/);
@@ -80,6 +88,19 @@ for (const view of [
       name: "Methodology",
       exact: true,
     });
+    await expect(page.getByRole("link", { name: /skip to/i })).toHaveCount(1);
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
+      "content",
+      "#111315",
+    );
+    if (view.name === "statistics" && testInfo.project.name === "mobile") {
+      const tracks = await page
+        .locator(".filter-panel")
+        .evaluate((element) =>
+          getComputedStyle(element).gridTemplateColumns.split(" "),
+        );
+      expect(tracks).toHaveLength(2);
+    }
     await page.keyboard.press("Tab");
     await methodology.focus();
     await expect(methodology).toBeFocused();
