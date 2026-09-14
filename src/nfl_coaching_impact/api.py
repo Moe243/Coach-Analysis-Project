@@ -15,6 +15,7 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict
 
 from .ask_api import router as ask_router
+from .conversation.api import router as ask_v2_router
 from .serving import API_CONTRACT_VERSION, SCHEMA_VERSION
 
 
@@ -222,6 +223,7 @@ app = FastAPI(
     ),
 )
 app.include_router(ask_router)
+app.include_router(ask_v2_router)
 
 
 def _cors_origins() -> list[str]:
