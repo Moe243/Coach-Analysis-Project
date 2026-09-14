@@ -29,6 +29,12 @@ export function MethodologyPage() {
           </p>
         </div>
       </div>
+      <p className="long-copy coach-effect-caution">
+        These principles describe the research question, not a released
+        composite score. No universal Coach Effect score is currently supported.
+        Historical PAE, coaching evidence and exploratory estimates remain
+        separate, with their own limitations.
+      </p>
       <div className="method-grid">
         <article>
           <Target aria-hidden="true" />
@@ -173,6 +179,25 @@ export function MethodologyPage() {
         ) : (
           <p>Version service unavailable.</p>
         )}
+      </section>
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Behind the application</p>
+            <h2>Inspect the engineering, not just the result</h2>
+          </div>
+        </div>
+        <p className="long-copy">
+          This project connects reproducible Python data pipelines, tested
+          PostgreSQL and FastAPI contracts, and an accessible React interface.
+          Source evidence and research limitations are part of the product.
+        </p>
+        <a
+          className="button button-secondary"
+          href="https://github.com/Moe243/Coach-Analysis-Project"
+        >
+          Explore the project on GitHub <ArrowRight aria-hidden="true" />
+        </a>
       </section>
       <div className="method-actions">
         <Link className="button button-secondary" to="/statistics">

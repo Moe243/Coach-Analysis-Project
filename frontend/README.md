@@ -1,4 +1,16 @@
-# Checkpoint-eight frontend
+# Football analytics frontend
+
+The interface is an evidence-first analytics workstation, not a context-free leaderboard.
+See the [project case study](../docs/PORTFOLIO_CASE_STUDY.md) for a short product tour and
+the [root README](../README.md) for the data, modeling and backend architecture.
+
+## Visual system
+
+Charcoal surfaces, flat panels and tabular numerals prioritize comparison. Orange marks actions
+and selection; green/gold distinguish chart series. Evidence labels and line styles preserve
+meaning without color alone. Mobile results become cards, search fields remain full-width,
+and compact graphs avoid oversized empty canvases. The redesign and portfolio polish are
+approved for release; live deployment verification remains pending.
 
 ## Checkpoint 19 — isolated Ask Anything addition
 
@@ -33,6 +45,7 @@ The default Vite proxy sends `/api` to `http://127.0.0.1:8000`. Set `VITE_API_PR
 - `/coaches/:coachId`: role intervals, exploratory impact/suppression, connected QB contexts, and citations
 - `/network`: URL-backed Relationship Explorer with Coach Journey, QB Journey, Team History, and all-years Full Network; Timeline/Tree chronological views use season-specific appearances with canonical identity and distinct continuity edges, while Full Network uses deterministic year bands; source-backed intervals, complete-key QB PAE, focus history, and the keyboard-equivalent relationship surface remain intact
 - `/methodology`: metric, evidence, eligibility, uncertainty, and version interpretation
+- `/ask`: approved snapshot lookup, uncertainty, source lineage and explicit unsupported-answer states; requires configured backend snapshot
 
 ## Quality commands
 

@@ -1,10 +1,30 @@
 # NFL Coaching Impact Engine
 
-The NFL Coaching Impact Engine is a sports analytics portfolio project that asks:
+An end-to-end football analytics application: reproducible NFL data, leakage-safe quarterback expectations, source-backed coaching history, and an interactive evidence explorer.
 
-> Which coaches consistently help quarterbacks outperform expectations, and how large is their impact compared with player talent and team environment?
+> Does performance follow the coach?
 
-The project will follow NFL quarterbacks across seasons, teams, and coaching staffs. It will estimate adjusted associations rather than claim that observational data proves causation.
+Compare quarterback production with a strictly preseason expectation, then inspect the team-season context and coaching evidence behind it. The application preserves uncertainty and missing data; it does not turn observational associations into causal claims or a universal Coach Effect score.
+
+[Application](https://nfl-coaching-impact-engine.onrender.com) · [Project case study](docs/PORTFOLIO_CASE_STUDY.md) · [Architecture](docs/ARCHITECTURE.md) · [Methodology](METHODOLOGY.md)
+
+## A three-minute walkthrough
+
+1. **Compare:** search Baker Mayfield in Statistics, inspect actual versus expected EPA/dropback, then open his profile. The two 2022 team stints remain distinct.
+2. **Trace:** open Houston's 2020 Team History in Relationship Explorer. Inspect role intervals, shared duties and source citations without interpreting team-season context as exact weekly QB exposure.
+3. **Question:** read the Methodology page and its limitations. In the configured local Ask interface, try a historical question and an unsupported team-transfer question: refusal is part of the contract, not a fabricated answer.
+
+The visual redesign and portfolio polish are approved for release. Live deployment verification remains pending; the public application may still show the previous release. Ask requires the approved private snapshot and is not claimed as live here.
+
+## Engineering highlights
+
+- **Data engineering:** independent season processing, canonical identities, Parquet layers and content-addressed manifests.
+- **Statistical discipline:** as-of features, chronological validation, uncertainty and explicit negative research results.
+- **Backend integrity:** PostgreSQL constraints, atomic publication and tested FastAPI contracts.
+- **Product design:** URL-restorable comparisons, evidence-preserving graphs, keyboard-equivalent exploration and responsive tables.
+
+**Stack:** Python · Polars · DuckDB · scikit-learn · PostgreSQL · FastAPI · React · TypeScript · Cytoscape · Vite.
+See the [case study](docs/PORTFOLIO_CASE_STUDY.md) for the implementation evidence and research boundaries.
 
 ## Project status
 
@@ -30,7 +50,7 @@ All nine release checkpoints are complete. Checkpoint Eleven-B finalized the evi
 
 The approved serving inputs retain historical `c3-f6c1aa118ff43b90`, expected performance `c5-8fd5d1aba2598c59`, and coach impact `c6-400a5b474aa37a35` / `coach-impact-400a5b474aa37a35`. The completeness hotfix changes only the serving status/provenance representation built from the finalized Eleven-B evidence; it does not change PAE, PCAE, coach-impact artifacts, or frozen named assignments. Read [the checkpoint-eight report](docs/CHECKPOINT_8_REPORT.md) and [post-release enhancement foundation](docs/POST_RELEASE_ENHANCEMENTS.md).
 
-Phase II Checkpoint 13 is complete on its isolated review branch. It adds a file-based,
+Phase II Checkpoint 13 is complete and integrated. It adds a file-based,
 leakage-enforced feature registry and predictive-safe team-season Scheme Engine; it changes no
 serving data or live product behavior. See the
 [Checkpoint 13 report](docs/CHECKPOINT_13_PREDICTIVE_DATA_FOUNDATION.md) and
@@ -80,7 +100,7 @@ assignment limitation is unchanged. **Checkpoint 18 is NOT READY.** Run locally 
 
 ## Football decision supported
 
-The eventual application is designed for analysts and football-operations staff evaluating whether quarterback performance changed beyond a reasonable preseason expectation while a coach held a particular role. The answer must always be read alongside player history, supporting cast, team context, sample size, and uncertainty.
+The application supports analysts exploring whether quarterback performance changed beyond a reasonable preseason expectation while a coach held a particular role. The answer must always be read alongside player history, supporting cast, team context, sample size, and uncertainty. It is a research and exploration tool, not a validated hiring or roster-decision system.
 
 The first version focuses on quarterbacks and four coaching roles:
 

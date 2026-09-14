@@ -43,6 +43,17 @@ describe("MethodologyPage", () => {
       /component weights|residualization|shrinkage/i,
     );
     expect(await screen.findByText("api-v1.5")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /No universal Coach Effect score is currently supported/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Explore the project on GitHub" }),
+    ).toHaveAttribute(
+      "href",
+      "https://github.com/Moe243/Coach-Analysis-Project",
+    );
   });
 
   it("has no automated accessibility violations", async () => {
