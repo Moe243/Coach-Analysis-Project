@@ -29,6 +29,7 @@ from .enums import (
     ReasonCode,
     Reliability,
     RequestedOutput,
+    ResolutionStatus,
 )
 from .policy import SCIENTIFIC_POLICY_VERSION
 from .serialization import canonical_json_bytes
@@ -68,7 +69,7 @@ class CanonicalEntityReference(ContractModel):
     @model_validator(mode="after")
     def validate_identifier(self) -> Self:
         patterns = {
-            EntityKind.QB: r"^00-\d{7}$",
+            EntityKind.QB: r"^(?:00-\d{7}|[A-Z]{3}\d{6})$",
             EntityKind.COACH: r"^coach-[a-z0-9]+(?:-[a-z0-9]+)*$",
             EntityKind.TEAM: r"^team_[a-z0-9]+$",
         }
@@ -111,6 +112,31 @@ class ConversationContext(ContractModel):
 class AskV2Request(ContractModel):
     question: str = Field(min_length=3, max_length=1_000)
     context: ConversationContext = Field(default_factory=ConversationContext)
+
+
+class ResolvedEntity(CanonicalEntityReference):
+    display_name: ShortText
+
+
+class EntityResolution(ContractModel):
+    mention: ShortText
+    kind: EntityKind
+    status: ResolutionStatus
+    resolved: tuple[ResolvedEntity, ...] = Field(default=(), max_length=8)
+    candidates: tuple[ResolvedEntity, ...] = Field(default=(), max_length=5)
+    lookup_authorized: bool
+
+    @model_validator(mode="after")
+    def validate_resolution(self) -> Self:
+        if self.lookup_authorized != (self.status is ResolutionStatus.EXACT):
+            raise ValueError("only exact resolution may authorize analytical lookup")
+        if self.status is ResolutionStatus.EXACT and len(self.resolved) != 1:
+            raise ValueError("exact resolution requires one canonical entity")
+        if self.status is not ResolutionStatus.EXACT and self.resolved:
+            raise ValueError("non-exact resolution cannot contain an authorized entity")
+        if self.status is ResolutionStatus.AMBIGUOUS and not self.candidates:
+            raise ValueError("ambiguous resolution requires candidates")
+        return self
 
 
 _UNSAFE_ENTITY_MENTION = re.compile(
@@ -201,18 +227,28 @@ class EvidenceValue(ContractModel):
 class SourceReference(ContractModel):
     artifact: ShortText
     data_version: ShortText
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     row_key: ShortText | None = None
     source_url: str | None = Field(default=None, max_length=2_000)
+    source_title: ShortText | None = None
+    source_type: ShortText | None = None
+    source_accessed_at: ShortText | None = None
+    evidence_locator: ReasonText | None = None
+    evidence_note: ReasonText | None = None
 
 
 class EvidenceRecord(ContractModel):
     evidence_id: Identifier
     kind: EvidenceKind
     summary: ReasonText
-    entities: tuple[CanonicalEntityReference, ...] = Field(default=(), max_length=8)
+    entities: tuple[ResolvedEntity, ...] = Field(default=(), max_length=8)
     season: int | None = Field(default=None, ge=MIN_SEASON, le=MAX_SEASON)
-    values: tuple[EvidenceValue, ...] = Field(default=(), max_length=12)
+    values: tuple[EvidenceValue, ...] = Field(default=(), max_length=16)
     sources: tuple[SourceReference, ...] = Field(default=(), max_length=4)
+    uncertainty_id: Identifier | None = None
+    operation_id: Identifier | None = None
+    sample_count: int | None = Field(default=None, ge=0)
+    source_evidence_ids: tuple[Identifier, ...] = Field(default=(), max_length=32)
 
 
 class UncertaintyRepresentation(ContractModel):
@@ -275,6 +311,7 @@ class PublicVersionMetadata(ContractModel):
     scientific_policy_version: str
     analytical_data_version: str | None = None
     analytical_model_versions: tuple[ShortText, ...] = ()
+    evidence_reducer_version: str | None = None
     planner_implementation_version: str
     planner_model_version: str | None = None
     synthesizer_implementation_version: str
@@ -284,15 +321,15 @@ class PublicVersionMetadata(ContractModel):
 
 class EvidencePackage(ContractModel):
     answerability: Answerability
-    resolved_entities: tuple[CanonicalEntityReference, ...] = Field(default=(), max_length=8)
+    resolved_entities: tuple[ResolvedEntity, ...] = Field(default=(), max_length=8)
     approved_tasks: tuple[ApprovedTask, ...] = Field(default=(), max_length=12)
     rejected_tasks: tuple[RejectedTask, ...] = Field(default=(), max_length=12)
     evidence: tuple[EvidenceRecord, ...] = Field(default=(), max_length=32)
-    uncertainty: tuple[UncertaintyRepresentation, ...] = Field(default=(), max_length=12)
+    uncertainty: tuple[UncertaintyRepresentation, ...] = Field(default=(), max_length=32)
     propositions: tuple[GroundedProposition, ...] = Field(default=(), max_length=12)
     conclusion_permissions: tuple[ConclusionPermission, ...] = Field(default=(), max_length=8)
     unsupported_portions: tuple[UnsupportedRequestedPortion, ...] = Field(default=(), max_length=8)
-    limitations: tuple[ReasonText, ...] = Field(default=(), max_length=8)
+    limitations: tuple[ReasonText, ...] = Field(default=(), max_length=12)
     versions: PublicVersionMetadata
 
 
@@ -302,7 +339,7 @@ class AskV2Response(ContractModel):
     answer_mode: AnswerMode
     reason_code: ReasonCode | None = None
     answer: str = Field(min_length=1, max_length=4_000)
-    entities: tuple[CanonicalEntityReference, ...] = Field(default=(), max_length=8)
+    entities: tuple[ResolvedEntity, ...] = Field(default=(), max_length=8)
     evidence: tuple[PublicEvidencePoint, ...] = Field(default=(), max_length=5)
     propositions: tuple[GroundedProposition, ...] = Field(default=(), max_length=12)
     uncertainty: tuple[UncertaintyRepresentation, ...] = Field(default=(), max_length=12)
