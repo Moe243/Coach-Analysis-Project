@@ -18,6 +18,7 @@ from .enums import (
     PermissionDecision,
     QuestionType,
 )
+from .registries import SCHEME_FEATURE_UNITS
 from .serialization import canonical_json_bytes
 
 
@@ -125,12 +126,14 @@ class ConclusionEngine:
     ) -> ConclusionResult:
         propositions: list[GroundedProposition] = []
         evidence = package.evidence
+        history_metric = requested_metric if metric_unit(requested_metric or "") else None
+        scheme_metric = requested_metric if requested_metric in SCHEME_FEATURE_UNITS else None
         if question_type in {
             QuestionType.QB_HISTORY,
             QuestionType.COMPARISON,
             QuestionType.CAREER_COUNTERFACTUAL,
         }:
-            propositions.extend(self._history(evidence, requested_metric))
+            propositions.extend(self._history(evidence, history_metric))
         if question_type is QuestionType.QB_PROFILE:
             propositions.extend(self._profiles(evidence, requested_metric))
         if question_type in {
@@ -138,7 +141,7 @@ class ConclusionEngine:
             QuestionType.COMPARISON,
             QuestionType.CAREER_COUNTERFACTUAL,
         }:
-            propositions.extend(self._scheme(evidence, requested_metric))
+            propositions.extend(self._scheme(evidence, scheme_metric))
         propositions.extend(self._roles(evidence))
         propositions.extend(self._contexts(evidence))
         propositions.extend(self._context_summaries(evidence))
@@ -486,7 +489,7 @@ class ConclusionEngine:
             if record.kind is not EvidenceKind.SUMMARY:
                 continue
             fields = values(record)
-            if not fields.get("young_filter_applied"):
+            if "distinct_qb_team_seasons" not in fields:
                 continue
             coach = next(
                 (entity for entity in record.entities if entity.kind.value == "coach"), None
@@ -494,6 +497,28 @@ class ConclusionEngine:
             if coach is None:
                 continue
             count = fields["distinct_qb_team_seasons"]
+            if not fields.get("young_filter_applied"):
+                result.append(
+                    self.proposition(
+                        kind=ConclusionKind.HISTORICAL_FACT,
+                        permission_id="permission_historical",
+                        statement=(
+                            f"{coach.display_name} has {count} distinct verified "
+                            "same-team-season QB context observations in the selected scope."
+                        ),
+                        evidence=(record,),
+                        subject=coach.display_name,
+                        predicate="qb_context_summary",
+                        metric="distinct_qb_team_seasons",
+                        value=count,
+                        qualifier=(
+                            "Descriptive same-team-season context; not exact weekly exposure "
+                            "or development quality."
+                        ),
+                        importance=97,
+                    )
+                )
+                continue
             missing = fields["missing_age_excluded_count"]
             missing_label = "observation" if missing == 1 else "observations"
             result.append(

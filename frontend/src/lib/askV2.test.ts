@@ -51,6 +51,7 @@ describe("Ask v2 presentation and context helpers", () => {
 
   it("formats only typed rate units as percentages and preserves missing values", () => {
     expect(formatAskV2Value(0.643, "rate")).toBe("64.3%");
+    expect(formatAskV2Value(-0.125, "rate_difference")).toBe("-12.5%");
     expect(formatAskV2Value(0.643, "epa_per_dropback")).toBe("0.643");
     expect(formatAskV2Value(null, "rate")).toBe("Unavailable");
     expect(formatAskV2Value(651, "count")).toBe("651");

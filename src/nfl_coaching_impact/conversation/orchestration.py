@@ -27,7 +27,11 @@ from .enums import (
 from .evidence import EvidenceService, ReducerResult
 from .planner import DeterministicPlan, DeterministicPlanner
 from .policy import SCIENTIFIC_POLICY_VERSION
-from .registries import EVIDENCE_REDUCER_VERSION, SCHEME_FEATURE_UNITS
+from .registries import (
+    EVIDENCE_REDUCER_VERSION,
+    PLAYER_FEATURE_DEFINITIONS,
+    SCHEME_FEATURE_UNITS,
+)
 from .synthesis import DeterministicSynthesizer
 
 
@@ -91,6 +95,7 @@ class AskV2Orchestrator:
             package=package,
             requested_metric=plan.requested_metric,
             young_only=plan.young_only,
+            unsupported_season=plan.unsupported_season,
         )
         reason = synthesis.reason_code
         if answerability is Answerability.CLARIFICATION_REQUIRED:
@@ -145,7 +150,7 @@ class AskV2Orchestrator:
         results = []
         if (
             plan.proposal.question_type is QuestionType.QB_PROJECTION
-            and plan.requested_metric == "performance_above_expectation"
+            and plan.requested_metric not in {None, "epa_per_dropback"}
         ):
             return ReducerResult()
         for approved in authorization.approved:
@@ -250,7 +255,7 @@ class AskV2Orchestrator:
         if metric is None:
             return None
         feature = metric if metric.startswith("recent_") else "recent_" + metric
-        return (feature,)
+        return (feature,) if feature in PLAYER_FEATURE_DEFINITIONS else None
 
     @staticmethod
     def _scheme_features(metric: str | None) -> tuple[str, ...] | None:

@@ -22,15 +22,13 @@ def determine_answerability(
         and SCIENTIFIC_POLICIES["C20_ROOKIE_PROJECTION"].status == "NOT ESTIMABLE / DATA-LIMITED"
     ):
         return Answerability.NOT_SUPPORTED
-    if (
-        question_type is QuestionType.QB_PROJECTION
-        and requested_metric == "performance_above_expectation"
-    ):
+    if question_type is QuestionType.QB_PROJECTION and requested_metric not in {
+        None,
+        "epa_per_dropback",
+    }:
         return Answerability.NOT_SUPPORTED
     if question_type is QuestionType.UNKNOWN:
         return Answerability.CLARIFICATION_REQUIRED
-    if not package.evidence:
-        return Answerability.DATA_UNAVAILABLE if resolutions else Answerability.NOT_SUPPORTED
     if (
         (
             question_type is QuestionType.PLAYER_TEAM_SCENARIO
@@ -45,7 +43,11 @@ def determine_answerability(
             and SCIENTIFIC_POLICIES["C12_COACH_EFFECT"].status == "NO_COMPOSITE_COACH_EFFECT"
         )
     ):
-        return Answerability.PARTIALLY_SUPPORTED
+        return (
+            Answerability.PARTIALLY_SUPPORTED if package.evidence else Answerability.NOT_SUPPORTED
+        )
+    if not package.evidence:
+        return Answerability.DATA_UNAVAILABLE if resolutions else Answerability.NOT_SUPPORTED
     if question_type is QuestionType.COMPARISON and any(
         entity.kind.value == "coach" for entity in package.resolved_entities
     ):

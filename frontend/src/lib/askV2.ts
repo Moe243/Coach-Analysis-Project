@@ -95,7 +95,7 @@ export function formatAskV2Value(
   if (value === null) return "Unavailable";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "string") return value;
-  if (unit === "rate" || unit === "proportion")
+  if (unit === "rate" || unit === "proportion" || unit === "rate_difference")
     return `${(value * 100).toFixed(1)}%`;
   if (unit === "percentage_points") return `${value.toFixed(1)} pp`;
   if (unit === "count") return Math.round(value).toLocaleString("en-US");

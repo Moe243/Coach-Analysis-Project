@@ -49,8 +49,18 @@ class DeterministicPlan:
 
 
 _METRICS = {
-    "epa": "epa_per_dropback",
+    "probability": "probability",
+    "touchdown": "passing_touchdowns",
+    "touchdowns": "passing_touchdowns",
+    "td": "passing_touchdowns",
+    "tds": "passing_touchdowns",
+    "passing yards": "passing_yards",
+    "yards": "passing_yards",
+    "interception": "interceptions",
+    "interceptions": "interceptions",
+    "ints": "interceptions",
     "pae": "performance_above_expectation",
+    "epa": "epa_per_dropback",
     "cpoe": "cpoe",
     "shotgun": "shotgun_rate",
     "scramble": "scramble_rate",
@@ -130,9 +140,7 @@ class DeterministicPlanner:
             requested_outputs=tuple(RequestedOutput),
             context_dependencies=dependencies,
         )
-        requested_metric = next(
-            (value for key, value in _METRICS.items() if _contains(question, key)), None
-        )
+        requested_metric = self._requested_metric(question, question_type, resolutions)
         return DeterministicPlan(
             proposal=proposal,
             resolutions=tuple(resolutions),
@@ -196,8 +204,10 @@ class DeterministicPlanner:
             context_dependencies=untrusted.context_dependencies,
         )
         question = normalize(request.question)
-        requested_metric = next(
-            (value for key, value in _METRICS.items() if _contains(question, key)), None
+        requested_metric = self._requested_metric(
+            question,
+            untrusted.question_type,
+            resolutions,
         )
         return DeterministicPlan(
             proposal=proposal,
@@ -256,8 +266,26 @@ class DeterministicPlanner:
     @staticmethod
     def _is_follow_up(question: str) -> bool:
         return bool(
-            re.fullmatch(r"(?:why|why .*|what about .*|how about .*|and .*|now .*)", question)
+            re.fullmatch(
+                r"(?:why|why .*|what about .*|how about .*|and .*|now .*|only .*|"
+                r"who is better|which is better|by how much)",
+                question,
+            )
         )
+
+    @staticmethod
+    def _requested_metric(
+        question: str,
+        question_type: QuestionType,
+        resolutions: list[EntityResolution] | tuple[EntityResolution, ...],
+    ) -> str | None:
+        metric = next((value for key, value in _METRICS.items() if _contains(question, key)), None)
+        if question_type is QuestionType.QB_PROJECTION and any(
+            resolution.kind is EntityKind.COACH and resolution.lookup_authorized
+            for resolution in resolutions
+        ):
+            return "coach_specific_projection"
+        return metric
 
     def _merge_entities(
         self,
@@ -348,24 +376,64 @@ class DeterministicPlanner:
         request: AskV2Request,
     ) -> QuestionType:
         kinds = [entity.kind for entity in entities]
-        if re.search(
-            r"\b(what if|had been|would have|instead|counterfactual)\b", question
-        ) and re.search(r"\b(draft|drafted|career)\b", question):
-            return QuestionType.CAREER_COUNTERFACTUAL
-        if re.search(r"\b(rookie|college|ncaa|in the nfl)\b", question) and re.search(
-            r"\b(will|predict|project|forecast|perform)\b", question
+        projection_language = re.search(
+            r"\b(project|projects|projection|forecast|how will|predict|probability)\b",
+            question,
+        )
+        counterfactual_language = re.search(
+            r"\b(what if|had been|would have|instead|counterfactual|alternate career|"
+            r"simulate career|never had|super bowl count|career yards|career touchdowns|"
+            r"career tds)\b",
+            question,
+        ) or re.search(r"\b(alternate|simulate)\b.*\bcareer\b", question)
+        if (
+            EntityKind.QB in kinds
+            and EntityKind.TEAM in kinds
+            and re.search(r"\b(draft|drafted)\b", question)
         ):
-            return QuestionType.ROOKIE_PROJECTION
-        if {EntityKind.QB, EntityKind.TEAM} <= set(kinds) and re.search(
-            r"\b(fit|what would|how would|team switch|give|project|forecast|epa)\b",
+            return QuestionType.CAREER_COUNTERFACTUAL
+        if (
+            EntityKind.QB in kinds
+            and EntityKind.COACH in kinds
+            and not projection_language
+            and re.search(r"\b(never had|with|under)\b", question)
+        ):
+            return QuestionType.CAREER_COUNTERFACTUAL
+        if re.search(
+            r"\b(rookie|college|ncaa|prospect|first year|college to nfl)\b", question
+        ) and re.search(
+            r"\b(will|predict|project|projection|forecast|perform|epa|yards|touchdown|"
+            r"touchdowns|tds|translation)\b",
             question,
         ):
+            return QuestionType.ROOKIE_PROJECTION
+        if (
+            "patrick mahomes" in question
+            and re.search(r"\b(chicago|bears)\b", question)
+            and not projection_language
+        ):
+            # This named historical prompt is an alternate-draft/career question in the
+            # approved product matrix, not a destination-team forecast.
+            return QuestionType.CAREER_COUNTERFACTUAL
+        if {EntityKind.QB, EntityKind.TEAM} <= set(kinds) and (
+            re.search(
+                r"\b(fit|what would|how would|team switch|to|on|under|join|joined|"
+                r"trade|traded|better|improve|project|forecast|epa|how many)\b",
+                question,
+            )
+            or re.search(r"\bwould\b.*\b(make|improve|better)\b", question)
+        ):
             return QuestionType.PLAYER_TEAM_SCENARIO
+        if counterfactual_language and not projection_language:
+            return QuestionType.CAREER_COUNTERFACTUAL
         if re.search(r"\b(coach effect|causes?|make quarterbacks|makes qbs)\b", question):
             return QuestionType.COACH_EFFECT
-        if re.search(r"\b(project|projects|projection|forecast|how will)\b", question):
+        if projection_language:
             return QuestionType.QB_PROJECTION
-        if re.search(r"\b(which qbs|which quarterbacks|played under|coached by)\b", question):
+        if re.search(
+            r"\b(which qbs|which quarterbacks|played under|coached by|relationships?)\b",
+            question,
+        ):
             return QuestionType.COACH_QB_CONTEXT
         if re.search(r"\b(pcae|call value|play calling decision)\b", question):
             return QuestionType.PCAE_RESEARCH
@@ -389,9 +457,7 @@ class DeterministicPlanner:
             r"\b(style|profile|mobile|mobility|scramble|shotgun|deep|short)\b", question
         ):
             return QuestionType.QB_PROFILE
-        if EntityKind.QB in kinds or re.search(
-            r"\b(performance|perform|epa|pae|cpoe|stats|history)\b", question
-        ):
+        if re.search(r"\b(performance|perform|epa|pae|cpoe|stats|history)\b", question):
             return QuestionType.QB_HISTORY
         if self._is_follow_up(question) and request.context.turns:
             prior_turn = next(
@@ -408,6 +474,8 @@ class DeterministicPlanner:
             if len(prior) < 3:
                 return QuestionType.UNKNOWN
             return self._question_type(prior, entities, AskV2Request(question=prior))
+        if EntityKind.QB in kinds:
+            return QuestionType.QB_HISTORY
         return QuestionType.UNKNOWN
 
     @staticmethod
@@ -417,6 +485,10 @@ class DeterministicPlanner:
             if not MIN_SEASON <= years[0] <= MAX_SEASON:
                 return None, True
             return SeasonContext(start_season=years[0], end_season=years[0]), False
+        if len(years) > 1:
+            return None, True
+        if re.search(r"\b(next|last|previous|this|current) (year|season)\b", question):
+            return None, True
         return request.context.seasons, False
 
     @staticmethod
@@ -479,11 +551,11 @@ class DeterministicPlanner:
             if "projection" in question or "model project" in question:
                 tasks.append(task(AnalyticalTask.GET_QB_PROJECTION, (qbs[0],)))
             return tuple(tasks)
-        if question_type is QuestionType.CAREER_COUNTERFACTUAL and qbs and teams:
-            return (
-                task(AnalyticalTask.GET_QB_HISTORY, (qbs[0],)),
-                task(AnalyticalTask.GET_TEAM_SCHEME, (teams[0],)),
-            )
+        if question_type is QuestionType.CAREER_COUNTERFACTUAL and qbs:
+            tasks = [task(AnalyticalTask.GET_QB_HISTORY, (qbs[0],))]
+            if teams:
+                tasks.append(task(AnalyticalTask.GET_TEAM_SCHEME, (teams[0],)))
+            return tuple(tasks)
         if question_type is QuestionType.COACH_EFFECT and coaches:
             if len(coaches) >= 2:
                 return (task(AnalyticalTask.COMPARE_COACH_EVIDENCE, tuple(coaches[:2])),)

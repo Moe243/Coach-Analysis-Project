@@ -36,12 +36,18 @@ class DeterministicSynthesizer:
         package: EvidencePackage,
         requested_metric: str | None,
         young_only: bool,
+        unsupported_season: bool = False,
     ) -> SynthesisResult:
         propositions = conclusions.propositions
         unsupported, reason = self._unsupported(
             question_type, requested_metric, conclusions.propositions
         )
-        if answerability is Answerability.CLARIFICATION_REQUIRED:
+        if unsupported_season:
+            answer = (
+                "Use one explicit supported season from 2010 through 2026. Relative-season "
+                "and multi-season wording is not mapped to a frozen analytical season."
+            )
+        elif answerability is Answerability.CLARIFICATION_REQUIRED:
             answer = (
                 "I need a more specific canonical player, coach, or team before looking up data."
             )
@@ -61,7 +67,13 @@ class DeterministicSynthesizer:
             answer = self._scenario(propositions)
         elif question_type is QuestionType.CAREER_COUNTERFACTUAL:
             answer = self._counterfactual(propositions)
-        elif question_type in {QuestionType.COMPARISON, QuestionType.COACH_EFFECT}:
+        elif question_type is QuestionType.COACH_EFFECT:
+            answer = (
+                "The project does not support a causal or universal Coach Effect. It can "
+                "describe verified roles, same-team-season QB context, and separately labeled "
+                "observational PCAE evidence without treating those as QB-development impact."
+            )
+        elif question_type is QuestionType.COMPARISON:
             answer = self._comparison(
                 propositions,
                 young_only,
@@ -71,6 +83,8 @@ class DeterministicSynthesizer:
             answer = self._profile(propositions)
         elif question_type is QuestionType.TEAM_SCHEME:
             answer = self._team_scheme(propositions)
+        elif question_type is QuestionType.COACH_QB_CONTEXT:
+            answer = self._coach_qb_context(propositions)
         elif propositions:
             answer = propositions[0].statement
         else:
@@ -201,6 +215,33 @@ class DeterministicSynthesizer:
         return lead + " These are team-season tendencies, not a subjective scheme grade."
 
     @staticmethod
+    def _coach_qb_context(propositions) -> str:
+        summary = next(
+            (
+                proposition
+                for proposition in propositions
+                if proposition.predicate == "qb_context_summary"
+            ),
+            None,
+        )
+        contexts = [
+            proposition
+            for proposition in propositions
+            if proposition.predicate == "same_team_season_context"
+        ]
+        contexts.sort(
+            key=lambda item: (
+                -(item.season or 0),
+                item.subject or "",
+                item.proposition_id,
+            )
+        )
+        selected = [*([] if summary is None else [summary]), *contexts[:4]]
+        if not selected:
+            return "No verified same-team-season quarterback context is available."
+        return " ".join(item.statement for item in selected)
+
+    @staticmethod
     def _comparison(propositions, young_only: bool, entity_order: tuple[str, ...]) -> str:
         if young_only:
             summaries = [
@@ -308,17 +349,30 @@ class DeterministicSynthesizer:
                 ),
                 code,
             )
-        if (
-            question_type is QuestionType.QB_PROJECTION
-            and requested_metric == "performance_above_expectation"
-        ):
-            code = ReasonCode.FORWARD_PAE_NOT_SUPPORTED
+        if question_type is QuestionType.QB_PROJECTION and requested_metric not in {
+            None,
+            "epa_per_dropback",
+        }:
+            pae = requested_metric == "performance_above_expectation"
+            code = (
+                ReasonCode.FORWARD_PAE_NOT_SUPPORTED
+                if pae
+                else ReasonCode.SCIENTIFICALLY_UNSUPPORTED
+            )
             return (
                 (
                     UnsupportedRequestedPortion(
-                        description="Forward PAE projection",
+                        description=(
+                            "Forward PAE projection"
+                            if pae
+                            else "Unsupported C16 projection output or context"
+                        ),
                         reason_code=code,
-                        explanation="C16 supports only team-independent EPA.",
+                        explanation=(
+                            "C16 supports only team-independent EPA through the frozen 2026 "
+                            "projection; it does not support touchdowns, yards, probabilities, "
+                            "coach-specific effects, or other requested outputs."
+                        ),
                     ),
                 ),
                 code,

@@ -156,8 +156,8 @@ export async function askQuestionV2(
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     try {
-      const body = (await response.json()) as { detail?: string };
-      if (body.detail) message = body.detail;
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string" && body.detail) message = body.detail;
     } catch {
       // Preserve the status-based message for non-JSON failures.
     }

@@ -50,4 +50,27 @@ describe("Ask v2 API", () => {
       new ApiError("Question is outside the supported contract.", 422),
     );
   });
+
+  it("keeps a safe status message when FastAPI returns structured validation detail", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              type: "string_too_short",
+              loc: ["body", "question"],
+              msg: "String should have at least 3 characters",
+            },
+          ],
+        }),
+        {
+          status: 422,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    await expect(askQuestionV2(request)).rejects.toEqual(
+      new ApiError("Request failed (422)", 422),
+    );
+  });
 });
