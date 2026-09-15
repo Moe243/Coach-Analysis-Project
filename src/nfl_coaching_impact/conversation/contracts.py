@@ -36,6 +36,7 @@ from .serialization import canonical_json_bytes
 
 ASK_V2_CONTRACT_VERSION = "ask-v2"
 STAGE_A_IMPLEMENTATION_VERSION = "ask-v2-stage-a"
+STAGE_C_IMPLEMENTATION_VERSION = "ask-v2-stage-c"
 MIN_SEASON = 2010
 MAX_SEASON = 2026
 
@@ -286,6 +287,15 @@ class GroundedProposition(ContractModel):
     evidence_ids: tuple[Identifier, ...] = Field(default=(), max_length=8)
     permission_id: Identifier
     uncertainty_id: Identifier | None = None
+    subject: ShortText | None = None
+    predicate: Identifier | None = None
+    metric: Identifier | None = None
+    value: ScalarValue = None
+    unit: ShortText | None = None
+    season: int | None = Field(default=None, ge=MIN_SEASON, le=MAX_SEASON)
+    qualifier: ReasonText | None = None
+    operation_id: Identifier | None = None
+    importance: int = Field(default=50, ge=1, le=100)
 
 
 class UnsupportedRequestedPortion(ContractModel):
@@ -340,10 +350,13 @@ class AskV2Response(ContractModel):
     reason_code: ReasonCode | None = None
     answer: str = Field(min_length=1, max_length=4_000)
     entities: tuple[ResolvedEntity, ...] = Field(default=(), max_length=8)
+    clarification_candidates: tuple[ResolvedEntity, ...] = Field(default=(), max_length=5)
     evidence: tuple[PublicEvidencePoint, ...] = Field(default=(), max_length=5)
     propositions: tuple[GroundedProposition, ...] = Field(default=(), max_length=12)
+    conclusion_permissions: tuple[ConclusionPermission, ...] = Field(default=(), max_length=8)
     uncertainty: tuple[UncertaintyRepresentation, ...] = Field(default=(), max_length=12)
     unsupported_portions: tuple[UnsupportedRequestedPortion, ...] = Field(default=(), max_length=8)
+    limitations: tuple[ReasonText, ...] = Field(default=(), max_length=8)
     follow_ups: tuple[SupportedFollowUp, ...] = Field(default=(), max_length=4)
     versions: PublicVersionMetadata
 

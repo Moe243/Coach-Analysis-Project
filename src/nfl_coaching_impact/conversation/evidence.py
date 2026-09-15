@@ -647,7 +647,13 @@ class EvidenceService:
             ),
         )
 
-    def coach_qb_context(self, coach_id: str, season: int | None = None) -> ReducerResult:
+    def coach_qb_context(
+        self,
+        coach_id: str,
+        season: int | None = None,
+        *,
+        young_only: bool = False,
+    ) -> ReducerResult:
         coach = self._entity(EntityKind.COACH, coach_id)
         assignment_rows = sorted(
             (
@@ -666,8 +672,19 @@ class EvidenceService:
             assignment_ids_by_team_season[team_season].append(item.record.evidence_id)
             assignment_keys_by_team_season[team_season].append(row["assignment_key"])
         sample_rows: dict[tuple[str, str, int], dict] = {}
+        missing_age_count = 0
+        age_excluded_count = 0
         for team_season in assignment_ids_by_team_season:
             for row in self._history_team_season.get(team_season, ()):
+                state_rows = self._states.get((row["player_id"], row["season"]), ())
+                age = state_rows[0]["age_at_season_start"] if len(state_rows) == 1 else None
+                if young_only and age is None:
+                    missing_age_count += 1
+                    continue
+                if young_only and age >= 25:
+                    age_excluded_count += 1
+                    continue
+                row = {**row, "age_at_season_start": age}
                 sample_rows[(row["player_id"], row["team_id"], row["season"])] = row
         contexts: list[RankedEvidence] = []
         models: set[str] = set()
@@ -696,6 +713,7 @@ class EvidenceService:
                         epa_per_dropback=row["epa_per_dropback"],
                         expected_epa_per_dropback=row["expected_epa_per_dropback"],
                         performance_above_expectation=row["performance_above_expectation"],
+                        age_at_season_start=row["age_at_season_start"],
                         relationship_semantics="same_team_season_context",
                         exact_weekly_overlap=False,
                         verified_role_count=len(assignment_ids),
@@ -722,8 +740,13 @@ class EvidenceService:
             values=self._values(
                 distinct_qb_team_seasons=len(sample_rows),
                 verified_assignment_count=len(assignments),
+                verified_roles="|".join(sorted({row["role"] for row in assignment_rows})),
                 relationship_semantics="same_team_season_context",
                 exact_weekly_overlap=False,
+                young_filter_applied=young_only,
+                young_definition="age_under_25_at_season_start" if young_only else None,
+                missing_age_excluded_count=missing_age_count,
+                age_25_or_older_excluded_count=age_excluded_count,
                 source_key_sha256=key_digest,
             ),
             sources=(self._source("assignments", f"coach|{coach_id}|{season or 'all'}"),),
@@ -733,10 +756,21 @@ class EvidenceService:
         )
         return ReducerResult(
             ranked=(summary, *assignments, *contexts),
-            limitations=(
-                "QB performance samples are distinct player_id + team_id + season observations.",
-                "Role assignments remain separate evidence and do not multiply QB samples.",
-                "Same-team-season context does not establish exact weekly QB exposure.",
+            limitations=tuple(
+                item
+                for item in (
+                    "QB performance samples are distinct player_id + team_id + season "
+                    "observations.",
+                    "Role assignments remain separate evidence and do not multiply QB samples.",
+                    "Same-team-season context does not establish exact weekly QB exposure.",
+                    (
+                        "Young quarterback means age under 25 at season start; missing ages are "
+                        f"excluded ({missing_age_count} observations)."
+                        if young_only
+                        else None
+                    ),
+                )
+                if item is not None
             ),
             model_versions=tuple(sorted(models)),
         )
@@ -1018,6 +1052,7 @@ class EvidenceService:
                         descriptive_only=True,
                     ),
                     sources=(*player_item.record.sources, *scheme_item.record.sources),
+                    uncertainty_id=player_item.record.uncertainty_id,
                     source_evidence_ids=(
                         player_item.record.evidence_id,
                         scheme_item.record.evidence_id,
@@ -1037,14 +1072,44 @@ class EvidenceService:
         return ReducerResult.combine(result)
 
     def compare_coaches(
-        self, first_coach_id: str, second_coach_id: str, season: int | None = None
+        self,
+        first_coach_id: str,
+        second_coach_id: str,
+        season: int | None = None,
+        *,
+        young_only: bool = False,
     ) -> ReducerResult:
         results = []
         for coach_id in (first_coach_id, second_coach_id):
+            context = self.coach_qb_context(coach_id, season, young_only=young_only)
+            pcae = self.pcae(coach_id, season)
+            coach = self._entity(EntityKind.COACH, coach_id)
+            pcae_records = [
+                item.record for item in pcae.ranked if item.record.kind is EvidenceKind.PCAE
+            ]
+            pcae_summary = self._record(
+                priority=4,
+                kind=EvidenceKind.SUMMARY,
+                grain=f"coach_pcae_summary|{coach_id}|{season or 'all'}",
+                summary=f"Research-only PCAE coverage for {coach.display_name}.",
+                entities=(coach,),
+                season=season,
+                values=self._values(
+                    pcae_interval_count=len(pcae_records),
+                    pcae_available=bool(pcae_records),
+                    research_only=True,
+                    production_ranking=False,
+                ),
+                sources=(self._source("pcae", f"coach|{coach_id}|{season or 'all'}"),),
+                operation_id="count_pcae_intervals",
+                sample_count=len(pcae_records),
+                source_evidence_ids=[item.evidence_id for item in pcae_records],
+            )
             results.extend(
                 (
-                    self.coach_qb_context(coach_id, season),
-                    self.pcae(coach_id, season),
+                    context,
+                    pcae,
+                    ReducerResult(ranked=(pcae_summary,)),
                 )
             )
         return ReducerResult.combine(
@@ -1093,8 +1158,9 @@ class EvidenceService:
             )
             ordered = [scope, *ordered[:31]]
             limitations.add(
-                f"BOUNDED_SCOPE: {omitted} evidence records are not represented; no conclusion "
-                "may be drawn from this partial package without narrowing the request."
+                f"BOUNDED_SCOPE: {omitted} evidence records are not represented; only retained "
+                "evidence and complete aggregate summaries may support a conclusion. Narrow the "
+                "request for record-level review."
             )
             answerability = Answerability.PARTIALLY_SUPPORTED
         versions = PublicVersionMetadata(

@@ -45,6 +45,7 @@ from nfl_coaching_impact.conversation.policy import (
     SCIENTIFIC_POLICY_VERSION,
 )
 from nfl_coaching_impact.conversation.serialization import canonical_json_bytes
+from nfl_coaching_impact.conversation.service import stage_a_response
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_DATABASE_IDENTITY = "133fbdd880801b935de0ab7fdf859daff12bf706041a66511de5532ef2169a1a"
@@ -359,9 +360,7 @@ def test_ask_v2_returns_honest_temporary_deterministic_response(monkeypatch):
         raise AssertionError("Stage A must not invoke a provider or network")
 
     monkeypatch.setattr(socket, "create_connection", block_network)
-    response = TestClient(app).post("/ask/v2", json=valid_request_payload())
-    assert response.status_code == 200
-    parsed = AskV2Response.model_validate(response.json())
+    parsed = stage_a_response(AskV2Request.model_validate(valid_request_payload()))
     assert parsed.answerability is Answerability.NOT_SUPPORTED
     assert parsed.answer_mode is AnswerMode.DETERMINISTIC
     assert parsed.reason_code is ReasonCode.IMPLEMENTATION_NOT_AVAILABLE_YET
