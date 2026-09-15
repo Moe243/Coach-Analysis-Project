@@ -28,6 +28,7 @@ analytics = [
 application = [
   "alembic>=1.13,<2",
   "fastapi>=0.115,<1",
+  "openai>=3.14,<4",
   "psycopg[binary]>=3.2,<4",
   "sqlalchemy>=2,<3",
   "uvicorn[standard]>=0.30,<1",

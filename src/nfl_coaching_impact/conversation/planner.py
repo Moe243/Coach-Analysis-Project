@@ -14,6 +14,7 @@ from .contracts import (
     EntityResolution,
     PlannerEntityProposal,
     PlannerProposal,
+    ProviderPlannerInput,
     ResolvedEntity,
     SeasonContext,
 )
@@ -139,6 +140,71 @@ class DeterministicPlanner:
             young_only="young quarterback" in question or "young qb" in question,
             follow_up=follow_up,
             unsupported_season=unsupported_season,
+        )
+
+    def provider_input(self, request: AskV2Request) -> ProviderPlannerInput:
+        """Build the bounded interpretation payload; assistant prose is excluded."""
+        prior_user_questions = tuple(
+            turn.content for turn in request.context.turns if turn.role is ConversationRole.USER
+        )
+        return ProviderPlannerInput(
+            question=request.question,
+            prior_user_questions=prior_user_questions,
+            canonical_context=request.context.entities,
+            seasons=request.context.seasons,
+            allowed_question_types=tuple(QuestionType),
+            allowed_tasks=tuple(AnalyticalTask),
+            allowed_outputs=tuple(RequestedOutput),
+            allowed_context_dependencies=tuple(ContextDependency),
+        )
+
+    def from_provider(self, request: AskV2Request, untrusted: PlannerProposal) -> DeterministicPlan:
+        """Re-resolve an untrusted provider plan and enforce the requested season scope."""
+        deterministic = self.plan(request)
+        if (
+            deterministic.proposal.question_type is not QuestionType.UNKNOWN
+            and untrusted.question_type is not deterministic.proposal.question_type
+        ):
+            raise ValueError("provider question type conflicts with backend interpretation")
+        requested_season, unsupported_season = self._season(request, normalize(request.question))
+        if unsupported_season:
+            raise ValueError("provider cannot override an unsupported requested season")
+        if any(task.seasons != requested_season for task in untrusted.tasks):
+            raise ValueError("provider task season differs from the user-authorized scope")
+
+        resolutions = tuple(
+            self.resolver.resolve(entity.kind, entity.mention) for entity in untrusted.entities
+        )
+        current = self._find_exact_entities(request.question)
+        context, _ = self._context_entities(request)
+        allowed_entities = {(entity.kind, entity.id) for entity in (*current, *context)}
+        for resolution in resolutions:
+            if resolution.lookup_authorized:
+                entity = resolution.resolved[0]
+                if (entity.kind, entity.id) not in allowed_entities:
+                    raise ValueError("provider introduced an entity absent from user context")
+        # Canonical hints from a provider are deliberately discarded. Only the resolver's
+        # exact result can later authorize an analytical lookup.
+        proposal = PlannerProposal(
+            question_type=untrusted.question_type,
+            entities=tuple(
+                PlannerEntityProposal(kind=entity.kind, mention=entity.mention)
+                for entity in untrusted.entities
+            ),
+            tasks=untrusted.tasks,
+            requested_outputs=untrusted.requested_outputs,
+            context_dependencies=untrusted.context_dependencies,
+        )
+        question = normalize(request.question)
+        requested_metric = next(
+            (value for key, value in _METRICS.items() if _contains(question, key)), None
+        )
+        return DeterministicPlan(
+            proposal=proposal,
+            resolutions=resolutions,
+            requested_metric=requested_metric,
+            young_only="young quarterback" in question or "young qb" in question,
+            follow_up=self._is_follow_up(question),
         )
 
     def _find_exact_entities(self, text: str) -> tuple[ResolvedEntity, ...]:

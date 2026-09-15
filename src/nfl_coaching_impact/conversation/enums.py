@@ -20,6 +20,19 @@ class AnswerMode(StrEnum):
     GROUNDED_AI = "grounded_ai"
 
 
+class SynthesisStyle(StrEnum):
+    CONCISE = "CONCISE"
+    EXPLANATORY = "EXPLANATORY"
+    COMPARATIVE = "COMPARATIVE"
+    CONTEXTUAL = "CONTEXTUAL"
+
+
+class SynthesisSectionKind(StrEnum):
+    KEY_EVIDENCE = "KEY_EVIDENCE"
+    CONTEXT = "CONTEXT"
+    UNCERTAINTY = "UNCERTAINTY"
+
+
 class ConversationRole(StrEnum):
     USER = "user"
     ASSISTANT = "assistant"

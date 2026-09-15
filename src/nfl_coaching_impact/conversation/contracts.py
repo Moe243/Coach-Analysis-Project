@@ -30,6 +30,8 @@ from .enums import (
     Reliability,
     RequestedOutput,
     ResolutionStatus,
+    SynthesisSectionKind,
+    SynthesisStyle,
 )
 from .policy import SCIENTIFIC_POLICY_VERSION
 from .serialization import canonical_json_bytes
@@ -37,6 +39,7 @@ from .serialization import canonical_json_bytes
 ASK_V2_CONTRACT_VERSION = "ask-v2"
 STAGE_A_IMPLEMENTATION_VERSION = "ask-v2-stage-a"
 STAGE_C_IMPLEMENTATION_VERSION = "ask-v2-stage-c"
+STAGE_D_IMPLEMENTATION_VERSION = "ask-v2-stage-d"
 MIN_SEASON = 2010
 MAX_SEASON = 2026
 
@@ -322,6 +325,7 @@ class PublicVersionMetadata(ContractModel):
     analytical_data_version: str | None = None
     analytical_model_versions: tuple[ShortText, ...] = ()
     evidence_reducer_version: str | None = None
+    deterministic_planner_version: str | None = None
     planner_implementation_version: str
     planner_model_version: str | None = None
     synthesizer_implementation_version: str
@@ -370,6 +374,104 @@ class AskV2Response(ContractModel):
         return self
 
 
+class ProviderPlannerInput(ContractModel):
+    """Minimal interpretation-only payload allowed to leave the server."""
+
+    question: str = Field(min_length=3, max_length=1_000)
+    prior_user_questions: tuple[str, ...] = Field(default=(), max_length=8)
+    canonical_context: tuple[CanonicalEntityReference, ...] = Field(default=(), max_length=8)
+    seasons: SeasonContext | None = None
+    allowed_question_types: tuple[QuestionType, ...]
+    allowed_tasks: tuple[AnalyticalTask, ...]
+    allowed_outputs: tuple[RequestedOutput, ...]
+    allowed_context_dependencies: tuple[ContextDependency, ...]
+
+
+class ProviderEvidenceRecord(ContractModel):
+    """Compact evidence without URLs, source paths, or raw analytical artifacts."""
+
+    evidence_id: Identifier
+    kind: EvidenceKind
+    summary: ReasonText
+    entities: tuple[ResolvedEntity, ...] = Field(default=(), max_length=8)
+    season: int | None = Field(default=None, ge=MIN_SEASON, le=MAX_SEASON)
+    values: tuple[EvidenceValue, ...] = Field(default=(), max_length=16)
+    uncertainty_id: Identifier | None = None
+    operation_id: Identifier | None = None
+
+
+class ProviderLimitation(ContractModel):
+    limitation_id: Identifier
+    text: ReasonText
+
+
+class ProviderUnsupportedPortion(ContractModel):
+    unsupported_id: Identifier
+    portion: UnsupportedRequestedPortion
+
+
+class ProviderFollowUp(ContractModel):
+    followup_id: Identifier
+    followup: SupportedFollowUp
+
+
+class ProviderSynthesisInput(ContractModel):
+    """Bounded, backend-authorized material supplied to a synthesizer."""
+
+    question: str = Field(min_length=3, max_length=1_000)
+    answerability: Answerability
+    entities: tuple[ResolvedEntity, ...] = Field(default=(), max_length=8)
+    propositions: tuple[GroundedProposition, ...] = Field(default=(), max_length=12)
+    evidence: tuple[ProviderEvidenceRecord, ...] = Field(default=(), max_length=32)
+    permissions: tuple[ConclusionPermission, ...] = Field(default=(), max_length=8)
+    uncertainty: tuple[UncertaintyRepresentation, ...] = Field(default=(), max_length=32)
+    limitations: tuple[ProviderLimitation, ...] = Field(default=(), max_length=8)
+    unsupported: tuple[ProviderUnsupportedPortion, ...] = Field(default=(), max_length=8)
+    followups: tuple[ProviderFollowUp, ...] = Field(default=(), max_length=4)
+
+
+class SynthesisSection(ContractModel):
+    kind: SynthesisSectionKind
+    proposition_ids: tuple[Identifier, ...] = Field(min_length=1, max_length=6)
+
+
+class GroundedSynthesisProposal(ContractModel):
+    """Selection-only synthesis: the provider cannot author analytical claims."""
+
+    style: SynthesisStyle
+    direct_proposition_ids: tuple[Identifier, ...] = Field(min_length=1, max_length=4)
+    sections: tuple[SynthesisSection, ...] = Field(default=(), max_length=3)
+    evidence_ids: tuple[Identifier, ...] = Field(default=(), max_length=5)
+    limitation_ids: tuple[Identifier, ...] = Field(default=(), max_length=8)
+    unsupported_ids: tuple[Identifier, ...] = Field(default=(), max_length=8)
+    followup_ids: tuple[Identifier, ...] = Field(default=(), max_length=4)
+
+    @model_validator(mode="after")
+    def validate_unique_references(self) -> Self:
+        collections = (
+            self.direct_proposition_ids,
+            self.evidence_ids,
+            self.limitation_ids,
+            self.unsupported_ids,
+            self.followup_ids,
+        )
+        if any(len(values) != len(set(values)) for values in collections):
+            raise ValueError("synthesis references must be unique within each collection")
+        section_claims = [
+            proposition_id
+            for section in self.sections
+            for proposition_id in section.proposition_ids
+        ]
+        if len(section_claims) != len(set(section_claims)):
+            raise ValueError("a proposition may appear in at most one supporting section")
+        all_claims = [*self.direct_proposition_ids, *section_claims]
+        if len(all_claims) != len(set(all_claims)):
+            raise ValueError("a proposition may appear only once in a synthesis")
+        if len(all_claims) > 8:
+            raise ValueError("a synthesis may select at most eight propositions")
+        return self
+
+
 def contract_schema_sha256() -> str:
     schemas: dict[str, Any] = {
         model.__name__: model.model_json_schema()
@@ -378,6 +480,9 @@ def contract_schema_sha256() -> str:
             PlannerProposal,
             EvidencePackage,
             AskV2Response,
+            ProviderPlannerInput,
+            ProviderSynthesisInput,
+            GroundedSynthesisProposal,
         )
     }
     return hashlib.sha256(canonical_json_bytes(schemas)).hexdigest()
@@ -387,6 +492,7 @@ def stage_a_versions() -> PublicVersionMetadata:
     return PublicVersionMetadata(
         contract_schema_sha256=contract_schema_sha256(),
         scientific_policy_version=SCIENTIFIC_POLICY_VERSION,
+        deterministic_planner_version=STAGE_A_IMPLEMENTATION_VERSION,
         planner_implementation_version=STAGE_A_IMPLEMENTATION_VERSION,
         synthesizer_implementation_version=STAGE_A_IMPLEMENTATION_VERSION,
         answer_mode=AnswerMode.DETERMINISTIC,

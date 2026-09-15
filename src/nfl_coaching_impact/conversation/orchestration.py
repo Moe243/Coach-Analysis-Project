@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .answerability import determine_answerability
 from .authorization import AuthorizationResult, TaskAuthorizer
-from .conclusions import ConclusionEngine
+from .conclusions import ConclusionEngine, ConclusionResult
 from .contracts import (
     ASK_V2_CONTRACT_VERSION,
     STAGE_C_IMPLEMENTATION_VERSION,
@@ -29,6 +31,16 @@ from .registries import EVIDENCE_REDUCER_VERSION, SCHEME_FEATURE_UNITS
 from .synthesis import DeterministicSynthesizer
 
 
+@dataclass(frozen=True, slots=True)
+class AuthoritativeResult:
+    """Backend-authorized analytical state before optional presentation."""
+
+    plan: DeterministicPlan
+    package: EvidencePackage
+    conclusions: ConclusionResult
+    response: AskV2Response
+
+
 class AskV2Orchestrator:
     """Execute only authorized registry tasks and render permitted propositions."""
 
@@ -40,7 +52,12 @@ class AskV2Orchestrator:
         self.synthesizer = DeterministicSynthesizer()
 
     def answer(self, request: AskV2Request) -> AskV2Response:
-        plan = self.planner.plan(request)
+        return self.analyze(request).response
+
+    def analyze(
+        self, request: AskV2Request, plan: DeterministicPlan | None = None
+    ) -> AuthoritativeResult:
+        plan = plan or self.planner.plan(request)
         exact_entities = tuple(
             resolution.resolved[0]
             for resolution in plan.resolutions
@@ -87,6 +104,7 @@ class AskV2Orchestrator:
         versions = package.versions.model_copy(
             update={
                 "planner_implementation_version": STAGE_C_IMPLEMENTATION_VERSION,
+                "deterministic_planner_version": STAGE_C_IMPLEMENTATION_VERSION,
                 "synthesizer_implementation_version": STAGE_C_IMPLEMENTATION_VERSION,
             }
         )
@@ -98,7 +116,7 @@ class AskV2Orchestrator:
         uncertainty = tuple(
             item for item in package.uncertainty if item.uncertainty_id in proposition_uncertainty
         )[:12]
-        return AskV2Response(
+        response = AskV2Response(
             answerability=answerability,
             answer_mode=AnswerMode.DETERMINISTIC,
             reason_code=reason,
@@ -113,6 +131,12 @@ class AskV2Orchestrator:
             limitations=synthesis.limitations,
             follow_ups=synthesis.follow_ups,
             versions=versions,
+        )
+        return AuthoritativeResult(
+            plan=plan,
+            package=package,
+            conclusions=conclusions,
+            response=response,
         )
 
     def _execute(
@@ -214,6 +238,7 @@ class AskV2Orchestrator:
                 scientific_policy_version=SCIENTIFIC_POLICY_VERSION,
                 analytical_data_version=self.evidence.analytical.version,
                 evidence_reducer_version=EVIDENCE_REDUCER_VERSION,
+                deterministic_planner_version=STAGE_C_IMPLEMENTATION_VERSION,
                 planner_implementation_version=STAGE_C_IMPLEMENTATION_VERSION,
                 synthesizer_implementation_version=STAGE_C_IMPLEMENTATION_VERSION,
                 answer_mode=AnswerMode.DETERMINISTIC,
