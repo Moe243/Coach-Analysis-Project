@@ -23,6 +23,26 @@ described in [the C19 report](../docs/CHECKPOINT_19_ASK_ANYTHING.md). A missing 
 error, never a trigger for fixture data. `e2e/checkpoint-nineteen.spec.ts` exercises the real
 configured local API; it does not intercept numerical responses.
 
+## Ask Anything 2.0 conversation preview
+
+`/ask/preview` is a **preview-only** conversation interface for the additive `POST /ask/v2`
+contract. `/ask` remains the unchanged v1 experience. The preview keeps conversation state in
+component memory, sends at most eight recent successful user turns and eight canonical entity
+references, and never reconstructs context from assistant prose. A page refresh or **New
+conversation** resets the session and cancels any pending request.
+
+Answers lead with the backend-approved football conclusion, then show ranked public evidence,
+material uncertainty, supported follow-ups, and expandable methodology/version information.
+Partially supported questions retain their useful descriptive evidence while clearly separating
+unsupported prediction or causal claims. `Deterministic` and `Grounded AI` describe presentation
+modes only; backend analytical authority is identical. Transient network and 503 failures use
+bounded automatic retries and retain a retry action for the exact request snapshot.
+
+Focused component tests live beside the preview source. `e2e/ask-v2-preview.spec.ts` intercepts
+only `POST /api/ask/v2` with typed deterministic public-contract fixtures, makes no provider call,
+and covers the golden conversation flows at desktop, tablet, and mobile widths. The separate v1
+browser suite continues to exercise the real configured local snapshot/API.
+
 This package is the React/TypeScript interface for the NFL Coaching Impact Engine. The production site is [live on Render](https://nfl-coaching-impact-engine.onrender.com). It reads the FastAPI contract and contains no embedded production data, database credentials, or model calculations.
 
 ## Local setup
@@ -46,6 +66,7 @@ The default Vite proxy sends `/api` to `http://127.0.0.1:8000`. Set `VITE_API_PR
 - `/network`: URL-backed Relationship Explorer with Coach Journey, QB Journey, Team History, and all-years Full Network; Timeline/Tree chronological views use season-specific appearances with canonical identity and distinct continuity edges, while Full Network uses deterministic year bands; source-backed intervals, complete-key QB PAE, focus history, and the keyboard-equivalent relationship surface remain intact
 - `/methodology`: metric, evidence, eligibility, uncertainty, and version interpretation
 - `/ask`: approved snapshot lookup, uncertainty, source lineage and explicit unsupported-answer states; requires configured backend snapshot
+- `/ask/preview`: preview-only Ask v2 conversation using bounded structured context; does not replace `/ask`
 
 ## Quality commands
 

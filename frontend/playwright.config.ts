@@ -37,7 +37,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm dev --host 127.0.0.1 --port ${port}`,
+    command: `./node_modules/.bin/vite --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/statistics`,
     reuseExistingServer: false,
     timeout: 30_000,

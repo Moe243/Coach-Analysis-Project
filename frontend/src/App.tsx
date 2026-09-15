@@ -7,6 +7,11 @@ import { StatisticsPage } from "./pages/StatisticsPage";
 const AskPage = lazy(() =>
   import("./pages/AskPage").then((module) => ({ default: module.AskPage })),
 );
+const AskPreviewPage = lazy(() =>
+  import("./pages/AskPreviewPage").then((module) => ({
+    default: module.AskPreviewPage,
+  })),
+);
 const CoachDetailPage = lazy(() =>
   import("./pages/CoachDetailPage").then((module) => ({
     default: module.CoachDetailPage,
@@ -39,6 +44,16 @@ export function App() {
           element={
             <Suspense fallback={<LoadingState label="Loading Ask Anything" />}>
               <AskPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="ask/preview"
+          element={
+            <Suspense
+              fallback={<LoadingState label="Loading Ask Anything preview" />}
+            >
+              <AskPreviewPage />
             </Suspense>
           }
         />
