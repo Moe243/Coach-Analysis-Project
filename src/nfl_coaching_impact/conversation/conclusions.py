@@ -18,7 +18,7 @@ from .enums import (
     PermissionDecision,
     QuestionType,
 )
-from .registries import SCHEME_FEATURE_UNITS
+from .registries import SCHEME_FEATURE_UNITS, feature_display_name
 from .serialization import canonical_json_bytes
 
 
@@ -32,6 +32,18 @@ def number(value: float | int | None, digits: int = 3) -> str:
 
 def percent(value: float | int | None) -> str:
     return "unavailable" if value is None else f"{100 * value:.1f}%"
+
+
+def possessive(value: str) -> str:
+    return value + ("'" if value.casefold().endswith("s") else "'s")
+
+
+def metric_display_name(metric: str) -> str:
+    return {
+        "cpoe": "CPOE",
+        "epa_per_dropback": "EPA/dropback",
+        "performance_above_expectation": "PAE",
+    }.get(metric, feature_display_name(metric))
 
 
 def metric_unit(metric: str) -> str | None:
@@ -309,7 +321,7 @@ class ConclusionEngine:
             rendered_value = percent(fields[metric]) if unit == "rate" else number(fields[metric])
             statement = (
                 f"{player.display_name} recorded {rendered_value} "
-                f"{metric.replace('_', ' ')} for {team.display_name} in {record.season} "
+                f"{metric_display_name(metric)} for {team.display_name} in {record.season} "
                 f"across {fields['dropbacks']} dropbacks."
             )
             if (
@@ -370,7 +382,7 @@ class ConclusionEngine:
                     permission_id="permission_historical",
                     statement=(
                         f"{player.display_name}'s entering-{record.season} profile recorded "
-                        f"{feature.replace('_', ' ')} at {rendered}."
+                        f"{feature_display_name(feature)} at {rendered}."
                     ),
                     evidence=(record,),
                     subject=player.display_name,
@@ -411,8 +423,8 @@ class ConclusionEngine:
                     kind=ConclusionKind.HISTORICAL_FACT,
                     permission_id="permission_historical",
                     statement=(
-                        f"{team.display_name}'s {record.season} "
-                        f"{fields['feature_name'].replace('_', ' ')} was {rendered}."
+                        f"{possessive(team.display_name)} {record.season} "
+                        f"{feature_display_name(fields['feature_name'])} was {rendered}."
                     ),
                     evidence=(record,),
                     subject=team.display_name,
@@ -521,6 +533,7 @@ class ConclusionEngine:
                 continue
             missing = fields["missing_age_excluded_count"]
             missing_label = "observation" if missing == 1 else "observations"
+            missing_verb = "was" if missing == 1 else "were"
             result.append(
                 self.proposition(
                     kind=ConclusionKind.HISTORICAL_FACT,
@@ -528,7 +541,7 @@ class ConclusionEngine:
                     statement=(
                         f"{coach.display_name} has {count} distinct QB-team-season context "
                         f"observations with age under 25 at season start; {missing} "
-                        f"missing-age {missing_label} were excluded."
+                        f"missing-age {missing_label} {missing_verb} excluded."
                     ),
                     evidence=(record,),
                     subject=coach.display_name,
@@ -583,7 +596,8 @@ class ConclusionEngine:
                     kind=ConclusionKind.HISTORICAL_FACT,
                     permission_id="permission_historical",
                     statement=(
-                        f"The frozen team-independent model projects {player.display_name} "
+                        f"The approved team-independent research model projects "
+                        f"{player.display_name} "
                         f"at {number(fields['prediction'])} EPA/dropback in 2026, with a "
                         f"published 95% historical-residual band of "
                         f"{number(fields['lower_95'])} to {number(fields['upper_95'])}."
@@ -616,9 +630,9 @@ class ConclusionEngine:
                     permission_id="permission_alignment",
                     statement=(
                         f"{player.display_name}'s measured "
-                        f"{fields['player_feature'].replace('_', ' ')} was "
-                        f"{renderer(fields['player_value'])}; {team.display_name}'s historical "
-                        f"{fields['scheme_feature'].replace('_', ' ')} was "
+                        f"{feature_display_name(fields['player_feature'])} was "
+                        f"{renderer(fields['player_value'])}; {possessive(team.display_name)} "
+                        f"historical {feature_display_name(fields['scheme_feature'])} was "
                         f"{renderer(fields['scheme_value'])}."
                     ),
                     evidence=(record,),

@@ -48,9 +48,7 @@ class DeterministicSynthesizer:
                 "and multi-season wording is not mapped to a frozen analytical season."
             )
         elif answerability is Answerability.CLARIFICATION_REQUIRED:
-            answer = (
-                "I need a more specific canonical player, coach, or team before looking up data."
-            )
+            answer = "I need a more specific player, coach, or team name before I look up evidence."
         elif question_type is QuestionType.ROOKIE_PROJECTION:
             answer = (
                 "The approved college-data foundation cannot estimate an NFL rookie "
@@ -289,7 +287,9 @@ class DeterministicSynthesizer:
                         description="Destination-team numerical performance or improvement",
                         reason_code=code,
                         explanation=(
-                            "C17 did not validate a Player × Scheme environment-response model."
+                            "The destination-team model did not improve prediction on unseen "
+                            "seasons, so the project does not estimate a team-specific performance "
+                            "change. Historical profile and scheme evidence may still be compared."
                         ),
                     ),
                 ),
@@ -302,7 +302,10 @@ class DeterministicSynthesizer:
                     UnsupportedRequestedPortion(
                         description="Alternate-career numerical simulation",
                         reason_code=code,
-                        explanation="C18 is not ready because its C17 prerequisite failed.",
+                        explanation=(
+                            "The project cannot simulate alternate careers because it has no "
+                            "validated destination-team response model."
+                        ),
                     ),
                 ),
                 code,
@@ -314,7 +317,10 @@ class DeterministicSynthesizer:
                     UnsupportedRequestedPortion(
                         description="College-to-NFL rookie performance projection",
                         reason_code=code,
-                        explanation="C20 is data-limited and not estimable.",
+                        explanation=(
+                            "The available college data cannot support a reliable NFL rookie "
+                            "performance projection."
+                        ),
                     ),
                 ),
                 code,
@@ -326,7 +332,10 @@ class DeterministicSynthesizer:
                     UnsupportedRequestedPortion(
                         description="Causal or universal Coach Effect conclusion",
                         reason_code=code,
-                        explanation="C12 approved no composite or causal Coach Effect.",
+                        explanation=(
+                            "There is no composite or causal Coach Effect estimate in the "
+                            "available observational evidence."
+                        ),
                     ),
                 ),
                 code,
@@ -365,13 +374,13 @@ class DeterministicSynthesizer:
                         description=(
                             "Forward PAE projection"
                             if pae
-                            else "Unsupported C16 projection output or context"
+                            else "Unsupported projection output or context"
                         ),
                         reason_code=code,
                         explanation=(
-                            "C16 supports only team-independent EPA through the frozen 2026 "
-                            "projection; it does not support touchdowns, yards, probabilities, "
-                            "coach-specific effects, or other requested outputs."
+                            "The approved research forecast supports only team-independent "
+                            "EPA/dropback for 2026; it does not support touchdowns, yards, "
+                            "probabilities, coach-specific effects, or other requested outputs."
                         ),
                     ),
                 ),

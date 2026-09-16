@@ -38,6 +38,7 @@ from .registries import (
     FEATURE_COMPATIBILITY,
     PLAYER_FEATURE_DEFINITIONS,
     SCHEME_FEATURE_UNITS,
+    feature_display_name,
 )
 from .resolution import EntityResolver
 from .serialization import canonical_json_bytes
@@ -378,7 +379,7 @@ class EvidenceService:
                     upper=fields["upper"],
                     confidence_level=0.95,
                     reliability=Reliability(row["preseason_ability_reliability"]),
-                    explanation="Entering-season C14 preseason ability uncertainty.",
+                    explanation="Entering-season preseason ability uncertainty.",
                 ),
             )
         return (
@@ -443,7 +444,10 @@ class EvidenceService:
                     upper=fields["upper"],
                     confidence_level=0.95,
                     reliability=Reliability(row["reliability"]),
-                    explanation="C14 as-of feature uncertainty retained without reinterpretation.",
+                    explanation=(
+                        "Entering-season estimate uncertainty is retained from the Player State "
+                        "research."
+                    ),
                 ),
             )
         return (
@@ -452,8 +456,8 @@ class EvidenceService:
                 kind=EvidenceKind.QB_PROFILE,
                 grain="player_id|target_season|feature_name|" + key,
                 summary=(
-                    f"Entering-season {definition.category.value.lower()} feature "
-                    f"{row['feature_name']} for {player.display_name}."
+                    f"Entering-season {definition.category.value.lower()} measurement: "
+                    f"{feature_display_name(row['feature_name'])} for {player.display_name}."
                 ),
                 entities=(player,),
                 season=row["target_season"],
@@ -534,7 +538,7 @@ class EvidenceService:
             kind=EvidenceKind.TEAM_SCHEME,
             grain="team_id|season|feature_name|" + key,
             summary=(
-                f"Observed team-season scheme feature {row['feature_name']} for "
+                f"Observed {feature_display_name(row['feature_name'])} for "
                 f"{team.display_name} in {row['season']}."
             ),
             entities=(team,),
@@ -1064,7 +1068,10 @@ class EvidenceService:
             uncertainty=tuple(uncertainty),
             limitations=(
                 "Alignment compares declared compatible tendencies only; it is not a fit score.",
-                "C17 does not support a destination-team prediction or improvement adjustment.",
+                (
+                    "The destination-team research does not support a prediction or "
+                    "improvement adjustment."
+                ),
             ),
         )
         if include_projection:

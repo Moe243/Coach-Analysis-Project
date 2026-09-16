@@ -493,12 +493,15 @@ def test_compliant_synthesis_changes_presentation_not_science(evidence):
         ),
         (
             "How would Kyler Murray fit Minnesota?",
-            "did not validate a Player × Scheme",
+            "destination-team model did not improve prediction on unseen seasons",
             "Minnesota EPA",
         ),
         (
             "What if Chicago drafted Patrick Mahomes?",
-            "not ready because its C17 prerequisite failed",
+            (
+                "cannot simulate alternate careers because it has no validated "
+                "destination-team response model"
+            ),
             "would have thrown",
         ),
         (

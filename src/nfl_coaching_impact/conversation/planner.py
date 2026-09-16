@@ -93,6 +93,18 @@ class DeterministicPlanner:
         entities = self._merge_entities(question, current, context, follow_up)
         preliminary = self._question_type(question, entities, request)
         resolutions = [self._exact_resolution(entity) for entity in entities]
+        if (
+            EntityKind.TEAM in {entity.kind for entity in entities}
+            and EntityKind.QB not in {entity.kind for entity in entities}
+            and re.search(r"\b(would|fit|join|joined|traded|throw|throws)\b", question)
+        ):
+            unresolved_qb = self._unresolved_reference(
+                question,
+                preliminary,
+                kind_override=EntityKind.QB,
+            )
+            if unresolved_qb is not None:
+                resolutions.append(unresolved_qb)
         if follow_up and not current and not entities:
             resolutions.extend(context_failures)
         if not entities and preliminary not in {
@@ -253,7 +265,18 @@ class DeterministicPlanner:
                 prior.extend(self._find_exact_entities(turn.content))
                 if prior:
                     break
-        ordered = prior or list(explicit)
+        if prior:
+            prior_kinds = {entity.kind for entity in prior}
+            ordered = [
+                *prior,
+                *(
+                    entity
+                    for entity in explicit
+                    if entity.kind in prior_kinds and entity not in prior
+                ),
+            ]
+        else:
+            ordered = list(explicit)
         seen: set[tuple[EntityKind, str]] = set()
         result = []
         for entity in ordered:
@@ -317,9 +340,13 @@ class DeterministicPlanner:
         return tuple(deduplicated)
 
     def _unresolved_reference(
-        self, question: str, question_type: QuestionType
+        self,
+        question: str,
+        question_type: QuestionType,
+        *,
+        kind_override: EntityKind | None = None,
     ) -> EntityResolution | None:
-        kind = (
+        kind = kind_override or (
             EntityKind.COACH
             if question_type
             in {
@@ -343,8 +370,14 @@ class DeterministicPlanner:
             "compare",
             "projection",
             "how",
+            "many",
             "did",
             "does",
+            "would",
+            "throw",
+            "throws",
+            "touchdown",
+            "touchdowns",
             "the",
             "this",
             "that",

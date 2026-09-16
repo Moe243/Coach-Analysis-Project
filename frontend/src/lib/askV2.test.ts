@@ -49,6 +49,54 @@ describe("Ask v2 presentation and context helpers", () => {
     });
   });
 
+  it("uses only the latest successful answer's entities as active context", () => {
+    const history = [
+      {
+        question: "Compare Andy Reid and Mike Tomlin.",
+        response: askV2Response({
+          entities: [
+            { kind: "coach", id: "coach-andy-reid", display_name: "Andy Reid" },
+            {
+              kind: "coach",
+              id: "coach-mike-tomlin",
+              display_name: "Mike Tomlin",
+            },
+          ],
+        }),
+      },
+      {
+        question: "Now compare Reid to Sean McVay.",
+        response: askV2Response({
+          entities: [
+            { kind: "coach", id: "coach-andy-reid", display_name: "Andy Reid" },
+            {
+              kind: "coach",
+              id: "coach-sean-mcvay",
+              display_name: "Sean McVay",
+            },
+          ],
+        }),
+      },
+    ];
+    expect(buildBoundedAskV2Context(history).context.entities).toEqual([
+      { kind: "coach", id: "coach-andy-reid" },
+      { kind: "coach", id: "coach-sean-mcvay" },
+    ]);
+  });
+
+  it("carries the latest unambiguous evidence season into short follow-ups", () => {
+    const response = askV2Response();
+    response.propositions = response.propositions.map((proposition) => ({
+      ...proposition,
+      season: 2022,
+    }));
+    expect(
+      buildBoundedAskV2Context([
+        { question: "How did Josh Allen perform in 2022?", response },
+      ]).context.seasons,
+    ).toEqual({ start_season: 2022, end_season: 2022 });
+  });
+
   it("formats only typed rate units as percentages and preserves missing values", () => {
     expect(formatAskV2Value(0.643, "rate")).toBe("64.3%");
     expect(formatAskV2Value(-0.125, "rate_difference")).toBe("-12.5%");

@@ -18,6 +18,7 @@ import {
   isAlignmentResponse,
   isComparisonResponse,
   isCounterfactualResponse,
+  metricLabel,
   propositionUncertainty,
 } from "../../lib/askV2";
 
@@ -50,6 +51,20 @@ function ModeBadge({ response }: { response: AskV2Response }) {
     >
       {grounded ? "Grounded AI" : "Deterministic"}
     </span>
+  );
+}
+
+function MetricExplainer({ response }: { response: AskV2Response }) {
+  const hasEpa = response.answer.includes("EPA/dropback");
+  const hasPae = response.answer.includes("PAE");
+  if (!hasEpa && !hasPae) return null;
+  return (
+    <p className="ask-v2-metric-explainer">
+      {hasEpa &&
+        "EPA/dropback estimates expected scoring value added per passing dropback."}
+      {hasEpa && hasPae && " "}
+      {hasPae && "PAE is actual EPA/dropback minus the preseason expectation."}
+    </p>
   );
 }
 
@@ -201,7 +216,7 @@ function EvidenceDetails({ response }: { response: AskV2Response }) {
                     </div>
                     {proposition.metric && (
                       <div>
-                        <dt>{humanize(proposition.metric)}</dt>
+                        <dt>{metricLabel(proposition.metric)}</dt>
                         <dd>
                           {formatAskV2Value(
                             proposition.value,
@@ -399,7 +414,8 @@ export function AskV2AssistantTurn({
         >
           Answer to {turn.question}
         </h2>
-        <p>{response.answer}</p>
+        <p className="ask-v2-answer-copy">{response.answer}</p>
+        <MetricExplainer response={response} />
       </section>
       {response.answerability === "CLARIFICATION_REQUIRED" &&
         response.clarification_candidates.length > 0 && (

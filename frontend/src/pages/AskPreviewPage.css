@@ -166,12 +166,20 @@
   padding: clamp(1.25rem, 3vw, 2rem);
 }
 
-.ask-v2-direct-answer > p:last-child {
+.ask-v2-answer-copy {
   max-width: 850px;
   margin: 0;
   white-space: pre-line;
   font-size: clamp(1.05rem, 1.8vw, 1.35rem);
   line-height: 1.65;
+}
+
+.ask-v2-metric-explainer {
+  max-width: 850px;
+  margin: 0.8rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
 }
 
 .ask-v2-entity-links {

@@ -40,7 +40,11 @@ class EntityResolver:
                 if len(label) >= 3:
                     self._candidate_labels[kind].append((label, entity))
             if kind in {EntityKind.QB, EntityKind.COACH}:
-                surname = normalize(entity.display_name).split()[-1]
+                name_parts = normalize(entity.display_name).split()
+                first_name = name_parts[0]
+                surname = name_parts[-1]
+                if len(first_name) >= 3:
+                    self._candidate_labels[kind].append((first_name, entity))
                 if len(surname) >= 3:
                     self._candidate_labels[kind].append((surname, entity))
         for entities_for_label in self._exact_labels.values():

@@ -94,6 +94,35 @@ SCHEME_FEATURE_UNITS = MappingProxyType(
     }
 )
 
+FEATURE_DISPLAY_NAMES = MappingProxyType(
+    {
+        "average_air_yards": "average target depth",
+        "early_down_pass_rate": "early-down pass rate",
+        "expected_pass_rate": "expected pass rate",
+        "neutral_pass_rate": "neutral-situation pass rate",
+        "no_huddle_rate": "no-huddle rate",
+        "pass_rate": "pass rate",
+        "proe": "pass rate over expected",
+        "recent_average_air_yards": "recent average target depth",
+        "recent_scramble_rate": "recent scramble rate",
+        "recent_shotgun_rate": "recent shotgun rate",
+        "recent_target_depth_deep_rate": "recent deep-target rate",
+        "recent_target_depth_intermediate_rate": "recent intermediate-target rate",
+        "recent_target_depth_short_rate": "recent short-target rate",
+        "scramble_rate": "scramble rate",
+        "shotgun_rate": "shotgun rate",
+        "target_depth_deep_rate": "deep-target rate",
+        "target_depth_intermediate_rate": "intermediate-target rate",
+        "target_depth_short_rate": "short-target rate",
+    }
+)
+
+
+def feature_display_name(feature_name: str) -> str:
+    """Return stable football-facing copy without changing feature identity."""
+    return FEATURE_DISPLAY_NAMES.get(feature_name, feature_name.replace("_", " "))
+
+
 FEATURE_COMPATIBILITY = (
     FeatureCompatibility(
         "recent_scramble_rate",

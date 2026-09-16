@@ -26,6 +26,31 @@ function entityKey(entity: AskV2CanonicalEntity) {
   return `${entity.kind}:${entity.id}`;
 }
 
+function latestSeasonContext(
+  turn: ContextSourceTurn | undefined,
+): AskV2ConversationContext["seasons"] {
+  if (!turn?.response) return undefined;
+  const evidenceSeasons = new Set(
+    turn.response.propositions
+      .map((proposition) => proposition.season)
+      .filter((season): season is number => season !== null),
+  );
+  if (evidenceSeasons.size === 1) {
+    const season = [...evidenceSeasons][0];
+    return { start_season: season, end_season: season };
+  }
+  const questionSeasons = new Set(
+    [...turn.question.matchAll(/\b20\d{2}\b/g)]
+      .map(([value]) => Number(value))
+      .filter((season) => season >= 2010 && season <= 2026),
+  );
+  if (questionSeasons.size === 1) {
+    const season = [...questionSeasons][0];
+    return { start_season: season, end_season: season };
+  }
+  return undefined;
+}
+
 export function buildBoundedAskV2Context(
   history: readonly ContextSourceTurn[],
   additionalEntity?: AskV2CanonicalEntity,
@@ -55,10 +80,9 @@ export function buildBoundedAskV2Context(
     }
   };
   if (additionalEntity) addEntity(additionalEntity);
-  for (let index = selected.length - 1; index >= 0; index -= 1) {
-    for (const entity of selected[index].response?.entities ?? [])
-      addEntity(entity);
-  }
+  const latestEntities = selected.at(-1)?.response?.entities ?? [];
+  for (const entity of latestEntities) addEntity(entity);
+  const seasons = latestSeasonContext(selected.at(-1));
 
   return {
     context: {
@@ -69,6 +93,7 @@ export function buildBoundedAskV2Context(
       entities: entities.sort((left, right) =>
         entityKey(left).localeCompare(entityKey(right)),
       ),
+      ...(seasons ? { seasons } : {}),
     },
     trimmed: selected.length < eligible.length,
   };
@@ -86,6 +111,27 @@ export function humanize(value: string): string {
     .toLowerCase()
     .replaceAll("_", " ")
     .replace(/(^|\s)\S/g, (character) => character.toUpperCase());
+}
+
+const metricLabels: Readonly<Record<string, string>> = {
+  epa_per_dropback: "EPA/dropback",
+  performance_above_expectation: "PAE",
+  cpoe: "CPOE",
+  pcae: "PCAE",
+  proe: "PROE",
+  recent_scramble_rate: "Recent scramble rate",
+  recent_shotgun_rate: "Recent shotgun rate",
+  recent_average_air_yards: "Recent average air yards",
+  recent_target_depth_short_rate: "Recent short-target rate",
+  recent_target_depth_intermediate_rate: "Recent intermediate-target rate",
+  recent_target_depth_deep_rate: "Recent deep-target rate",
+  target_depth_short_rate: "Short-target rate",
+  target_depth_intermediate_rate: "Intermediate-target rate",
+  target_depth_deep_rate: "Deep-target rate",
+};
+
+export function metricLabel(value: string): string {
+  return metricLabels[value] ?? humanize(value);
 }
 
 export function formatAskV2Value(

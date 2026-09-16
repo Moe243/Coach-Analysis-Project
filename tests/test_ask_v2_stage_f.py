@@ -28,6 +28,8 @@ SNAPSHOT = ROOT / "data/processed/ask_anything" / release.VERSION
 JOSH_ALLEN = "00-0034857"
 ANDY_REID = "coach-andy-reid"
 MIKE_TOMLIN = "coach-mike-tomlin"
+SEAN_MCVAY = "coach-sean-mcvay"
+KYLER_MURRAY = "00-0035228"
 
 
 @pytest.fixture(scope="module")
@@ -101,6 +103,90 @@ def test_short_followups_reuse_entities_without_causal_drift(
     assert "99-point" not in response.answer
     assert "causes" not in response.answer.lower()
     assert "winner" not in response.answer.lower() or "no development winner" in response.answer
+
+
+def test_replacement_comparison_keeps_the_active_pair_for_short_followups(
+    orchestrator: AskV2Orchestrator,
+):
+    context = ConversationContext(
+        turns=(
+            ConversationTurn(
+                role=ConversationRole.USER,
+                content="Now compare Reid to Sean McVay.",
+            ),
+        ),
+        entities=(
+            CanonicalEntityReference(kind=EntityKind.COACH, id=ANDY_REID),
+            CanonicalEntityReference(kind=EntityKind.COACH, id=SEAN_MCVAY),
+        ),
+    )
+    response = ask(orchestrator, "Who is better?", context)
+    assert response.answerability is Answerability.PARTIALLY_SUPPORTED
+    assert {entity.id for entity in response.entities} == {ANDY_REID, SEAN_MCVAY}
+    assert response.reason_code is ReasonCode.DEVELOPMENT_CONCLUSION_NOT_PERMITTED
+
+
+def test_unique_first_name_offers_safe_clarification_before_scenario_evidence(
+    orchestrator: AskV2Orchestrator,
+):
+    clarification = ask(
+        orchestrator,
+        "How many touchdowns would Kyler throw in Minnesota?",
+    )
+    assert clarification.answerability is Answerability.CLARIFICATION_REQUIRED
+    assert [entity.id for entity in clarification.clarification_candidates] == [KYLER_MURRAY]
+    assert clarification.evidence == ()
+    assert "canonical" not in clarification.answer.casefold()
+
+    resolved = ask(
+        orchestrator,
+        "Kyler Murray: How many touchdowns would Kyler throw in Minnesota?",
+        ConversationContext(
+            entities=(CanonicalEntityReference(kind=EntityKind.QB, id=KYLER_MURRAY),)
+        ),
+    )
+    assert resolved.answerability is Answerability.PARTIALLY_SUPPORTED
+    assert resolved.reason_code is ReasonCode.C17_SCENARIO_NOT_SUPPORTED
+    assert "destination-team EPA change" in resolved.answer
+
+
+def test_release_copy_uses_football_labels_and_plain_language(
+    orchestrator: AskV2Orchestrator,
+):
+    history = ask(orchestrator, "How did Josh Allen perform in 2022?")
+    assert "EPA/dropback" in history.answer
+    assert "epa per dropback" not in history.answer
+
+    mobility = ask(orchestrator, "Is Lamar Jackson mobile?")
+    assert "recent scramble rate" in mobility.answer
+    assert all("recent_scramble_rate" not in item.summary for item in mobility.evidence)
+    assert all("C14" not in item.explanation for item in mobility.uncertainty)
+
+    scheme = ask(orchestrator, "What type of offense did Miami run in 2024?")
+    assert "Miami Dolphins'" in scheme.answer
+    assert all("scheme feature" not in item.summary for item in scheme.evidence)
+    assert all("_" not in item.summary for item in scheme.evidence)
+
+    scenario = ask(orchestrator, "Project Josh Allen in Minnesota in 2026.")
+    assert "C17" not in scenario.answer
+    assert all("C17" not in item.explanation for item in scenario.unsupported_portions)
+    assert all("C17" not in limitation for limitation in scenario.limitations)
+
+    counterfactual = ask(orchestrator, "What if Chicago drafted Patrick Mahomes?")
+    assert "C17" not in counterfactual.answer and "C18" not in counterfactual.answer
+    assert all(
+        "C17" not in item.explanation and "C18" not in item.explanation
+        for item in counterfactual.unsupported_portions
+    )
+
+    rookie = ask(orchestrator, "Project a rookie QB in the NFL.")
+    assert "C20" not in rookie.answer
+    assert all("C20" not in item.explanation for item in rookie.unsupported_portions)
+
+
+def test_young_qb_copy_uses_singular_grammar(orchestrator: AskV2Orchestrator):
+    response = ask(orchestrator, "Only young QBs.", coach_comparison_context())
+    assert "1 missing-age observation was excluded" in response.answer
 
 
 @pytest.mark.parametrize(

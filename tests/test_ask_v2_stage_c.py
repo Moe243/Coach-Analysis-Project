@@ -278,7 +278,7 @@ def test_mahomes_chicago_returns_actual_and_context_without_simulation(orchestra
     assert response.reason_code is ReasonCode.C18_COUNTERFACTUAL_NOT_IMPLEMENTED
     assert "cannot simulate an alternate career" in response.answer
     assert "Patrick Mahomes recorded" in response.answer
-    assert "Chicago Bears's" in response.answer
+    assert "Chicago Bears'" in response.answer
     assert "in 2025" in response.answer
     assert "touchdowns" not in response.answer.lower()
 

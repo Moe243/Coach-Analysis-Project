@@ -30,7 +30,7 @@ async function submit(question: string) {
 function clarificationResponse() {
   return askV2Response({
     answerability: "CLARIFICATION_REQUIRED",
-    answer: "I need a more specific canonical player before looking up data.",
+    answer: "I need a more specific player name before I look up evidence.",
     entities: [],
     clarification_candidates: [
       { kind: "qb", id: "00-0032434", display_name: "Brandon Allen" },
@@ -73,6 +73,11 @@ describe("Ask Anything v2", () => {
       /recorded 0.237 EPA\/dropback/,
     );
     expect(answer).toBeVisible();
+    expect(
+      screen.getByText(
+        /EPA\/dropback estimates expected scoring value added per passing dropback/,
+      ),
+    ).toBeVisible();
     const evidence = screen.getByRole("heading", {
       name: "Strongest evidence",
     });
@@ -86,6 +91,27 @@ describe("Ask Anything v2", () => {
       }),
       expect.any(AbortSignal),
     );
+  });
+
+  it("explains PAE inline without exposing a methodology wall", async () => {
+    vi.mocked(askQuestionV2).mockResolvedValue(
+      askV2Response({
+        answer:
+          "Josh Allen recorded 0.237 EPA/dropback and outperformed expectation by 0.115 PAE.",
+      }),
+    );
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("How did Josh Allen perform in 2022?");
+    expect(
+      await screen.findByText((_, element) =>
+        Boolean(
+          element?.classList.contains("ask-v2-metric-explainer") &&
+          element.textContent?.includes(
+            "PAE is actual EPA/dropback minus the preseason expectation.",
+          ),
+        ),
+      ),
+    ).toBeVisible();
   });
 
   it("renders partial support as useful alignment before the unsupported portion", async () => {
