@@ -43,20 +43,21 @@ export function App() {
           path="ask"
           element={
             <Suspense fallback={<LoadingState label="Loading Ask Anything" />}>
-              <AskPage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="ask/preview"
-          element={
-            <Suspense
-              fallback={<LoadingState label="Loading Ask Anything preview" />}
-            >
               <AskPreviewPage />
             </Suspense>
           }
         />
+        <Route
+          path="ask/legacy"
+          element={
+            <Suspense
+              fallback={<LoadingState label="Loading legacy Ask Anything" />}
+            >
+              <AskPage />
+            </Suspense>
+          }
+        />
+        <Route path="ask/preview" element={<Navigate to="/ask" replace />} />
         <Route
           path="network"
           element={

@@ -60,6 +60,27 @@ async function expectNoAxeViolations(page: Page) {
   expect(violations).toEqual([]);
 }
 
+test("primary, preview-alias, and legacy routes preserve browser navigation", async ({
+  page,
+}) => {
+  await page.goto("/ask/preview");
+  await expect(page).toHaveURL(/\/ask$/);
+  await expect(
+    page.getByRole("heading", { name: "Ask Anything" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Conversation preview/i)).toHaveCount(0);
+
+  await page.goto("/ask/legacy");
+  await expect(
+    page.getByRole("heading", { name: "Query the analytics system" }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/ask$/);
+  await expect(page.getByText("Evidence-led conversation")).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(/\/ask\/legacy$/);
+});
+
 test("Josh Allen answer leads with evidence and supports a contextual follow-up", async ({
   page,
 }) => {
@@ -71,7 +92,7 @@ test("Josh Allen answer leads with evidence and supports a contextual follow-up"
         })
       : askV2Response(),
   );
-  await page.goto("/ask/preview");
+  await page.goto("/ask");
   await expectNoAxeViolations(page);
   await submit(page, "How did Josh Allen perform in 2022?");
   await expect(
@@ -107,7 +128,7 @@ test("Reid versus Tomlin remains neutral and carries context into Why", async ({
     requests.push(request);
     await route.fulfill({ json: coachComparisonResponse() });
   });
-  await page.goto("/ask/preview");
+  await page.goto("/ask");
   await submit(
     page,
     "Who has stronger QB-development evidence, Andy Reid or Mike Tomlin?",
@@ -150,7 +171,7 @@ test("partial alignment and counterfactual questions remain useful without fake 
       ? counterfactualResponse()
       : partialAlignmentResponse(),
   );
-  await page.goto("/ask/preview");
+  await page.goto("/ask");
   await submit(page, "How would Kyler Murray fit Minnesota?");
   await expect(page.getByText("Comparable dimensions")).toBeVisible();
   await expect(page.getByText(/Descriptive alignment only/)).toBeVisible();
@@ -173,7 +194,7 @@ test("ambiguous player input resolves through canonical context without exposing
       ? clarificationResponse
       : askV2Response(),
   );
-  await page.goto("/ask/preview");
+  await page.goto("/ask");
   await submit(page, "Allen performance 2022");
   await expect(page.getByText("Which one did you mean?")).toBeVisible();
   await expectNoAxeViolations(page);
@@ -193,7 +214,7 @@ test("failed evidence request is an accessible retry state", async ({
       json: { detail: "Temporary server failure" },
     }),
   );
-  await page.goto("/ask/preview");
+  await page.goto("/ask");
   await submit(page, "How did Josh Allen perform in 2022?");
   await expect(page.getByRole("alert")).toContainText(
     "Published evidence could not be loaded",

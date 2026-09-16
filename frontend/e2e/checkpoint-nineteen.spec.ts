@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 test("Ask returns versioned history, source evidence and no scenario numbers", async ({
   page,
 }) => {
-  await page.goto("/ask");
+  await page.goto("/ask/legacy");
   const input = page.getByLabel("Your football question");
   await input.fill("How did Josh Allen perform in 2022?");
   const response = page.waitForResponse(
@@ -40,7 +40,7 @@ test("Ask returns versioned history, source evidence and no scenario numbers", a
 test("Ask resolves ambiguity and reads the frozen team-independent projection", async ({
   page,
 }) => {
-  await page.goto("/ask");
+  await page.goto("/ask/legacy");
   await page
     .getByLabel("Your football question")
     .fill("Allen performance 2022");

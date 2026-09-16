@@ -33,10 +33,13 @@ history, C14 state/style, C13 scheme, C16 team-independent research projections 
 separate PCAE evidence. It explicitly refuses unsupported transfer, counterfactual,
 rookie and universal Coach Effect estimates. No external LLM credential is required.
 See [the C19 contract and local setup](docs/CHECKPOINT_19_ASK_ANYTHING.md).
-The additive Ask v2 development branch also defines a disabled-by-default
+The local Ask v2 release-candidate branch also defines a disabled-by-default
 [grounded-provider contract](docs/ASK_V2_GROUNDED_PROVIDER.md). It uses an external model only for
 strict interpretation and proposition selection; backend evidence and scientific policy remain
-authoritative. No OpenAI provider is configured or claimed live in production.
+authoritative. The local frontend route `/ask` uses Ask v2, `/ask/legacy` preserves the v1 rollback
+interface, and `/ask/preview` redirects to `/ask`; backend `POST /ask` and `POST /ask/v2` remain
+separate and unchanged. No OpenAI provider is configured or claimed live in production, and this
+route migration has not been pushed, merged or deployed.
 C17's negative scenario result is integrated; C18 remains NOT READY.
 
 All nine release checkpoints are complete. Checkpoint Eleven-B finalized the evidence overlay for formal OC/QB-coach titles, verified absences of separately designated roles, and leakage-safe historical PCAE readiness without rewriting frozen named assignments. This release hotfix publishes that completeness evidence as status and provenance only: it creates no synthetic coach, assignment, or graph edge. The final matrix contains 488 verified-person and 24 verified-no-designated-role OC cells; 496 verified-person and 16 verified-no-designated-role QB-coach cells; and 119 verified, one partial, 125 provisional, and 267 unresolved play-caller cells. The November 2017 all-team caller source is bounded through Week 10 rather than extrapolated through season end. Neither the interface nor the serving data turns same-team-season context into exact weekly overlap or causal coach attribution.

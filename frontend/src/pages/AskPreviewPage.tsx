@@ -19,7 +19,7 @@ export function AskPreviewPage() {
     <section className="page ask-v2-page">
       <header className="ask-v2-page-header">
         <div>
-          <p className="eyebrow">Conversation preview · Ask v2</p>
+          <p className="eyebrow">Evidence-led football analysis</p>
           <h1>Ask Anything</h1>
           <p>
             Ask questions about quarterbacks, coaches, historical schemes,

@@ -44,11 +44,11 @@ function clarificationResponse() {
   });
 }
 
-describe("Ask Anything v2 preview", () => {
+describe("Ask Anything v2", () => {
   beforeEach(() => vi.mocked(askQuestionV2).mockReset());
 
-  it("shows an answer-first preview with supported examples", () => {
-    renderRoute(<AskPreviewPage />, "/ask/preview");
+  it("shows an answer-first experience with supported examples", () => {
+    renderRoute(<AskPreviewPage />, "/ask");
     expect(screen.getByRole("heading", { name: "Ask Anything" })).toBeVisible();
     expect(screen.getByText("Evidence-led conversation")).toBeVisible();
     expect(
@@ -56,6 +56,7 @@ describe("Ask Anything v2 preview", () => {
     ).toBeVisible();
     expect(screen.queryByText("Rookie forecast")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Ask$/ })).toBeDisabled();
+    expect(screen.queryByText(/preview/i)).not.toBeInTheDocument();
   });
 
   it("submits an example and renders the direct answer before evidence", async () => {
