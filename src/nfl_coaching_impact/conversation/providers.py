@@ -7,9 +7,12 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .contracts import ProviderPlannerInput, ProviderSynthesisInput
+
+if TYPE_CHECKING:
+    from .provider_drafts import ProviderDraftInput
 
 MAX_PROVIDER_PAYLOAD_BYTES = 48 * 1024
 MAX_PROVIDER_CALLS = 2
@@ -55,7 +58,9 @@ class PlannerProvider(Protocol):
     implementation_version: str
     model_version: str
 
-    def plan(self, request: ProviderPlannerInput, *, timeout: float) -> Any: ...
+    def plan(
+        self, request: ProviderPlannerInput | ProviderDraftInput, *, timeout: float
+    ) -> Any: ...
 
 
 class SynthesizerProvider(Protocol):
@@ -130,6 +135,10 @@ class ProviderConfiguration:
     provider: ProviderName = ProviderName.OPENAI
 
     @property
+    def planner_only(self) -> bool:
+        return self.provider is ProviderName.GROQ
+
+    @property
     def ready(self) -> bool:
         return bool(
             self.valid
@@ -138,7 +147,7 @@ class ProviderConfiguration:
             and self.external_sharing_enabled
             and self.api_key
             and self.planner_model
-            and self.synthesizer_model
+            and (self.planner_only or self.synthesizer_model)
         )
 
     @classmethod
@@ -183,10 +192,7 @@ class ProviderConfiguration:
             source, "ASK_V2_SYNTHESIZER_MAX_OUTPUT_TOKENS", 800, 128, 1_500
         )
         if provider is ProviderName.GROQ:
-            models_valid = bool(
-                planner_model in _GROQ_STRUCTURED_OUTPUT_MODELS
-                and synthesizer_model in _GROQ_STRUCTURED_OUTPUT_MODELS
-            )
+            models_valid = bool(planner_model in _GROQ_STRUCTURED_OUTPUT_MODELS)
             key_valid = bool(re.fullmatch(r"gsk_[A-Za-z0-9_-]{16,}", api_key))
         elif provider is ProviderName.OPENAI:
             models_valid = bool(
@@ -197,16 +203,10 @@ class ProviderConfiguration:
         else:
             models_valid = True
             key_valid = True
-        numeric_valid = all(
-            value is not None
-            for value in (
-                planner_timeout,
-                synthesizer_timeout,
-                total_timeout,
-                planner_tokens,
-                synthesizer_tokens,
-            )
-        )
+        numeric_values = (planner_timeout, total_timeout, planner_tokens)
+        if provider is not ProviderName.GROQ:
+            numeric_values += (synthesizer_timeout, synthesizer_tokens)
+        numeric_valid = all(value is not None for value in numeric_values)
         valid = bool(
             provider_valid
             and (explicit_provider is not None or legacy_enabled is not None)
@@ -214,7 +214,8 @@ class ProviderConfiguration:
             and (not enabled or key_valid)
             and (not enabled or models_valid)
             and numeric_valid
-            and float(planner_timeout or 0) + float(synthesizer_timeout or 0)
+            and float(planner_timeout or 0)
+            + (0 if provider is ProviderName.GROQ else float(synthesizer_timeout or 0))
             <= float(total_timeout or 0)
         )
         return cls(
@@ -242,7 +243,11 @@ class ProviderRuntime:
 
     @property
     def ready(self) -> bool:
-        return bool(self.configuration.ready and self.planner and self.synthesizer)
+        return bool(
+            self.configuration.ready
+            and self.planner
+            and (self.configuration.planner_only or self.synthesizer)
+        )
 
 
 def classify_provider_failure(error: BaseException) -> ProviderFailureCategory:

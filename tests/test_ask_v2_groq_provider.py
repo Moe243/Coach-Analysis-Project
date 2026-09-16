@@ -24,7 +24,6 @@ from nfl_coaching_impact.conversation.contracts import (
 from nfl_coaching_impact.conversation.enums import (
     AnalyticalTask,
     AnswerMode,
-    ContextDependency,
     EntityKind,
     QuestionType,
     RequestedOutput,
@@ -41,7 +40,15 @@ from nfl_coaching_impact.conversation.groq_provider import (
     groq_runtime,
 )
 from nfl_coaching_impact.conversation.grounding import provider_synthesis_input
+from nfl_coaching_impact.conversation.openai_provider import OpenAISynthesizer
 from nfl_coaching_impact.conversation.orchestration import AskV2Orchestrator
+from nfl_coaching_impact.conversation.provider_drafts import (
+    FollowupKind,
+    ProviderDraftInput,
+    ProviderEntityMention,
+    ProviderPlanDraft,
+    RequestedCapability,
+)
 from nfl_coaching_impact.conversation.provider_orchestration import ProviderOrchestrator
 from nfl_coaching_impact.conversation.providers import (
     PlannerProvider,
@@ -113,6 +120,20 @@ def coach_comparison_proposal() -> PlannerProposal:
     )
 
 
+def coach_comparison_draft() -> ProviderPlanDraft:
+    return ProviderPlanDraft(
+        question_type=QuestionType.COMPARISON,
+        entity_mentions=(
+            ProviderEntityMention(text="Andy Reid", kind_hint=EntityKind.COACH),
+            ProviderEntityMention(text="Mike Tomlin", kind_hint=EntityKind.COACH),
+        ),
+        season_mentions=(),
+        requested_capabilities=(RequestedCapability.COACH_COMPARISON,),
+        comparison_requested=True,
+        followup_kind=FollowupKind.NONE,
+    )
+
+
 def compliant_synthesis(payload: ProviderSynthesisInput) -> GroundedSynthesisProposal:
     propositions = list(payload.propositions[:4])
     direct = tuple(item.proposition_id for item in propositions[:1])
@@ -174,6 +195,30 @@ class LocalPlanner(PlannerProvider):
             raise self.error
         if self.value is not None:
             return self.value
+        if isinstance(request, ProviderDraftInput):
+            plan = self.local.plan(AskV2Request(question=request.question))
+            capabilities = {
+                QuestionType.QB_HISTORY: RequestedCapability.QB_HISTORY,
+                QuestionType.COMPARISON: RequestedCapability.COACH_COMPARISON,
+                QuestionType.PLAYER_TEAM_SCENARIO: (
+                    RequestedCapability.PLAYER_TEAM_DESCRIPTIVE_COMPARISON
+                ),
+            }
+            return ProviderPlanDraft(
+                question_type=plan.proposal.question_type,
+                entity_mentions=tuple(
+                    ProviderEntityMention(text=e.mention, kind_hint=e.kind)
+                    for e in plan.proposal.entities
+                ),
+                season_mentions=(plan.proposal.tasks[0].seasons.start_season,)
+                if plan.proposal.tasks and plan.proposal.tasks[0].seasons
+                else (),
+                requested_capabilities=(
+                    capabilities.get(plan.proposal.question_type, RequestedCapability.QB_HISTORY),
+                ),
+                comparison_requested=plan.proposal.question_type is QuestionType.COMPARISON,
+                followup_kind=FollowupKind.NONE,
+            )
         return self.local.plan(AskV2Request(question=request.question)).proposal
 
 
@@ -200,6 +245,19 @@ def groq_orchestrator(evidence, planner=None, synthesizer=None):
         synthesizer=synthesizer or LocalSynthesizer(),
     )
     return ProviderOrchestrator(evidence, runtime)
+
+
+def experimental_orchestrator(evidence, synthesizer):
+    # The retained experimental synthesis adapter is subject to the unchanged
+    # two-stage grounding seam. Normal Groq mode intentionally never calls it.
+    return ProviderOrchestrator(
+        evidence,
+        ProviderRuntime(
+            configuration=groq_configuration(provider=ProviderName.OPENAI),
+            planner=LocalPlanner(evidence),
+            synthesizer=synthesizer,
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -230,7 +288,7 @@ def groq_orchestrator(evidence, planner=None, synthesizer=None):
         (
             {**groq_environment(), "ASK_V2_GROQ_SYNTHESIZER_MODEL": ""},
             ProviderName.GROQ,
-            False,
+            True,
         ),
         (groq_environment(), ProviderName.GROQ, True),
         ({"ASK_V2_PROVIDER": "arbitrary"}, ProviderName.NONE, False),
@@ -298,19 +356,18 @@ def test_groq_runtime_uses_fixed_endpoint_and_no_retries(monkeypatch):
 
 
 def test_groq_adapters_use_strict_responses_contract_without_tools(evidence):
-    planner_value = coach_comparison_proposal()
+    planner_value = coach_comparison_draft()
     planner_client = FakeClient(planner_value)
     planner = GroqPlanner(planner_client, groq_configuration())
-    planner_input = ProviderPlannerInput(
+    planner_input = ProviderDraftInput(
         question="Compare Andy Reid and Mike Tomlin.",
-        allowed_question_types=tuple(QuestionType),
-        allowed_tasks=tuple(AnalyticalTask),
-        allowed_outputs=tuple(RequestedOutput),
-        allowed_context_dependencies=tuple(ContextDependency),
+        prior_user_questions=(),
+        context_mentions=(),
+        context_seasons=(),
     )
     assert planner.plan(planner_input, timeout=9) == planner_value
     planner_call = planner_client.responses.calls[0]
-    assert planner_call["text_format"] is PlannerProposal
+    assert planner_call["text_format"] is ProviderPlanDraft
     assert planner_call["reasoning"] == {"effort": GROQ_PLANNER_REASONING_EFFORT}
     assert planner_call["tools"] == [] and planner_call["tool_choice"] == "none"
     assert planner_call["max_output_tokens"] == 600
@@ -432,10 +489,7 @@ def test_groq_synthesis_cannot_expand_scientific_authority(evidence, field, valu
         invalid["evidence_ids"] = [value]
     else:
         invalid[field] = value
-    actual = groq_orchestrator(
-        evidence,
-        synthesizer=LocalSynthesizer(value=invalid),
-    ).answer(request)
+    actual = experimental_orchestrator(evidence, LocalSynthesizer(value=invalid)).answer(request)
     assert canonical_json_bytes(actual) == canonical_json_bytes(expected)
 
 
@@ -447,10 +501,9 @@ def test_groq_omitted_limitation_and_malformed_output_fall_back(evidence):
     omitted = compliant_synthesis(payload).model_dump(mode="json")
     omitted["limitation_ids"] = []
     for invalid in (omitted, {"not": "the schema"}):
-        actual = groq_orchestrator(
-            evidence,
-            synthesizer=LocalSynthesizer(value=invalid),
-        ).answer(request)
+        actual = experimental_orchestrator(evidence, LocalSynthesizer(value=invalid)).answer(
+            request
+        )
         assert canonical_json_bytes(actual) == canonical_json_bytes(expected)
 
 
@@ -462,7 +515,7 @@ def test_groq_synthesizer_failures_return_exact_fallback(evidence, error):
     request = AskV2Request(question="How did Josh Allen perform in 2022?")
     expected = AskV2Orchestrator(evidence).answer(request)
     synth = LocalSynthesizer(error=error)
-    actual = groq_orchestrator(evidence, synthesizer=synth).answer(request)
+    actual = experimental_orchestrator(evidence, synth).answer(request)
     assert canonical_json_bytes(actual) == canonical_json_bytes(expected)
     assert synth.calls == 1
 
@@ -474,14 +527,11 @@ def test_openai_and_groq_fakes_share_identical_grounding(evidence):
     payload = provider_synthesis_input(request.question, result)
     invalid = compliant_synthesis(payload).model_dump(mode="json")
     invalid["destination_forecast"] = "Kyler gains 0.5 EPA"
-    for provider in (ProviderName.OPENAI, ProviderName.GROQ):
-        configuration = groq_configuration(provider=provider)
-        runtime = ProviderRuntime(
-            configuration=configuration,
-            planner=LocalPlanner(evidence),
-            synthesizer=LocalSynthesizer(value=invalid),
-        )
-        response = ProviderOrchestrator(evidence, runtime).answer(request)
+    for adapter in (OpenAISynthesizer, GroqSynthesizer):
+        configuration = groq_configuration(provider=ProviderName.OPENAI)
+        response = experimental_orchestrator(
+            evidence, adapter(FakeClient(invalid), configuration)
+        ).answer(request)
         assert canonical_json_bytes(response) == canonical_json_bytes(expected)
 
 
@@ -500,7 +550,7 @@ def test_groq_tests_guarantee_no_network(evidence, monkeypatch):
 
 
 def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
-    proposal = coach_comparison_proposal()
+    proposal = coach_comparison_draft()
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -535,7 +585,7 @@ def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
                     }
                 ],
                 "parallel_tool_calls": False,
-                "reasoning": {"effort": "low", "summary": None},
+                "reasoning": {"effort": "medium", "summary": None},
                 "store": False,
                 "temperature": 1.0,
                 "text": {"format": captured["text"]["format"], "verbosity": "medium"},
@@ -563,16 +613,15 @@ def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
         http_client=http_client,
     )
     planner = GroqPlanner(client, groq_configuration())
-    planner_input = ProviderPlannerInput(
+    planner_input = ProviderDraftInput(
         question="Compare Andy Reid and Mike Tomlin.",
-        allowed_question_types=tuple(QuestionType),
-        allowed_tasks=tuple(AnalyticalTask),
-        allowed_outputs=tuple(RequestedOutput),
-        allowed_context_dependencies=tuple(ContextDependency),
+        prior_user_questions=(),
+        context_mentions=(),
+        context_seasons=(),
     )
     assert planner.plan(planner_input, timeout=9) == proposal
     assert captured["tools"] == [] and captured["tool_choice"] == "none"
-    assert captured["reasoning"] == {"effort": "low"}
+    assert captured["reasoning"] == {"effort": "medium"}
     response_format = captured["text"]["format"]
     assert response_format["type"] == "json_schema"
     assert response_format["strict"] is True
