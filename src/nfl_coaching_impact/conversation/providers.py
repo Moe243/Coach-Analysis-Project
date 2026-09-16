@@ -27,6 +27,12 @@ class ProviderFailureCategory(StrEnum):
     OVERSIZED_PAYLOAD = "oversized_payload"
 
 
+class ProviderName(StrEnum):
+    NONE = "none"
+    OPENAI = "openai"
+    GROQ = "groq"
+
+
 class ProviderError(RuntimeError):
     """Base provider failure with a safe internal category."""
 
@@ -59,7 +65,8 @@ class SynthesizerProvider(Protocol):
     def synthesize(self, request: ProviderSynthesisInput, *, timeout: float) -> Any: ...
 
 
-_MODEL_ID = re.compile(r"^(?:gpt-[A-Za-z0-9._:-]{1,95}|o[1-9][A-Za-z0-9._:-]{0,97})$")
+_OPENAI_MODEL_ID = re.compile(r"^(?:gpt-[A-Za-z0-9._:-]{1,95}|o[1-9][A-Za-z0-9._:-]{0,97})$")
+_GROQ_STRUCTURED_OUTPUT_MODELS = frozenset({"openai/gpt-oss-120b", "openai/gpt-oss-20b"})
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off", ""})
 
@@ -120,11 +127,13 @@ class ProviderConfiguration:
     synthesizer_max_output_tokens: int
     api_key: str = field(repr=False)
     valid: bool = True
+    provider: ProviderName = ProviderName.OPENAI
 
     @property
     def ready(self) -> bool:
         return bool(
             self.valid
+            and self.provider is not ProviderName.NONE
             and self.enabled
             and self.external_sharing_enabled
             and self.api_key
@@ -137,11 +146,33 @@ class ProviderConfiguration:
         cls, environment: Mapping[str, str] | None = None
     ) -> ProviderConfiguration:
         source = os.environ if environment is None else environment
-        enabled = _flag(source.get("ASK_V2_OPENAI_ENABLED"))
+        explicit_provider = source.get("ASK_V2_PROVIDER")
+        legacy_enabled = _flag(source.get("ASK_V2_OPENAI_ENABLED"))
+        provider_valid = True
+        if explicit_provider is not None:
+            try:
+                provider = ProviderName(explicit_provider.strip().lower())
+            except ValueError:
+                provider = ProviderName.NONE
+                provider_valid = False
+            enabled = provider is not ProviderName.NONE
+        else:
+            provider_valid = legacy_enabled is not None
+            provider = ProviderName.OPENAI if legacy_enabled else ProviderName.NONE
+            enabled = bool(legacy_enabled)
         sharing = _flag(source.get("ASK_V2_EXTERNAL_SHARING_ENABLED"))
-        api_key = source.get("OPENAI_API_KEY", "").strip()
-        planner_model = source.get("ASK_V2_PLANNER_MODEL", "").strip()
-        synthesizer_model = source.get("ASK_V2_SYNTHESIZER_MODEL", "").strip()
+        if provider is ProviderName.GROQ:
+            api_key = source.get("GROQ_API_KEY", "").strip()
+            planner_model = source.get("ASK_V2_GROQ_PLANNER_MODEL", "").strip()
+            synthesizer_model = source.get("ASK_V2_GROQ_SYNTHESIZER_MODEL", "").strip()
+        elif provider is ProviderName.OPENAI:
+            api_key = source.get("OPENAI_API_KEY", "").strip()
+            planner_model = source.get("ASK_V2_PLANNER_MODEL", "").strip()
+            synthesizer_model = source.get("ASK_V2_SYNTHESIZER_MODEL", "").strip()
+        else:
+            api_key = ""
+            planner_model = ""
+            synthesizer_model = ""
         planner_timeout = _number(source, "ASK_V2_PLANNER_TIMEOUT_SECONDS", 12.0, 1.0, 20.0)
         synthesizer_timeout = _number(source, "ASK_V2_SYNTHESIZER_TIMEOUT_SECONDS", 18.0, 1.0, 20.0)
         total_timeout = _number(
@@ -151,10 +182,21 @@ class ProviderConfiguration:
         synthesizer_tokens = _integer(
             source, "ASK_V2_SYNTHESIZER_MAX_OUTPUT_TOKENS", 800, 128, 1_500
         )
-        models_valid = bool(
-            _MODEL_ID.fullmatch(planner_model) and _MODEL_ID.fullmatch(synthesizer_model)
-        )
-        key_valid = bool(re.fullmatch(r"sk-[A-Za-z0-9_-]{16,}", api_key))
+        if provider is ProviderName.GROQ:
+            models_valid = bool(
+                planner_model in _GROQ_STRUCTURED_OUTPUT_MODELS
+                and synthesizer_model in _GROQ_STRUCTURED_OUTPUT_MODELS
+            )
+            key_valid = bool(re.fullmatch(r"gsk_[A-Za-z0-9_-]{16,}", api_key))
+        elif provider is ProviderName.OPENAI:
+            models_valid = bool(
+                _OPENAI_MODEL_ID.fullmatch(planner_model)
+                and _OPENAI_MODEL_ID.fullmatch(synthesizer_model)
+            )
+            key_valid = bool(re.fullmatch(r"sk-[A-Za-z0-9_-]{16,}", api_key))
+        else:
+            models_valid = True
+            key_valid = True
         numeric_valid = all(
             value is not None
             for value in (
@@ -166,7 +208,8 @@ class ProviderConfiguration:
             )
         )
         valid = bool(
-            enabled is not None
+            provider_valid
+            and (explicit_provider is not None or legacy_enabled is not None)
             and sharing is not None
             and (not enabled or key_valid)
             and (not enabled or models_valid)
@@ -186,6 +229,7 @@ class ProviderConfiguration:
             planner_max_output_tokens=int(planner_tokens or 0),
             synthesizer_max_output_tokens=int(synthesizer_tokens or 0),
             valid=valid,
+            provider=provider,
         )
 
 

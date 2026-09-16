@@ -103,6 +103,7 @@ class ProviderOrchestrator:
             "ask_v2_provider_success",
             extra={
                 "provider_attempted": True,
+                "provider": self.runtime.configuration.provider.value,
                 "planner_model": planner.model_version,
                 "synthesizer_model": synthesizer.model_version,
                 "task_count": len(result.package.approved_tasks),
@@ -121,8 +122,8 @@ class ProviderOrchestrator:
         finally:
             _PROVIDER_CALL_SLOTS.release()
 
-    @staticmethod
     def _log_fallback(
+        self,
         component: str,
         category: ProviderFailureCategory,
         started: float,
@@ -131,6 +132,7 @@ class ProviderOrchestrator:
             "ask_v2_provider_fallback",
             extra={
                 "provider_attempted": True,
+                "provider": self.runtime.configuration.provider.value,
                 "provider_component": component,
                 "fallback_category": category.value,
                 "provider_latency_ms": round((time.monotonic() - started) * 1000),

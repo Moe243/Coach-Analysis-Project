@@ -7,7 +7,12 @@ from .enums import Answerability, AnswerMode, ReasonCode
 from .evidence import EvidenceService
 from .orchestration import AskV2Orchestrator
 from .provider_orchestration import ProviderOrchestrator
-from .providers import ProviderConfiguration, ProviderFailureCategory, ProviderRuntime
+from .providers import (
+    ProviderConfiguration,
+    ProviderFailureCategory,
+    ProviderName,
+    ProviderRuntime,
+)
 
 
 def stage_a_response(_request: AskV2Request) -> AskV2Response:
@@ -35,9 +40,15 @@ def provider_runtime() -> ProviderRuntime:
             initialization_failure=ProviderFailureCategory.CONFIGURATION_DISABLED,
         )
     try:
-        from .openai_provider import openai_runtime
+        if configuration.provider is ProviderName.GROQ:
+            from .groq_provider import groq_runtime
 
-        return openai_runtime(configuration)
+            return groq_runtime(configuration)
+        if configuration.provider is ProviderName.OPENAI:
+            from .openai_provider import openai_runtime
+
+            return openai_runtime(configuration)
+        return ProviderRuntime(configuration=configuration)
     except Exception:
         # SDK import/client construction failures must not break deterministic Ask v2.
         return ProviderRuntime(

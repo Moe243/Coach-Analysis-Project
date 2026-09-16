@@ -60,7 +60,11 @@ class OpenAIPlanner(PlannerProvider):
         self.model_version = configuration.planner_model
 
     def plan(self, request: ProviderPlannerInput, *, timeout: float) -> PlannerProposal:
-        response = self.client.responses.parse(
+        response = self.client.responses.parse(**self._request_arguments(request, timeout))
+        return _parsed(response, PlannerProposal)
+
+    def _request_arguments(self, request: ProviderPlannerInput, timeout: float) -> dict[str, Any]:
+        return dict(
             model=self.model_version,
             instructions=_PLANNER_INSTRUCTIONS,
             input=canonical_json_bytes(request).decode("ascii"),
@@ -74,7 +78,6 @@ class OpenAIPlanner(PlannerProvider):
             max_output_tokens=self.configuration.planner_max_output_tokens,
             timeout=timeout,
         )
-        return _parsed(response, PlannerProposal)
 
 
 class OpenAISynthesizer(SynthesizerProvider):
@@ -88,7 +91,11 @@ class OpenAISynthesizer(SynthesizerProvider):
     def synthesize(
         self, request: ProviderSynthesisInput, *, timeout: float
     ) -> GroundedSynthesisProposal:
-        response = self.client.responses.parse(
+        response = self.client.responses.parse(**self._request_arguments(request, timeout))
+        return _parsed(response, GroundedSynthesisProposal)
+
+    def _request_arguments(self, request: ProviderSynthesisInput, timeout: float) -> dict[str, Any]:
+        return dict(
             model=self.model_version,
             instructions=_SYNTHESIZER_INSTRUCTIONS,
             input=canonical_json_bytes(request).decode("ascii"),
@@ -102,7 +109,6 @@ class OpenAISynthesizer(SynthesizerProvider):
             max_output_tokens=self.configuration.synthesizer_max_output_tokens,
             timeout=timeout,
         )
-        return _parsed(response, GroundedSynthesisProposal)
 
 
 def openai_runtime(configuration: ProviderConfiguration) -> ProviderRuntime:
