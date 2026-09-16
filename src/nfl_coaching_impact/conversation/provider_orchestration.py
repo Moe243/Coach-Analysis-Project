@@ -43,12 +43,7 @@ class ProviderOrchestrator:
     def answer(self, request: AskV2Request) -> AskV2Response:
         fallback = self.authoritative.analyze(request)
         if not self.runtime.ready:
-            provider_event(
-                self.runtime.configuration,
-                phase=ProviderPhase.READINESS,
-                category=self.runtime.initialization_failure,
-                runtime_ready=False,
-            )
+            # Runtime creation owns the one readiness/initialization event.
             return fallback.response
         planner = self.runtime.planner
         synthesizer = self.runtime.synthesizer
@@ -185,7 +180,6 @@ class ProviderOrchestrator:
     ) -> Any:
         if not _PROVIDER_CALL_SLOTS.acquire(blocking=False):
             raise ProviderConcurrencyLimit("provider concurrency limit reached")
-        started = time.monotonic()
         if attempt is not None:
             attempt.attempted = True
         try:
@@ -195,10 +189,13 @@ class ProviderOrchestrator:
                 phase=ProviderPhase.REQUEST,
                 attempted=True,
             )
-            return call(payload, timeout=timeout)
+            started = time.monotonic()
+            try:
+                return call(payload, timeout=timeout)
+            finally:
+                if attempt is not None:
+                    finish_attempt(attempt, started)
         finally:
-            if attempt is not None:
-                finish_attempt(attempt, started)
             _PROVIDER_CALL_SLOTS.release()
 
     def _log_fallback(

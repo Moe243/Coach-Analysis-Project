@@ -5,6 +5,9 @@
 **Root cause: UNRESOLVED.** The historical production logs cannot establish whether
 the provider was eligible, initialized, attempted, rejected remotely, or rejected by
 the backend. Do not reactivate sharing to infer the missing evidence.
+This telemetry patch does not fix Groq or establish that Groq is ready. A later,
+separately authorized controlled retry is required after this patch is reviewed,
+integrated and deployed with sharing still disabled first.
 
 Read-only Render inspection confirmed current live deployment
 `dep-dalbr8uk1f9s73fmero0`, source
@@ -161,22 +164,33 @@ It does not alter root/SDK logging or the public health/Ask contracts. Runtime c
 records selected provider, sharing, key-present boolean, configured-model boolean,
 configuration validity/readiness and runtime readiness. No startup/application hooks
 or production configuration changes are required; events occur on request handling.
+Logging and formatting failures are contained and silent, so telemetry cannot turn a
+deterministic fallback or grounded response into an HTTP error. A disabled request
+emits one readiness event, not duplicate events.
 
 Invocation-start/completion events record closed phase/component, attempted, success,
 coarse category, validated numeric HTTP status/family, bounded model identity, and
 SDK-call elapsed milliseconds. `attempted=true` means SDK provider invocation began,
 not proof that an HTTP packet reached Groq. Saturation, payload failure and readiness
 fallback record false. Translation and authorization phases distinguish backend
-rejection from request/parse failures. OpenAI planner and synthesizer have separate
+rejection from request/parse failures; entity-resolution and task-translation failures
+have distinct bounded categories. OpenAI planner and synthesizer have separate
 attempts and timers. No question, prior question, prompt, draft, evidence, ID, key,
 header, raw exception, body, or arbitrary extra field is accepted by the emitter.
 
-Validation: 266 passed, zero failed/skipped, across telemetry (33), Groq (50), draft
-(49), OpenAI Stage D (71), and adversarial/fallback Stage F (63) tests. Includes
+Independent review found and corrected one merge blocker in the original candidate:
+logger/formatter failures could propagate through the request path. It also removed a
+duplicate disabled-readiness event and refined bounded semantic categories. Validation:
+458 passed, zero failed/skipped/warnings, across telemetry (50), Groq (50), draft (49),
+Stage A (46), Stage B (45), API/Stage C (41), OpenAI Stage D (71), adversarial/fallback
+Stage F (63), and Ask release (43) tests. Includes
 actual SDK offline wire capture, invalid status/model redaction, safe initialization
 failure, saturated/disabled non-attempts, semantic/parse separation, deterministic
-fallback equality, and a subprocess with production Uvicorn/root WARNING logging.
-Ruff, formatting (five files), Python compilation, diff and scoped secret checks passed.
+fallback equality, logger/formatter failure containment, duplicate-event protection,
+and a subprocess with production Uvicorn/root WARNING logging. A 500-request offline
+disabled-mode benchmark measured 27.731 ms/request on baseline and 28.074 ms/request
+on the candidate by median (about 0.34 ms or 1.24%); the difference is negligible. Ruff, formatting, Python
+compilation, dependency sanity, diff and scoped secret checks passed.
 
 **Next action:** review the isolated safe telemetry patch while keeping sharing false.
 No provider reactivation, deployment, configuration correction, or live synthetic

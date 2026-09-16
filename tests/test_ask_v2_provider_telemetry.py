@@ -13,17 +13,24 @@ from pathlib import Path
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from openai import BadRequestError, OpenAI
 
 from nfl_coaching_impact import release_snapshot as release
+from nfl_coaching_impact.api import app
+from nfl_coaching_impact.ask_api import _load
 from nfl_coaching_impact.conversation import provider_telemetry as telemetry
+from nfl_coaching_impact.conversation.api import _cached_evidence
 from nfl_coaching_impact.conversation.contracts import AskV2Request
 from nfl_coaching_impact.conversation.evidence import EvidenceService
 from nfl_coaching_impact.conversation.groq_provider import GroqPlanner
 from nfl_coaching_impact.conversation.orchestration import AskV2Orchestrator
 from nfl_coaching_impact.conversation.provider_drafts import (
+    DraftEntityResolutionRejected,
+    DraftTaskTranslationRejected,
     FollowupKind,
     ProviderDraftInput,
+    ProviderDraftTranslator,
     ProviderEntityMention,
     ProviderPlanDraft,
     RequestedCapability,
@@ -122,7 +129,7 @@ def test_groq_readiness_parses_flags_without_synthesizer(value):
         ({"GROQ_API_KEY": "not-a-valid-key"}, "configuration_invalid"),
         ({"ASK_V2_GROQ_PLANNER_MODEL": ""}, "missing_model"),
         ({"ASK_V2_GROQ_PLANNER_MODEL": "unsupported"}, "configuration_invalid"),
-        ({"ASK_V2_PROVIDER": "invalid"}, "provider_disabled"),
+        ({"ASK_V2_PROVIDER": "invalid"}, "configuration_invalid"),
         ({"ASK_V2_PLANNER_TIMEOUT_SECONDS": "31"}, "configuration_invalid"),
     ],
 )
@@ -206,7 +213,10 @@ def test_parse_failure_is_distinct_from_semantic_rejection(evidence, events):
 
 def test_disabled_and_saturated_attempts_are_false(evidence, events, monkeypatch):
     planner = Planner()
-    orchestrator, request = ask(evidence, planner, ASK_V2_EXTERNAL_SHARING_ENABLED="false")
+    monkeypatch.setattr(os, "environ", environment(ASK_V2_EXTERNAL_SHARING_ENABLED="false"))
+    disabled = provider_runtime()
+    orchestrator = ProviderOrchestrator(evidence, disabled)
+    request = AskV2Request(question="How did Josh Allen perform in 2022?")
     assert orchestrator.answer(request).answer_mode == "deterministic"
     assert planner.calls == 0 and events()[-1]["attempted"] is False
     orchestrator, request = ask(evidence, planner)
@@ -234,10 +244,10 @@ def test_unknown_model_and_extra_telemetry_fields_cannot_leak(events):
     assert events()[-1]["model"] is None
     with pytest.raises(TypeError):
         telemetry.provider_event(config, phase=telemetry.ProviderPhase.READINESS, question="SECRET")
-    with pytest.raises(ValueError):
-        telemetry.provider_event(config, phase="SECRET")
-    with pytest.raises(ValueError):
-        telemetry.provider_event(config, phase=telemetry.ProviderPhase.REQUEST, component="SECRET")
+    before = len(events())
+    telemetry.provider_event(config, phase="SECRET")
+    telemetry.provider_event(config, phase=telemetry.ProviderPhase.REQUEST, component="SECRET")
+    assert len(events()) == before  # Invalid fields are dropped, never propagated.
     assert "SECRET" not in json.dumps(events())
 
 
@@ -250,7 +260,9 @@ logging.getLogger().setLevel(logging.WARNING)
 from nfl_coaching_impact.conversation.provider_telemetry import provider_event, ProviderPhase
 from nfl_coaching_impact.conversation.providers import ProviderConfiguration
 c = ProviderConfiguration.from_environment({
-    'ASK_V2_PROVIDER':'groq', 'ASK_V2_EXTERNAL_SHARING_ENABLED':'false'
+    'ASK_V2_PROVIDER':'groq', 'ASK_V2_EXTERNAL_SHARING_ENABLED':'false',
+    'GROQ_API_KEY':'gsk_' + '0' * 32,
+    'ASK_V2_GROQ_PLANNER_MODEL':'openai/gpt-oss-120b'
 })
 provider_event(c, phase=ProviderPhase.READINESS, runtime_ready=False)
 assert logging.getLogger().level == logging.WARNING
@@ -338,3 +350,138 @@ def test_sdk_exact_wire_parameters_and_strict_schema_are_captured_offline():
 )
 def test_transport_and_timeout_categories(error, category):
     assert classify_provider_failure(error) is category
+
+
+@pytest.mark.parametrize("scenario", ["disabled", "initialization", "failure", "success"])
+def test_logging_failure_never_changes_api_response(evidence, monkeypatch, scenario):
+    config_environment = environment()
+    if scenario == "disabled":
+        config_environment["ASK_V2_EXTERNAL_SHARING_ENABLED"] = "false"
+    monkeypatch.setattr(os, "environ", config_environment)
+    monkeypatch.setenv("ASK_DATA_DIR", str(ROOT / "data/processed/ask_anything" / release.VERSION))
+    planner = Planner(
+        error=RuntimeError("private provider body") if scenario == "failure" else None
+    )
+
+    def build(config):
+        if scenario == "initialization":
+            raise RuntimeError("private initialization error")
+        return ProviderRuntime(config, planner=planner)
+
+    monkeypatch.setattr("nfl_coaching_impact.conversation.groq_provider.groq_runtime", build)
+    request = AskV2Request(question="How did Josh Allen perform in 2022?")
+    expected = (
+        ProviderOrchestrator(evidence, provider_runtime()).answer(request).model_dump(mode="json")
+    )
+
+    def broken_logger():
+        raise OSError("private sink failure")
+
+    monkeypatch.setattr(telemetry, "_logger", broken_logger)
+    _load.cache_clear()
+    _cached_evidence.cache_clear()
+    try:
+        response = TestClient(app).post("/ask/v2", json=request.model_dump(mode="json"))
+        assert response.status_code == 200
+        assert response.json() == expected
+    finally:
+        _load.cache_clear()
+        _cached_evidence.cache_clear()
+
+
+@pytest.mark.parametrize("phase", ["readiness", "completed"])
+def test_formatter_and_sink_errors_are_silent(events, monkeypatch, capsys, phase):
+    class BrokenStream:
+        def write(self, _text):
+            raise OSError("PRIVATE_ERROR and local path must not escape")
+
+    class BrokenFormatter(logging.Formatter):
+        def format(self, _record):
+            raise RuntimeError("PRIVATE_FORMATTER_ERROR")
+
+    logger = logging.Logger("safe_broken_sink", level=logging.INFO)
+    handler = telemetry._SafeStreamHandler(BrokenStream())
+    logger.addHandler(handler)
+    monkeypatch.setattr(telemetry, "_logger", lambda: logger)
+    config = ProviderConfiguration.from_environment(environment())
+    telemetry.provider_event(config, phase=telemetry.ProviderPhase(phase))
+    handler.setFormatter(BrokenFormatter())
+    telemetry.provider_event(config, phase=telemetry.ProviderPhase(phase))
+    assert capsys.readouterr().err == ""
+
+
+@pytest.mark.parametrize("field,value", [("category", "PRIVATE"), ("component", "PRIVATE")])
+def test_malformed_enum_telemetry_drops_event_without_throwing(events, field, value):
+    config = ProviderConfiguration.from_environment(environment())
+    telemetry.provider_event(config, phase=telemetry.ProviderPhase.REQUEST, **{field: value})
+    assert events() == []
+    telemetry.provider_event(config, phase="PRIVATE")
+    assert events() == []
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(float("nan"), None), ("PRIVATE", None), (True, None), (-10, 0), (10**100, 86_400_000)],
+)
+def test_latency_is_numeric_and_bounded(events, value, expected):
+    config = ProviderConfiguration.from_environment(environment())
+    telemetry.provider_event(config, phase=telemetry.ProviderPhase.REQUEST, latency_ms=value)
+    assert events()[-1]["latency_ms"] == expected
+
+
+def test_missing_or_broken_status_degrades_without_exception_text(events):
+    class BrokenStatus(RuntimeError):
+        @property
+        def status_code(self):
+            raise RuntimeError("PRIVATE_STATUS_ERROR")
+
+    error = BrokenStatus("PRIVATE_BODY")
+    assert classify_provider_failure(error) is ProviderFailureCategory.PROVIDER_UNAVAILABLE
+    config = ProviderConfiguration.from_environment(environment())
+    telemetry.provider_event(config, phase=telemetry.ProviderPhase.REQUEST, error=error)
+    assert events()[-1]["http_status"] is None
+    assert "PRIVATE" not in json.dumps(events())
+
+
+def test_disabled_api_emits_exactly_one_readiness_event(evidence, monkeypatch, events):
+    monkeypatch.setattr(os, "environ", environment(ASK_V2_EXTERNAL_SHARING_ENABLED="false"))
+    monkeypatch.setenv("ASK_DATA_DIR", str(ROOT / "data/processed/ask_anything" / release.VERSION))
+    _load.cache_clear()
+    _cached_evidence.cache_clear()
+    try:
+        response = TestClient(app).post(
+            "/ask/v2", json={"question": "How did Josh Allen perform in 2022?"}
+        )
+        assert response.status_code == 200
+        assert len(events()) == 1
+        assert events()[0]["readiness_reason"] == "sharing_disabled"
+        assert events()[0]["attempted"] is False
+    finally:
+        _load.cache_clear()
+        _cached_evidence.cache_clear()
+
+
+def test_resolution_and_task_translation_have_distinct_bounded_categories(
+    evidence, events, monkeypatch
+):
+    request = AskV2Request(question="How did Josh Allen perform in 2022?")
+    translator = ProviderDraftTranslator(AskV2Orchestrator(evidence).planner)
+    with pytest.raises(DraftEntityResolutionRejected):
+        translator._literal_entity(ProviderEntityMention(text="Unknown Person", kind_hint="qb"))
+    monkeypatch.setattr(translator.planner, "_tasks", lambda *_: ())
+    with pytest.raises(DraftTaskTranslationRejected):
+        translator.translate(request, Planner().plan(None, timeout=12))
+    for error, category in [
+        (DraftEntityResolutionRejected("PRIVATE_ENTITY"), "entity_resolution_error"),
+        (DraftTaskTranslationRejected("PRIVATE_TASK"), "task_translation_error"),
+    ]:
+        orchestrator, req = ask(evidence, Planner(error=error))
+        assert orchestrator.answer(req) == AskV2Orchestrator(evidence).answer(req)
+        assert events()[-1]["fallback_category"] == category
+    assert "PRIVATE" not in json.dumps(events())
+
+
+def test_attempt_clock_failure_cannot_prevent_cleanup():
+    attempt = telemetry.ProviderAttempt(attempted=True)
+    telemetry.finish_attempt(attempt, float("nan"))
+    assert attempt.latency_ms is None

@@ -32,6 +32,14 @@ class ProviderAttempt:
 
 _LOCK = Lock()
 _LOGGER_NAME = "nfl_coaching_impact.ask_provider_telemetry"
+_MAX_LATENCY_MS = 86_400_000
+
+
+class _SafeStreamHandler(logging.StreamHandler):
+    def handleError(self, _record: logging.LogRecord) -> None:
+        # Standard handleError can print exception bodies, paths and call stacks.
+        # A failed diagnostic sink must be silent, not another disclosure channel.
+        return
 
 
 def _logger() -> logging.Logger:
@@ -40,7 +48,7 @@ def _logger() -> logging.Logger:
     with _LOCK:
         logger = logging.getLogger(_LOGGER_NAME)
         if not logger.handlers:
-            handler = logging.StreamHandler()
+            handler = _SafeStreamHandler()
             handler.setFormatter(logging.Formatter("%(message)s"))
             logger.addHandler(handler)
         logger.setLevel(logging.INFO)
@@ -50,21 +58,32 @@ def _logger() -> logging.Logger:
 
 
 def safe_http_status(error: BaseException | None) -> int | None:
-    status = getattr(error, "status_code", None)
+    try:
+        status = getattr(error, "status_code", None)
+    except Exception:
+        return None
     return status if type(status) is int and 100 <= status <= 599 else None
 
 
+def safe_latency_ms(value: int | None) -> int | None:
+    if type(value) is not int:
+        return None
+    return min(_MAX_LATENCY_MS, max(0, value))
+
+
 def readiness_reason(configuration: ProviderConfiguration) -> str:
-    if not configuration.enabled or configuration.provider is ProviderName.NONE:
-        return "provider_disabled"
-    if not configuration.external_sharing_enabled:
-        return "sharing_disabled"
+    if configuration.provider is ProviderName.NONE:
+        return "configuration_invalid" if not configuration.valid else "provider_disabled"
     if not configuration.api_key:
         return "missing_credentials"
     if not configuration.planner_model:
         return "missing_model"
     if not configuration.valid:
         return "configuration_invalid"
+    if not configuration.enabled:
+        return "provider_disabled"
+    if not configuration.external_sharing_enabled:
+        return "sharing_disabled"
     if not configuration.ready:
         return "provider_not_ready"
     return "ready"
@@ -93,13 +112,43 @@ def provider_event(
     latency_ms: int | None = None,
     runtime_ready: bool | None = None,
 ) -> None:
+    """Best effort: invalid fields, formatters and sinks can never break Ask."""
+    try:
+        _emit_provider_event(
+            configuration,
+            phase=phase,
+            component=component,
+            attempted=attempted,
+            success=success,
+            category=category,
+            error=error,
+            latency_ms=latency_ms,
+            runtime_ready=runtime_ready,
+        )
+    except Exception:
+        # Never log the logging error or a repr of arguments that caused it.
+        return
+
+
+def _emit_provider_event(
+    configuration: ProviderConfiguration,
+    *,
+    phase: ProviderPhase,
+    component: str,
+    attempted: bool,
+    success: bool,
+    category: ProviderFailureCategory | None,
+    error: BaseException | None,
+    latency_ms: int | None,
+    runtime_ready: bool | None,
+) -> None:
     """No arbitrary message/extra dict, exception text, headers, or request input."""
     if component not in {"planner", "synthesizer"}:
         raise ValueError("unknown provider component")
     status = safe_http_status(error)
     payload = {
         "event": "ask_v2_provider",
-        "provider": configuration.provider.value,
+        "provider": ProviderName(configuration.provider).value,
         "component": component,
         "phase": ProviderPhase(phase).value,
         "attempted": bool(attempted),
@@ -107,21 +156,24 @@ def provider_event(
         "fallback_category": ProviderFailureCategory(category).value if category else None,
         "http_status": status,
         "http_status_family": f"{status // 100}xx" if status else None,
-        "latency_ms": max(0, int(latency_ms)) if latency_ms is not None else None,
+        "latency_ms": safe_latency_ms(latency_ms),
         "model": _safe_model(configuration, component),
     }
     if phase in {ProviderPhase.READINESS, ProviderPhase.INITIALIZATION}:
         payload.update(
-            external_sharing_enabled=configuration.external_sharing_enabled,
+            external_sharing_enabled=bool(configuration.external_sharing_enabled),
             key_present=bool(configuration.api_key),
             planner_model_configured=bool(configuration.planner_model),
-            configuration_valid=configuration.valid,
-            configuration_ready=configuration.ready,
+            configuration_valid=bool(configuration.valid),
+            configuration_ready=bool(configuration.ready),
             readiness_reason=readiness_reason(configuration),
-            runtime_ready=runtime_ready,
+            runtime_ready=runtime_ready if type(runtime_ready) is bool else None,
         )
     _logger().info(json.dumps(payload, sort_keys=True, allow_nan=False))
 
 
 def finish_attempt(attempt: ProviderAttempt, started: float) -> None:
-    attempt.latency_ms = round((time.monotonic() - started) * 1000)
+    try:
+        attempt.latency_ms = round((time.monotonic() - started) * 1000)
+    except Exception:
+        attempt.latency_ms = None

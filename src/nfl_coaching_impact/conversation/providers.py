@@ -34,6 +34,8 @@ class ProviderFailureCategory(StrEnum):
     SERVER_ERROR = "provider_server_error"
     TRANSPORT_ERROR = "transport_error"
     CONCURRENCY_LIMIT = "concurrency_limit"
+    ENTITY_RESOLUTION_ERROR = "entity_resolution_error"
+    TASK_TRANSLATION_ERROR = "task_translation_error"
 
 
 class ProviderName(StrEnum):
@@ -266,7 +268,10 @@ def classify_provider_failure(error: BaseException) -> ProviderFailureCategory:
     name = type(error).__name__.lower()
     if "timeout" in name:
         return ProviderFailureCategory.TIMEOUT
-    status = getattr(error, "status_code", None)
+    try:
+        status = getattr(error, "status_code", None)
+    except Exception:
+        status = None
     if type(status) is int:
         if status == 401:
             return ProviderFailureCategory.AUTHENTICATION_ERROR

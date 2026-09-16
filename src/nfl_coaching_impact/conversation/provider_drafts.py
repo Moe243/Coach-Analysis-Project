@@ -84,6 +84,14 @@ class DraftRejected(ProviderError):
     category = ProviderFailureCategory.GROUNDING_REJECTED
 
 
+class DraftEntityResolutionRejected(DraftRejected):
+    category = ProviderFailureCategory.ENTITY_RESOLUTION_ERROR
+
+
+class DraftTaskTranslationRejected(DraftRejected):
+    category = ProviderFailureCategory.TASK_TRANSLATION_ERROR
+
+
 _CAPABILITY_TYPES = {
     RequestedCapability.QB_HISTORY: QuestionType.QB_HISTORY,
     RequestedCapability.QB_PROFILE: QuestionType.QB_PROFILE,
@@ -148,7 +156,7 @@ class ProviderDraftTranslator:
                 exact = self.planner.resolver.resolve(mention.kind_hint, matches[0]["name"])
                 if exact.lookup_authorized:
                     return exact.resolved[0]
-        raise DraftRejected("literal entity is unknown or ambiguous")
+        raise DraftEntityResolutionRejected("literal entity is unknown or ambiguous")
 
     def translate(self, request: AskV2Request, untrusted: object) -> DeterministicPlan:
         draft = ProviderPlanDraft.model_validate(untrusted)
@@ -158,7 +166,7 @@ class ProviderDraftTranslator:
             raise DraftRejected("follow-up classification conflicts with the literal request")
         context, failures = self.planner._context_entities(request)
         if failures and not context and followup:
-            raise DraftRejected("canonical context could not be validated")
+            raise DraftEntityResolutionRejected("canonical context could not be validated")
         context_keys = {(e.kind, e.id) for e in context}
         prior_question = next(
             (
@@ -193,7 +201,7 @@ class ProviderDraftTranslator:
             raise DraftRejected("draft omitted a literal canonical entity")
         entities = self.planner._merge_entities(question, tuple(current), context, followup)
         if not entities:
-            raise DraftRejected("draft has no unambiguous canonical entities")
+            raise DraftEntityResolutionRejected("draft has no unambiguous canonical entities")
         # Entity order is source-independent and deterministic; tasks bind this order.
         entities = tuple(sorted(entities, key=lambda e: (e.kind.value, e.id)))
         resolutions = tuple(self.planner._exact_resolution(e) for e in entities)
@@ -266,7 +274,7 @@ class ProviderDraftTranslator:
                 raise DraftRejected("ambiguous requested capabilities")
         tasks = self.planner._tasks(chosen, list(resolutions), season, question)
         if not tasks:
-            raise DraftRejected("no backend task supports this draft")
+            raise DraftTaskTranslationRejected("no backend task supports this draft")
         proposal = PlannerProposal(
             question_type=chosen,
             entities=tuple(
