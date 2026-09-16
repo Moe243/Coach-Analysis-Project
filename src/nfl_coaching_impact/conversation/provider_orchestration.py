@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from threading import BoundedSemaphore
 from typing import Any
@@ -20,9 +19,10 @@ from .grounding import (
 )
 from .orchestration import AskV2Orchestrator
 from .provider_drafts import ProviderDraftTranslator
+from .provider_telemetry import ProviderAttempt, ProviderPhase, finish_attempt, provider_event
 from .providers import (
     MAX_PROVIDER_PAYLOAD_BYTES,
-    ProviderError,
+    ProviderConcurrencyLimit,
     ProviderFailureCategory,
     ProviderPayloadTooLarge,
     ProviderRuntime,
@@ -30,7 +30,6 @@ from .providers import (
 )
 from .serialization import canonical_json_bytes
 
-logger = logging.getLogger(__name__)
 _PROVIDER_CALL_SLOTS = BoundedSemaphore(value=4)
 
 
@@ -44,12 +43,20 @@ class ProviderOrchestrator:
     def answer(self, request: AskV2Request) -> AskV2Response:
         fallback = self.authoritative.analyze(request)
         if not self.runtime.ready:
+            provider_event(
+                self.runtime.configuration,
+                phase=ProviderPhase.READINESS,
+                category=self.runtime.initialization_failure,
+                runtime_ready=False,
+            )
             return fallback.response
         planner = self.runtime.planner
         synthesizer = self.runtime.synthesizer
         assert planner is not None
 
         started = time.monotonic()
+        attempt = ProviderAttempt()
+        phase = ProviderPhase.PAYLOAD
         try:
             translator = ProviderDraftTranslator(self.authoritative.planner)
             planner_input = (
@@ -59,29 +66,33 @@ class ProviderOrchestrator:
             )
             if len(canonical_json_bytes(planner_input)) > MAX_PROVIDER_PAYLOAD_BYTES:
                 raise ProviderPayloadTooLarge("provider planner payload exceeds 48 KiB")
+            phase = ProviderPhase.REQUEST
             raw_plan = self._provider_call(
                 planner.plan,
                 planner_input,
                 timeout=self.runtime.configuration.planner_timeout_seconds,
+                attempt=attempt,
             )
+            phase = ProviderPhase.DRAFT_TRANSLATION
             if self.runtime.configuration.planner_only:
                 provider_plan = translator.translate(request, raw_plan)
             else:
                 proposal = PlannerProposal.model_validate(raw_plan)
                 provider_plan = self.authoritative.planner.from_provider(request, proposal)
+            phase = ProviderPhase.AUTHORIZATION
             result = self.authoritative.analyze(request, provider_plan)
             if result.package.rejected_tasks:
                 raise ValueError("provider plan did not pass backend task authorization")
             if not result.conclusions.propositions:
                 raise ValueError("provider plan produced no grounded analytical propositions")
         except Exception as error:
-            self._log_fallback("planner", classify_provider_failure(error), started)
+            self._log_fallback("planner", classify_provider_failure(error), attempt, phase, error)
             return fallback.response
 
         elapsed = time.monotonic() - started
         remaining = self.runtime.configuration.total_timeout_seconds - elapsed
         if remaining <= 0:
-            self._log_fallback("planner", ProviderFailureCategory.TIMEOUT, started)
+            self._log_fallback("planner", ProviderFailureCategory.TIMEOUT, attempt, phase)
             return fallback.response
         if self.runtime.configuration.planner_only:
             # Stage C already rendered this answer, including all qualifications and
@@ -100,21 +111,28 @@ class ProviderOrchestrator:
                     "versions": versions,
                 }
             )
-            logger.info(
-                "ask_v2_provider_success",
-                extra={
-                    "provider": self.runtime.configuration.provider.value,
-                    "provider_attempted": True,
-                    "planner_model": planner.model_version,
-                    "synthesizer_model": None,
-                    "task_count": len(result.package.approved_tasks),
-                    "provider_latency_ms": round(elapsed * 1000),
-                },
+            provider_event(
+                self.runtime.configuration,
+                phase=ProviderPhase.COMPLETED,
+                attempted=attempt.attempted,
+                success=True,
+                latency_ms=attempt.latency_ms,
             )
             return response
         assert synthesizer is not None
+        # Log the successful planner separately; synthesis has its own attempt/timer.
+        provider_event(
+            self.runtime.configuration,
+            phase=ProviderPhase.COMPLETED,
+            attempted=attempt.attempted,
+            success=True,
+            latency_ms=attempt.latency_ms,
+        )
+        attempt = ProviderAttempt()
+        phase = ProviderPhase.PAYLOAD
         try:
             payload = provider_synthesis_input(request.question, result)
+            phase = ProviderPhase.REQUEST
             raw_synthesis = self._provider_call(
                 synthesizer.synthesize,
                 payload,
@@ -122,7 +140,10 @@ class ProviderOrchestrator:
                     remaining,
                     self.runtime.configuration.synthesizer_timeout_seconds,
                 ),
+                attempt=attempt,
+                component="synthesizer",
             )
+            phase = ProviderPhase.SYNTHESIS_VALIDATION
             proposal = validate_synthesis(raw_synthesis, payload)
             response = render_grounded_response(
                 result,
@@ -133,48 +154,77 @@ class ProviderOrchestrator:
                 synthesizer_implementation_version=synthesizer.implementation_version,
                 synthesizer_model_version=synthesizer.model_version,
             )
-        except (GroundingRejected, ValidationError):
-            self._log_fallback("synthesizer", ProviderFailureCategory.GROUNDING_REJECTED, started)
+        except (GroundingRejected, ValidationError) as error:
+            self._log_fallback(
+                "synthesizer", ProviderFailureCategory.GROUNDING_REJECTED, attempt, phase, error
+            )
             return fallback.response
         except Exception as error:
-            self._log_fallback("synthesizer", classify_provider_failure(error), started)
+            self._log_fallback(
+                "synthesizer", classify_provider_failure(error), attempt, phase, error
+            )
             return fallback.response
-        logger.info(
-            "ask_v2_provider_success",
-            extra={
-                "provider_attempted": True,
-                "provider": self.runtime.configuration.provider.value,
-                "planner_model": planner.model_version,
-                "synthesizer_model": synthesizer.model_version,
-                "task_count": len(result.package.approved_tasks),
-                "proposition_count": len(result.conclusions.propositions),
-                "provider_latency_ms": round((time.monotonic() - started) * 1000),
-            },
+        provider_event(
+            self.runtime.configuration,
+            component="synthesizer",
+            phase=ProviderPhase.COMPLETED,
+            attempted=attempt.attempted,
+            success=True,
+            latency_ms=attempt.latency_ms,
         )
         return response
 
-    @staticmethod
-    def _provider_call(call, payload, *, timeout: float) -> Any:
+    def _provider_call(
+        self,
+        call,
+        payload,
+        *,
+        timeout: float,
+        attempt: ProviderAttempt | None = None,
+        component: str = "planner",
+    ) -> Any:
         if not _PROVIDER_CALL_SLOTS.acquire(blocking=False):
-            raise ProviderError("provider concurrency limit reached")
+            raise ProviderConcurrencyLimit("provider concurrency limit reached")
+        started = time.monotonic()
+        if attempt is not None:
+            attempt.attempted = True
         try:
+            provider_event(
+                self.runtime.configuration,
+                component=component,
+                phase=ProviderPhase.REQUEST,
+                attempted=True,
+            )
             return call(payload, timeout=timeout)
         finally:
+            if attempt is not None:
+                finish_attempt(attempt, started)
             _PROVIDER_CALL_SLOTS.release()
 
     def _log_fallback(
         self,
         component: str,
         category: ProviderFailureCategory,
-        started: float,
+        attempt: ProviderAttempt,
+        phase: ProviderPhase,
+        error: BaseException | None = None,
     ) -> None:
-        logger.info(
-            "ask_v2_provider_fallback",
-            extra={
-                "provider_attempted": True,
-                "provider": self.runtime.configuration.provider.value,
-                "provider_component": component,
-                "fallback_category": category.value,
-                "provider_latency_ms": round((time.monotonic() - started) * 1000),
-            },
+        if (
+            phase
+            in {
+                ProviderPhase.DRAFT_TRANSLATION,
+                ProviderPhase.AUTHORIZATION,
+                ProviderPhase.SYNTHESIS_VALIDATION,
+            }
+            and category is ProviderFailureCategory.PROVIDER_UNAVAILABLE
+        ):
+            category = ProviderFailureCategory.GROUNDING_REJECTED
+        provider_event(
+            self.runtime.configuration,
+            component=component,
+            phase=phase,
+            attempted=attempt.attempted,
+            category=category,
+            error=error,
+            latency_ms=attempt.latency_ms,
         )

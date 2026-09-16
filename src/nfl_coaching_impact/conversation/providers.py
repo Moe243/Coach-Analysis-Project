@@ -28,6 +28,12 @@ class ProviderFailureCategory(StrEnum):
     MALFORMED_OUTPUT = "malformed_output"
     GROUNDING_REJECTED = "grounding_rejected"
     OVERSIZED_PAYLOAD = "oversized_payload"
+    AUTHENTICATION_ERROR = "authentication_error"
+    PERMISSION_ERROR = "permission_error"
+    BAD_REQUEST = "provider_bad_request"
+    SERVER_ERROR = "provider_server_error"
+    TRANSPORT_ERROR = "transport_error"
+    CONCURRENCY_LIMIT = "concurrency_limit"
 
 
 class ProviderName(StrEnum):
@@ -52,6 +58,10 @@ class ProviderMalformedOutput(ProviderError):
 
 class ProviderPayloadTooLarge(ProviderError):
     category = ProviderFailureCategory.OVERSIZED_PAYLOAD
+
+
+class ProviderConcurrencyLimit(ProviderError):
+    category = ProviderFailureCategory.CONCURRENCY_LIMIT
 
 
 class PlannerProvider(Protocol):
@@ -256,6 +266,20 @@ def classify_provider_failure(error: BaseException) -> ProviderFailureCategory:
     name = type(error).__name__.lower()
     if "timeout" in name:
         return ProviderFailureCategory.TIMEOUT
+    status = getattr(error, "status_code", None)
+    if type(status) is int:
+        if status == 401:
+            return ProviderFailureCategory.AUTHENTICATION_ERROR
+        if status == 403:
+            return ProviderFailureCategory.PERMISSION_ERROR
+        if status == 429:
+            return ProviderFailureCategory.RATE_LIMIT
+        if 400 <= status <= 499:
+            return ProviderFailureCategory.BAD_REQUEST
+        if 500 <= status <= 599:
+            return ProviderFailureCategory.SERVER_ERROR
+    if "connection" in name or "connecterror" in name:
+        return ProviderFailureCategory.TRANSPORT_ERROR
     if "ratelimit" in name or "rate_limit" in name:
         return ProviderFailureCategory.RATE_LIMIT
     if "validation" in name or "json" in name:

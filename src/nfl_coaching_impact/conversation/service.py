@@ -7,11 +7,13 @@ from .enums import Answerability, AnswerMode, ReasonCode
 from .evidence import EvidenceService
 from .orchestration import AskV2Orchestrator
 from .provider_orchestration import ProviderOrchestrator
+from .provider_telemetry import ProviderPhase, provider_event
 from .providers import (
     ProviderConfiguration,
     ProviderFailureCategory,
     ProviderName,
     ProviderRuntime,
+    classify_provider_failure,
 )
 
 
@@ -35,6 +37,7 @@ def stage_c_response(request: AskV2Request, evidence: EvidenceService) -> AskV2R
 def provider_runtime() -> ProviderRuntime:
     configuration = ProviderConfiguration.from_environment()
     if not configuration.ready:
+        provider_event(configuration, phase=ProviderPhase.READINESS, runtime_ready=False)
         return ProviderRuntime(
             configuration=configuration,
             initialization_failure=ProviderFailureCategory.CONFIGURATION_DISABLED,
@@ -43,14 +46,29 @@ def provider_runtime() -> ProviderRuntime:
         if configuration.provider is ProviderName.GROQ:
             from .groq_provider import groq_runtime
 
-            return groq_runtime(configuration)
+            runtime = groq_runtime(configuration)
+            provider_event(
+                configuration, phase=ProviderPhase.READINESS, runtime_ready=runtime.ready
+            )
+            return runtime
         if configuration.provider is ProviderName.OPENAI:
             from .openai_provider import openai_runtime
 
-            return openai_runtime(configuration)
+            runtime = openai_runtime(configuration)
+            provider_event(
+                configuration, phase=ProviderPhase.READINESS, runtime_ready=runtime.ready
+            )
+            return runtime
         return ProviderRuntime(configuration=configuration)
-    except Exception:
+    except Exception as error:
         # SDK import/client construction failures must not break deterministic Ask v2.
+        provider_event(
+            configuration,
+            phase=ProviderPhase.INITIALIZATION,
+            category=classify_provider_failure(error),
+            error=error,
+            runtime_ready=False,
+        )
         return ProviderRuntime(
             configuration=configuration,
             initialization_failure=ProviderFailureCategory.PROVIDER_UNAVAILABLE,
