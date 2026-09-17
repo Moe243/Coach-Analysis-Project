@@ -37,6 +37,7 @@ class DeterministicSynthesizer:
         requested_metric: str | None,
         young_only: bool,
         unsupported_season: bool = False,
+        best_seasons: bool = False,
     ) -> SynthesisResult:
         propositions = conclusions.propositions
         unsupported, reason = self._unsupported(
@@ -83,6 +84,44 @@ class DeterministicSynthesizer:
             answer = self._team_scheme(propositions)
         elif question_type is QuestionType.COACH_QB_CONTEXT:
             answer = self._coach_qb_context(propositions)
+        elif question_type is QuestionType.QB_COACHING_CONTEXT:
+            history = sorted(
+                (item for item in propositions if item.predicate == "historical_qb_performance"),
+                key=lambda item: (
+                    -(item.value or 0) if best_seasons else -(item.season or 0),
+                    item.proposition_id,
+                ),
+            )
+            # Keep both quarterbacks represented in a contextual comparison.
+            shown = []
+            for entity in package.resolved_entities:
+                first = next(
+                    (item for item in history if item.subject == entity.display_name), None
+                )
+                if first and first not in shown:
+                    shown.append(first)
+            shown.extend(item for item in history if item not in shown)
+            roles = [item for item in propositions if item.predicate == "verified_role_attribution"]
+            head_coaches = [item for item in roles if item.value == "head_coach"]
+            # Every role sentence is an already-permitted source-backed proposition.
+            answer = "\n\n".join(
+                [
+                    " ".join(item.statement for item in (head_coaches or roles)[:3])
+                    or (
+                        "No verified coaching assignment is available for these "
+                        "recorded team-seasons."
+                    ),
+                    " ".join(item.statement for item in shown[:3]),
+                    (
+                        "These are the strongest recorded QB-team-seasons by EPA/dropback "
+                        "with at least 200 dropbacks, within 2010–2025. "
+                        if best_seasons
+                        else "These are the most recent recorded QB-team-seasons. "
+                    )
+                    + "Recorded staff context is not proof that one coach "
+                    "caused the quarterback's performance.",
+                ]
+            )
         elif propositions:
             answer = propositions[0].statement
         else:

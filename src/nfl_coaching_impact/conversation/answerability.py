@@ -48,6 +48,10 @@ def determine_answerability(
         )
     if not package.evidence:
         return Answerability.DATA_UNAVAILABLE if resolutions else Answerability.NOT_SUPPORTED
+    if question_type is QuestionType.QB_COACHING_CONTEXT and not any(
+        record.kind.value == "COACH_ASSIGNMENT" for record in package.evidence
+    ):
+        return Answerability.PARTIALLY_SUPPORTED
     if question_type is QuestionType.COMPARISON and any(
         entity.kind.value == "coach" for entity in package.resolved_entities
     ):

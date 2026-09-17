@@ -277,6 +277,14 @@ export function NetworkPage() {
   const teamId = params.get("team_id") ?? "";
   const anchorType = params.get("anchor") ?? "all";
   const selected = params.get("selected");
+  const highlighted = useMemo(
+    () =>
+      (params.get("highlights") ?? "")
+        .split(",")
+        .filter((value) => /^(coach|qb):[A-Za-z0-9._-]+$/.test(value))
+        .slice(0, 8),
+    [params],
+  );
   const focused = params.get("focus");
   const verificationValue = params.get("verification") ?? "";
   const verification = validVerifications.has(
@@ -538,7 +546,7 @@ export function NetworkPage() {
     coreRef.current = core;
   }, []);
   const selectNode = useCallback(
-    (nodeId: string) => setUrl({ selected: nodeId }),
+    (nodeId: string) => setUrl({ selected: nodeId, highlights: null }),
     [setUrl],
   );
   const revealGraphIdentity = useCallback((nodeId: string) => {
@@ -568,6 +576,7 @@ export function NetworkPage() {
           mode: "coach_journey",
           coach_id: node.coach_id,
           selected: nodeId,
+          highlights: null,
           focus: nodeId,
         });
       } else if (node.node_type === "quarterback") {
@@ -575,6 +584,7 @@ export function NetworkPage() {
           mode: "qb_journey",
           player_id: node.player_id,
           selected: nodeId,
+          highlights: null,
           focus: nodeId,
         });
       } else {
@@ -584,6 +594,7 @@ export function NetworkPage() {
           start_season: node.season,
           end_season: node.season,
           selected: nodeId,
+          highlights: null,
           focus: nodeId,
         });
       }
@@ -600,6 +611,7 @@ export function NetworkPage() {
     setNetworkSearch("");
     setUrl({
       selected: null,
+      highlights: null,
       focus: null,
       roles: null,
       verification: null,
@@ -618,7 +630,7 @@ export function NetworkPage() {
   };
   const clearNetworkSelection = () => {
     setNetworkSearch("");
-    setUrl({ selected: null, focus: null });
+    setUrl({ selected: null, highlights: null, focus: null });
     coreRef.current?.fit(undefined, 36);
   };
   const updateRole = (role: CoachRole, checked: boolean) => {
@@ -668,7 +680,12 @@ export function NetworkPage() {
           <select
             value={mode}
             onChange={(event) =>
-              setUrl({ mode: event.target.value, selected: null, focus: null })
+              setUrl({
+                mode: event.target.value,
+                selected: null,
+                highlights: null,
+                focus: null,
+              })
             }
           >
             {Object.entries(modeLabels).map(([value, label]) => (
@@ -687,6 +704,7 @@ export function NetworkPage() {
                 setUrl({
                   anchor: event.target.value,
                   selected: null,
+                  highlights: null,
                   focus: null,
                 })
               }
@@ -705,7 +723,11 @@ export function NetworkPage() {
             <select
               value={coachId}
               onChange={(event) =>
-                setUrl({ coach_id: event.target.value, selected: null })
+                setUrl({
+                  coach_id: event.target.value,
+                  selected: null,
+                  highlights: null,
+                })
               }
             >
               <option value="">Choose a coach</option>
@@ -724,7 +746,11 @@ export function NetworkPage() {
             <select
               value={playerId}
               onChange={(event) =>
-                setUrl({ player_id: event.target.value, selected: null })
+                setUrl({
+                  player_id: event.target.value,
+                  selected: null,
+                  highlights: null,
+                })
               }
             >
               <option value="">Choose a quarterback</option>
@@ -743,7 +769,11 @@ export function NetworkPage() {
             <select
               value={teamId}
               onChange={(event) =>
-                setUrl({ team_id: event.target.value, selected: null })
+                setUrl({
+                  team_id: event.target.value,
+                  selected: null,
+                  highlights: null,
+                })
               }
             >
               <option value="">Choose a team</option>
@@ -1157,6 +1187,7 @@ export function NetworkPage() {
                 <NetworkGraph
                   elements={graph.elements}
                   selected={selected ?? null}
+                  highlighted={highlighted}
                   onSelect={selectNode}
                   register={register}
                 />

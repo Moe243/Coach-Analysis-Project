@@ -5,19 +5,23 @@ import { applyGraphSelection } from "./networkSelection";
 export function NetworkGraph({
   elements,
   selected,
+  highlighted,
   onSelect,
   register,
 }: {
   elements: ElementDefinition[];
   selected: string | null;
+  highlighted?: readonly string[];
   onSelect: (id: string) => void;
   register: (core: Core | null) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const graph = useRef<Core | null>(null);
-  const selectedRef = useRef(selected);
+  const selectedRef = useRef<string | readonly string[] | null>(
+    highlighted?.length ? highlighted : selected,
+  );
   const onSelectRef = useRef(onSelect);
-  selectedRef.current = selected;
+  selectedRef.current = highlighted?.length ? highlighted : selected;
   onSelectRef.current = onSelect;
 
   useEffect(() => {
@@ -179,6 +183,21 @@ export function NetworkGraph({
       graph.current = core;
       register(core);
       applyGraphSelection(core, selectedRef.current);
+      const initialIds = new Set(
+        Array.isArray(selectedRef.current)
+          ? selectedRef.current
+          : selectedRef.current
+            ? [selectedRef.current]
+            : [],
+      );
+      const initialNodes = core.nodes().filter((node) => {
+        const canonicalId = node.data("canonicalId") as string | undefined;
+        return (
+          initialIds.has(node.id()) ||
+          Boolean(canonicalId && initialIds.has(canonicalId))
+        );
+      });
+      if (!initialNodes.empty()) core.fit(core.elements(".is-highlighted"), 84);
     });
     return () => {
       disposed = true;
@@ -189,8 +208,12 @@ export function NetworkGraph({
   }, [elements, register]);
 
   useEffect(() => {
-    if (graph.current) applyGraphSelection(graph.current, selected);
-  }, [selected]);
+    if (graph.current)
+      applyGraphSelection(
+        graph.current,
+        highlighted?.length ? highlighted : selected,
+      );
+  }, [highlighted, selected]);
 
   return (
     <div

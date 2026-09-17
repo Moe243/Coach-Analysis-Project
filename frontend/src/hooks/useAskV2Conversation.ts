@@ -5,6 +5,7 @@ import {
   type AskV2Request,
   type AskV2ResolvedEntity,
   type AskV2Response,
+  type AskV2SeasonContext,
 } from "../api/askV2";
 import { ApiError, isRetryableApiError } from "../api/client";
 import {
@@ -34,6 +35,8 @@ type AskV2Client = (
 interface SubmitOptions {
   visibleQuestion?: string;
   canonicalEntity?: AskV2CanonicalEntity;
+  canonicalEntities?: readonly AskV2CanonicalEntity[];
+  seasons?: AskV2SeasonContext;
 }
 
 interface UseAskV2ConversationOptions {
@@ -161,7 +164,8 @@ export function useAskV2Conversation({
         }));
       const bounded = buildBoundedAskV2Context(
         history,
-        options.canonicalEntity,
+        options.canonicalEntities ?? options.canonicalEntity,
+        options.seasons,
       );
       const request: AskV2Request = {
         question: normalized,

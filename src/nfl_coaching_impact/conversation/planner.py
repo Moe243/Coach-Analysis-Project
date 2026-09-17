@@ -38,6 +38,7 @@ class DeterministicPlan:
     young_only: bool
     follow_up: bool
     unsupported_season: bool = False
+    best_seasons: bool = False
 
     @property
     def resolved_by_index(self) -> dict[int, ResolvedEntity]:
@@ -90,9 +91,22 @@ class DeterministicPlanner:
         follow_up = self._is_follow_up(question)
         current = self._find_exact_entities(request.question)
         context, context_failures = self._context_entities(request)
+        replacement = (
+            self._contextual_replacement(question, context)
+            if follow_up and not current and context
+            else None
+        )
+        if replacement is not None:
+            if replacement.lookup_authorized:
+                current = replacement.resolved
+            else:
+                # A genuinely ambiguous new counterpart must not reuse the old pair.
+                context = ()
         entities = self._merge_entities(question, current, context, follow_up)
         preliminary = self._question_type(question, entities, request)
         resolutions = [self._exact_resolution(entity) for entity in entities]
+        if replacement is not None and not replacement.lookup_authorized:
+            resolutions.append(replacement)
         if (
             EntityKind.TEAM in {entity.kind for entity in entities}
             and EntityKind.QB not in {entity.kind for entity in entities}
@@ -130,6 +144,23 @@ class DeterministicPlanner:
             for resolution in resolutions
         )
         season, unsupported_season = self._season(request, question)
+        best_seasons = bool(re.search(r"\bbest seasons?\b", question))
+        if best_seasons and not re.search(r"\b20\d{2}\b", question):
+            season = None
+        # A newly named entity does not silently inherit an unrelated question's season.
+        if (
+            not follow_up
+            and current
+            and not re.search(r"\b20\d{2}\b", question)
+            and not re.search(r"\b(next|last|previous|this|current) (year|season)\b", question)
+            and request.context.entities
+            and not any(
+                entity.kind == reference.kind and entity.id == reference.id
+                for entity in current
+                for reference in request.context.entities
+            )
+        ):
+            season = None
         question_type = self._question_type(
             question,
             tuple(
@@ -160,6 +191,7 @@ class DeterministicPlanner:
             young_only="young quarterback" in question or "young qb" in question,
             follow_up=follow_up,
             unsupported_season=unsupported_season,
+            best_seasons=best_seasons,
         )
 
     def provider_input(self, request: AskV2Request) -> ProviderPlannerInput:
@@ -227,7 +259,58 @@ class DeterministicPlanner:
             requested_metric=requested_metric,
             young_only="young quarterback" in question or "young qb" in question,
             follow_up=self._is_follow_up(question),
+            best_seasons=bool(re.search(r"\bbest seasons?\b", question)),
         )
+
+    def _contextual_replacement(
+        self, question: str, context: tuple[ResolvedEntity, ...]
+    ) -> EntityResolution | None:
+        """Resolve an exact unique surname only in an explicit replacement utterance.
+
+        Generic partial/fuzzy resolution remains clarification-only. This bounded
+        interpretation uses the immutable catalog, not assistant prose or similarity.
+        """
+        match = re.fullmatch(r"(?:what about|how about|and|now) ([a-z]+)", question)
+        if not match:
+            return None
+        mention = match[1]
+        candidates = []
+        for row in self.source_entities:
+            kind = EntityKind(row["kind"])
+            if kind not in {EntityKind.COACH, EntityKind.QB}:
+                continue
+            if normalize(row["name"]).split()[-1] == mention:
+                candidates.append(self.resolver.require_id(kind, row["id"]))
+        if len(candidates) == 1:
+            return self._exact_resolution(candidates[0])
+        if candidates:
+            return EntityResolution(
+                kind=candidates[0].kind,
+                mention=mention,
+                status=ResolutionStatus.AMBIGUOUS,
+                candidates=tuple(sorted(candidates, key=lambda entity: entity.id)[:5]),
+                lookup_authorized=False,
+            )
+        if mention not in _METRICS and mention not in {
+            "this",
+            "that",
+            "history",
+            "scheme",
+            "roles",
+            "projections",
+            "profile",
+            "performance",
+            "rookies",
+            "coaches",
+            "quarterbacks",
+        }:
+            return EntityResolution(
+                kind=context[0].kind,
+                mention=mention,
+                status=ResolutionStatus.NOT_FOUND,
+                lookup_authorized=False,
+            )
+        return None
 
     def _find_exact_entities(self, text: str) -> tuple[ResolvedEntity, ...]:
         normalized = normalize(text)
@@ -240,6 +323,11 @@ class DeterministicPlanner:
                 candidate = normalize(str(label))
                 if len(candidate) < 3 or not _contains(normalized, candidate):
                     continue
+                if kind is EntityKind.TEAM and candidate in {"was", "ten"}:
+                    # These abbreviations are also ordinary English. Require deliberate
+                    # uppercase abbreviation spelling when scanning a whole question.
+                    if not re.search(rf"\b{candidate.upper()}\b", text):
+                        continue
                 position = f" {normalized} ".find(f" {candidate} ")
                 key = (kind, entity.id)
                 previous = matches.get(key)
@@ -291,7 +379,8 @@ class DeterministicPlanner:
         return bool(
             re.fullmatch(
                 r"(?:why|why .*|what about .*|how about .*|and .*|now .*|only .*|"
-                r"who is better|which is better|by how much)",
+                r"who is better|which is better|by how much|"
+                r"which parts are descriptive rather than predictive)",
                 question,
             )
         )
@@ -325,7 +414,8 @@ class DeterministicPlanner:
                 surname = normalize(entity.display_name).split()[-1]
                 if _contains(question, surname) and entity not in result:
                     result.insert(0, entity)
-            if "compare" in question and len(result) == 1:
+            same_kind_context = [entity for entity in context if entity.kind is result[0].kind]
+            if len(result) == 1 and ("compare" in question or len(same_kind_context) == 2):
                 for entity in context:
                     if entity.kind is result[0].kind and entity not in result:
                         result.insert(0, entity)
@@ -463,6 +553,12 @@ class DeterministicPlanner:
             return QuestionType.COACH_EFFECT
         if projection_language:
             return QuestionType.QB_PROJECTION
+        if (
+            EntityKind.QB in kinds
+            and re.search(r"\b(coach|coaches|coaching|staff)\b", question)
+            and EntityKind.COACH not in kinds
+        ):
+            return QuestionType.QB_COACHING_CONTEXT
         if re.search(
             r"\b(which qbs|which quarterbacks|played under|coached by|relationships?)\b",
             question,
@@ -493,20 +589,15 @@ class DeterministicPlanner:
         if re.search(r"\b(performance|perform|epa|pae|cpoe|stats|history)\b", question):
             return QuestionType.QB_HISTORY
         if self._is_follow_up(question) and request.context.turns:
-            prior_turn = next(
-                (
-                    turn
-                    for turn in reversed(request.context.turns)
-                    if turn.role is ConversationRole.USER
-                ),
-                None,
-            )
-            if prior_turn is None:
-                return QuestionType.UNKNOWN
-            prior = normalize(prior_turn.content)
-            if len(prior) < 3:
-                return QuestionType.UNKNOWN
-            return self._question_type(prior, entities, AskV2Request(question=prior))
+            for prior_turn in reversed(request.context.turns):
+                if prior_turn.role is not ConversationRole.USER:
+                    continue
+                prior = normalize(prior_turn.content)
+                if len(prior) < 3:
+                    continue
+                prior_type = self._question_type(prior, entities, AskV2Request(question=prior))
+                if prior_type is not QuestionType.UNKNOWN:
+                    return prior_type
         if EntityKind.QB in kinds:
             return QuestionType.QB_HISTORY
         return QuestionType.UNKNOWN
@@ -521,6 +612,17 @@ class DeterministicPlanner:
         if len(years) > 1:
             return None, True
         if re.search(r"\b(next|last|previous|this|current) (year|season)\b", question):
+            context = request.context.seasons
+            relative = re.search(r"\b(next|last|previous) (year|season)\b", question)
+            if (
+                relative
+                and context
+                and context.start_season == context.end_season
+                and context.end_season <= 2025
+            ):
+                year = context.start_season + (1 if relative[1] == "next" else -1)
+                if MIN_SEASON <= year <= 2025:
+                    return SeasonContext(start_season=year, end_season=year), False
             return None, True
         return request.context.seasons, False
 
@@ -553,6 +655,8 @@ class DeterministicPlanner:
             return (task(AnalyticalTask.GET_COACH_ASSIGNMENTS, (coaches[0],)),)
         if question_type is QuestionType.COACH_QB_CONTEXT and coaches:
             return (task(AnalyticalTask.GET_COACH_QB_CONTEXT, (coaches[0],)),)
+        if question_type is QuestionType.QB_COACHING_CONTEXT and qbs:
+            return tuple(task(AnalyticalTask.GET_QB_COACHING_CONTEXT, (qb,)) for qb in qbs[:2])
         if question_type is QuestionType.PCAE_RESEARCH and coaches:
             return (task(AnalyticalTask.GET_PLAYCALLER_PCAE, (coaches[0],)),)
         if question_type is QuestionType.TEAM_SCHEME:

@@ -59,7 +59,7 @@ describe("Ask Anything v2", () => {
     expect(screen.queryByText(/preview/i)).not.toBeInTheDocument();
   });
 
-  it("submits an example and renders the direct answer before evidence", async () => {
+  it("submits an example and renders the direct answer before key numbers", async () => {
     vi.mocked(askQuestionV2).mockResolvedValue(askV2Response());
     const user = userEvent.setup();
     renderRoute(<AskPreviewPage />, "/ask/preview");
@@ -78,13 +78,27 @@ describe("Ask Anything v2", () => {
         /EPA\/dropback estimates expected scoring value added per passing dropback/,
       ),
     ).toBeVisible();
-    const evidence = screen.getByRole("heading", {
-      name: "Strongest evidence",
+    const keyNumbers = screen.getByRole("heading", {
+      name: "Key numbers",
     });
     expect(
-      answer.compareDocumentPosition(evidence) &
+      answer.compareDocumentPosition(keyNumbers) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    const exploration = screen.getByRole("heading", { name: "Keep exploring" })
+      .parentElement?.parentElement;
+    expect(
+      exploration?.querySelectorAll(".ask-v2-explore-grid > *"),
+    ).toHaveLength(4);
+    expect(
+      screen.getByRole("link", { name: /View Josh Allen's career tree/ }),
+    ).toHaveAttribute(
+      "href",
+      "/network?mode=qb_journey&player_id=00-0034857&start_season=2022&end_season=2022&selected=qb%3A00-0034857",
+    );
+    expect(
+      screen.getByRole("link", { name: /View Josh Allen's 2022 statistics/ }),
+    ).toHaveAttribute("href", "/statistics?player=Josh+Allen&season=2022");
     expect(askQuestionV2).toHaveBeenCalledWith(
       expect.objectContaining({
         question: "How did Josh Allen perform in 2022?",
@@ -114,17 +128,116 @@ describe("Ask Anything v2", () => {
     ).toBeVisible();
   });
 
-  it("renders partial support as useful alignment before the unsupported portion", async () => {
+  it("connects a Rodgers coaching answer to both canonical journeys and their bounded graph", async () => {
+    vi.mocked(askQuestionV2).mockResolvedValue(
+      askV2Response({
+        answer:
+          "Mike McCarthy was the verified head coach around several of Aaron Rodgers' strongest observed seasons.",
+        entities: [
+          { kind: "qb", id: "qb-rodgers", display_name: "Aaron Rodgers" },
+          {
+            kind: "coach",
+            id: "coach-mike-mccarthy",
+            display_name: "Mike McCarthy",
+          },
+        ],
+        evidence: [],
+        propositions: [
+          {
+            ...askV2Response().propositions[0],
+            proposition_id: "rodgers-2011",
+            subject: "Aaron Rodgers",
+            season: 2011,
+          },
+        ],
+        follow_ups: [
+          {
+            label: "How did the coaching context change?",
+            question: "How did Aaron Rodgers' coaching context change?",
+          },
+        ],
+      }),
+    );
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("Who was coaching Aaron Rodgers during his best seasons?");
+    expect(
+      await screen.findByText(/Mike McCarthy was the verified/),
+    ).toBeVisible();
+    expect(screen.queryByText(/evidence_qb_2022/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Aaron Rodgers' career tree/ }),
+    ).toHaveAttribute(
+      "href",
+      "/network?mode=qb_journey&player_id=qb-rodgers&start_season=2011&end_season=2011&selected=qb%3Aqb-rodgers",
+    );
+    expect(
+      screen.getByRole("link", { name: /Mike McCarthy's coach tree/ }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Explore Aaron Rodgers \+ Mike McCarthy/,
+      }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining(
+        "highlights=qb%3Aqb-rodgers%2Ccoach%3Acoach-mike-mccarthy",
+      ),
+    );
+    const exploration = screen.getByRole("heading", { name: "Keep exploring" })
+      .parentElement?.parentElement;
+    expect(
+      exploration?.querySelectorAll(".ask-v2-explore-grid > *"),
+    ).toHaveLength(4);
+  });
+
+  it("limits a Rodgers and Favre answer to four actions distributed across both quarterbacks", async () => {
+    vi.mocked(askQuestionV2).mockResolvedValue(
+      askV2Response({
+        answer:
+          "Rodgers and Favre each have distinct Green Bay quarterback histories that can be compared descriptively.",
+        entities: [
+          { kind: "qb", id: "qb-rodgers", display_name: "Aaron Rodgers" },
+          { kind: "qb", id: "qb-favre", display_name: "Brett Favre" },
+        ],
+        propositions: [],
+        evidence: [],
+        follow_ups: [],
+      }),
+    );
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("Compare Aaron Rodgers and Brett Favre");
+    expect(await screen.findByText(/distinct Green Bay/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Aaron Rodgers' career tree/ }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Brett Favre's career tree/ }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: /Compare the coaches around their best seasons/,
+      }),
+    ).toBeVisible();
+    const exploration = screen.getByRole("heading", { name: "Keep exploring" })
+      .parentElement?.parentElement;
+    expect(
+      exploration?.querySelectorAll(".ask-v2-explore-grid > *"),
+    ).toHaveLength(4);
+  });
+
+  it("renders partial support as a useful answer with one natural limitation", async () => {
     vi.mocked(askQuestionV2).mockResolvedValue(partialAlignmentResponse());
     renderRoute(<AskPreviewPage />, "/ask/preview");
     await submit("How would Kyler Murray fit Minnesota?");
-    expect(await screen.findByText("Partially supported")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Comparable dimensions" }),
+      await screen.findByText(/measured tendencies can be compared/),
     ).toBeVisible();
-    expect(screen.getByText(/Descriptive alignment only/)).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "What the model can't estimate" }),
+      screen.getByText(/cannot reliably estimate performance in a different/),
+    ).toBeVisible();
+    expect(screen.queryByText(/\bC17\b/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Keep exploring" }),
     ).toBeVisible();
     expect(screen.queryByText(/Fit Score/i)).not.toBeInTheDocument();
   });
@@ -150,11 +263,13 @@ describe("Ask Anything v2", () => {
     );
     renderRoute(<AskPreviewPage />, "/ask/preview");
     await submit("Project a rookie quarterback");
-    expect(await screen.findByText("Not supported")).toBeVisible();
     expect(
-      screen.getByText("The project cannot produce a rookie forecast."),
+      await screen.findByText("The project cannot produce a rookie forecast."),
     ).toBeVisible();
-    expect(screen.getByText(/available cohort cannot estimate/)).toBeVisible();
+    expect(
+      screen.getByText(/cannot support a reliable college-to-NFL/),
+    ).toBeVisible();
+    expect(screen.queryByText("NOT_SUPPORTED")).not.toBeInTheDocument();
   });
 
   it("renders data-unavailable and missing numerical values without zeros", async () => {
@@ -173,10 +288,10 @@ describe("Ask Anything v2", () => {
     });
     vi.mocked(askQuestionV2).mockResolvedValue(response);
     renderRoute(<AskPreviewPage />, "/ask/preview");
-    const user = await submit("Show Josh Allen CPOE in 2010");
-    expect(await screen.findByText("Data unavailable")).toBeVisible();
-    await user.click(screen.getByText("Evidence & methodology"));
-    expect(screen.getByText("Unavailable")).toBeVisible();
+    await submit("Show Josh Allen CPOE in 2010");
+    expect(
+      await screen.findByText(/requested metric is unavailable/),
+    ).toBeVisible();
     expect(screen.queryByText("0.000")).not.toBeInTheDocument();
   });
 
@@ -211,7 +326,7 @@ describe("Ask Anything v2", () => {
     const user = await submit(
       "Who has stronger QB-development evidence, Andy Reid or Mike Tomlin?",
     );
-    await screen.findByText("Comparison frame");
+    await screen.findByText(/Andy Reid has clearer/);
     await user.type(screen.getByLabelText("Ask a football question"), "Why?");
     await user.click(screen.getByRole("button", { name: /^Ask$/ }));
     await waitFor(() => expect(askQuestionV2).toHaveBeenCalledTimes(2));
@@ -229,7 +344,74 @@ describe("Ask Anything v2", () => {
     ]);
   });
 
-  it("submits only backend-provided follow-up suggestions", async () => {
+  it("replaces the comparison counterpart after a contextual McVay turn", async () => {
+    const reidMcVay = coachComparisonResponse();
+    reidMcVay.entities = [
+      { kind: "coach", id: "coach-andy-reid", display_name: "Andy Reid" },
+      { kind: "coach", id: "coach-sean-mcvay", display_name: "Sean McVay" },
+    ];
+    vi.mocked(askQuestionV2)
+      .mockResolvedValueOnce(coachComparisonResponse())
+      .mockResolvedValueOnce(coachComparisonResponse())
+      .mockResolvedValueOnce(reidMcVay)
+      .mockResolvedValueOnce(reidMcVay);
+    renderRoute(<AskPreviewPage />, "/ask");
+    const user = await submit("Compare Andy Reid and Mike Tomlin");
+    await screen.findByText(/Andy Reid has clearer/);
+    await user.type(screen.getByLabelText("Ask a football question"), "Why?");
+    await user.click(screen.getByRole("button", { name: /^Ask$/ }));
+    await waitFor(() => expect(askQuestionV2).toHaveBeenCalledTimes(2));
+    await user.type(
+      screen.getByLabelText("Ask a football question"),
+      "What about McVay?",
+    );
+    await user.click(screen.getByRole("button", { name: /^Ask$/ }));
+    await waitFor(() => expect(askQuestionV2).toHaveBeenCalledTimes(3));
+    await user.type(screen.getByLabelText("Ask a football question"), "Why?");
+    await user.click(screen.getByRole("button", { name: /^Ask$/ }));
+    await waitFor(() => expect(askQuestionV2).toHaveBeenCalledTimes(4));
+    expect(vi.mocked(askQuestionV2).mock.calls[3][0].context.entities).toEqual([
+      { kind: "coach", id: "coach-andy-reid" },
+      { kind: "coach", id: "coach-sean-mcvay" },
+    ]);
+  });
+
+  it("carries an observed season into a next-season follow-up without inventing evidence", async () => {
+    const season2011 = askV2Response({
+      answer: "Aaron Rodgers' observed 2011 season is available.",
+      entities: [
+        { kind: "qb", id: "qb-rodgers", display_name: "Aaron Rodgers" },
+      ],
+      propositions: [{ ...askV2Response().propositions[0], season: 2011 }],
+    });
+    const season2012 = askV2Response({
+      answer: "Aaron Rodgers' observed 2012 season is available.",
+      entities: season2011.entities,
+      propositions: [{ ...askV2Response().propositions[0], season: 2012 }],
+    });
+    vi.mocked(askQuestionV2)
+      .mockResolvedValueOnce(season2011)
+      .mockResolvedValueOnce(season2012);
+    renderRoute(<AskPreviewPage />, "/ask");
+    const user = await submit("Tell me about Aaron Rodgers in 2011");
+    await screen.findByText(/observed 2011 season/);
+    await user.type(
+      screen.getByLabelText("Ask a football question"),
+      "What about the next season?",
+    );
+    await user.click(screen.getByRole("button", { name: /^Ask$/ }));
+    expect(await screen.findByText(/observed 2012 season/)).toBeVisible();
+    const request = vi.mocked(askQuestionV2).mock.calls[1][0];
+    expect(request.context.entities).toEqual([
+      { kind: "qb", id: "qb-rodgers" },
+    ]);
+    expect(request.context.seasons).toEqual({
+      start_season: 2011,
+      end_season: 2011,
+    });
+  });
+
+  it("submits an entity-specific allowlisted follow-up with canonical context", async () => {
     vi.mocked(askQuestionV2)
       .mockResolvedValueOnce(coachComparisonResponse())
       .mockResolvedValueOnce(coachComparisonResponse());
@@ -238,31 +420,114 @@ describe("Ask Anything v2", () => {
       "Compare Andy Reid and Mike Tomlin with quarterbacks",
     );
     await user.click(
-      await screen.findByRole("button", { name: /Explain why/ }),
+      await screen.findByRole("button", {
+        name: /Which QB histories connect to Andy Reid/,
+      }),
     );
     await waitFor(() => expect(askQuestionV2).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(askQuestionV2).mock.calls[1][0].question).toBe("Why?");
+    expect(vi.mocked(askQuestionV2).mock.calls[1][0].question).toBe(
+      "Which quarterbacks shared Andy Reid's team-seasons?",
+    );
+    expect(vi.mocked(askQuestionV2).mock.calls[1][0].context.entities).toEqual([
+      { kind: "coach", id: "coach-andy-reid" },
+      { kind: "coach", id: "coach-mike-tomlin" },
+    ]);
+    expect(document.activeElement).toHaveAttribute("id", "answer-2");
   });
 
-  it("shows uncertainty and safe provenance in expandable sections", async () => {
+  it("shows useful numbers while keeping internal evidence machinery private", async () => {
     vi.mocked(askQuestionV2).mockResolvedValue(askV2Response());
     renderRoute(<AskPreviewPage />, "/ask/preview");
-    const user = await submit("How did Josh Allen perform in 2022?");
+    await submit("How did Josh Allen perform in 2022?");
     expect(
-      await screen.findByText(/High reliability · 651 dropbacks/),
+      await screen.findByRole("heading", { name: "Key numbers" }),
     ).toBeVisible();
-    await user.click(screen.getByText("Evidence & methodology"));
-    expect(screen.getByText("Historical Fact")).toBeVisible();
-    expect(screen.getByText("0.237")).toBeVisible();
-    expect(screen.getByText(/Interval: -0.102 to 0.347/)).toBeVisible();
-    await user.click(screen.getByText("Versions & provenance"));
-    expect(screen.getByText("c19-test")).toBeVisible();
+    expect(screen.getByText("0.237", { selector: "strong" })).toBeVisible();
+    expect(
+      screen.queryByText("Evidence & methodology"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Versions & provenance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Historical Fact")).not.toBeInTheDocument();
+    expect(screen.queryByText("evidence_qb_2022")).not.toBeInTheDocument();
+    expect(screen.queryByText("c19-test")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/OPENAI_API_KEY|DATABASE_URL|\/Users\//),
     ).not.toBeInTheDocument();
   });
 
-  it("labels deterministic and grounded modes without changing analytical authority", async () => {
+  it("does not surface a number whose conclusion permission is denied", async () => {
+    const denied = askV2Response();
+    denied.conclusion_permissions = denied.conclusion_permissions.map(
+      (permission) => ({ ...permission, decision: "DENIED" }),
+    );
+    vi.mocked(askQuestionV2).mockResolvedValue(denied);
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("How did Josh Allen perform in 2022?");
+    await screen.findByText(/recorded 0.237 EPA\/dropback/);
+    expect(
+      screen.queryByRole("heading", { name: "Key numbers" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("translates bounded-evidence machinery into a natural public limitation", async () => {
+    vi.mocked(askQuestionV2).mockResolvedValue(
+      askV2Response({
+        limitations: [
+          "BOUNDED_SCOPE: 21 evidence records are not represented; narrow the request.",
+        ],
+      }),
+    );
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("How did Josh Allen perform in 2022?");
+    expect(
+      await screen.findByText(/focused sample of the published history/),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/BOUNDED_SCOPE|21 evidence records/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not turn internal context coverage counts into a public performance grid", async () => {
+    const response = coachComparisonResponse();
+    response.propositions = [
+      {
+        ...askV2Response().propositions[0],
+        metric: "distinct_qb_team_seasons",
+        value: 38,
+        unit: "count",
+      },
+    ];
+    response.conclusion_permissions = askV2Response().conclusion_permissions;
+    vi.mocked(askQuestionV2).mockResolvedValue(response);
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("Compare Andy Reid and Mike Tomlin.");
+    await screen.findByText(/Andy Reid has clearer/);
+    expect(
+      screen.queryByRole("heading", { name: "Key numbers" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not misattribute a comparison's environment value to its player", async () => {
+    const response = partialAlignmentResponse();
+    response.propositions = response.propositions.map((proposition) => ({
+      ...proposition,
+      subject: "Kyler Murray",
+      value: 0.028,
+      predicate: "descriptive_player_scheme_alignment",
+    }));
+    vi.mocked(askQuestionV2).mockResolvedValue(response);
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("How would Kyler Murray fit Minnesota?");
+    await screen.findByText(/measured tendencies can be compared/);
+    expect(
+      screen.queryByRole("heading", { name: "Key numbers" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("2.8%", { selector: "strong" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not expose provider mode while preserving the same public answer", async () => {
     vi.mocked(askQuestionV2)
       .mockResolvedValueOnce(askV2Response())
       .mockResolvedValueOnce(
@@ -278,38 +543,46 @@ describe("Ask Anything v2", () => {
       );
     renderRoute(<AskPreviewPage />, "/ask/preview");
     const user = await submit("How did Josh Allen perform in 2022?");
-    expect(
-      await screen.findByText("Deterministic", { selector: ".ask-v2-mode" }),
-    ).toBeVisible();
+    await screen.findByText(/recorded 0.237 EPA\/dropback/);
+    expect(screen.queryByText("Deterministic")).not.toBeInTheDocument();
     await user.type(
       screen.getByLabelText("Ask a football question"),
       "What about 2023?",
     );
     await user.click(screen.getByRole("button", { name: /^Ask$/ }));
-    expect(
-      await screen.findByText("Grounded AI", { selector: ".ask-v2-mode" }),
-    ).toBeVisible();
-    expect(screen.getAllByText(/Analytics first/)).toHaveLength(2);
+    await waitFor(() => expect(askQuestionV2).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("Grounded AI")).not.toBeInTheDocument();
+    expect(screen.queryByText(/gpt-test/)).not.toBeInTheDocument();
   });
 
-  it("renders comparisons neutrally with canonical profile links", async () => {
+  it("renders comparisons neutrally with canonical exploration links", async () => {
     vi.mocked(askQuestionV2).mockResolvedValue(coachComparisonResponse());
     renderRoute(<AskPreviewPage />, "/ask/preview");
     await submit("Compare Andy Reid and Mike Tomlin with quarterbacks");
-    expect(await screen.findByText("Comparison frame")).toBeVisible();
-    expect(screen.getByText(/No overall winner is implied/)).toBeVisible();
+    expect(await screen.findByText(/Andy Reid has clearer/)).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "View Andy Reid" }),
-    ).toHaveAttribute("href", "/coaches/coach-andy-reid");
+      screen.getByText(/not proof of better QB development/),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /View Andy Reid's coach tree/ }),
+    ).toHaveAttribute(
+      "href",
+      "/network?mode=coach_journey&coach_id=coach-andy-reid&start_season=2010&end_season=2025&selected=coach%3Acoach-andy-reid",
+    );
+    expect(
+      screen.queryByText(/comparison_winner_allowed/i),
+    ).not.toBeInTheDocument();
   });
 
   it("renders counterfactual support before the alternate-career limitation", async () => {
     vi.mocked(askQuestionV2).mockResolvedValue(counterfactualResponse());
     renderRoute(<AskPreviewPage />, "/ask/preview");
     await submit("What if Chicago drafted Patrick Mahomes?");
-    expect(await screen.findByText("What we can compare")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "What we cannot estimate" }),
+      await screen.findByText(/actual history with Chicago/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/cannot reliably estimate an alternate/),
     ).toBeVisible();
     expect(screen.queryByText(/would have thrown/i)).not.toBeInTheDocument();
   });
@@ -424,11 +697,7 @@ describe("Ask Anything v2", () => {
       renderRoute(<AskPreviewPage />, "/ask/preview");
       if (response) {
         await submit("Show the approved evidence");
-        await screen.findByText(
-          response.answerability === "CLARIFICATION_REQUIRED"
-            ? "Clarification needed"
-            : response.answer,
-        );
+        await screen.findByText(response.answer);
       }
       const result = await axe.run(document.body, {
         rules: {

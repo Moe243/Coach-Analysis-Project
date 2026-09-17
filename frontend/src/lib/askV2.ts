@@ -53,7 +53,8 @@ function latestSeasonContext(
 
 export function buildBoundedAskV2Context(
   history: readonly ContextSourceTurn[],
-  additionalEntity?: AskV2CanonicalEntity,
+  additionalEntities?: AskV2CanonicalEntity | readonly AskV2CanonicalEntity[],
+  seasonOverride?: AskV2ConversationContext["seasons"],
 ): BoundedContextResult {
   const eligible = history.filter((turn) => turn.response);
   const selected: ContextSourceTurn[] = [];
@@ -79,10 +80,15 @@ export function buildBoundedAskV2Context(
       entities.push({ kind: entity.kind, id: entity.id });
     }
   };
-  if (additionalEntity) addEntity(additionalEntity);
+  if (additionalEntities) {
+    const additions = Array.isArray(additionalEntities)
+      ? additionalEntities
+      : [additionalEntities];
+    for (const entity of additions) addEntity(entity);
+  }
   const latestEntities = selected.at(-1)?.response?.entities ?? [];
   for (const entity of latestEntities) addEntity(entity);
-  const seasons = latestSeasonContext(selected.at(-1));
+  const seasons = seasonOverride ?? latestSeasonContext(selected.at(-1));
 
   return {
     context: {
@@ -128,6 +134,7 @@ const metricLabels: Readonly<Record<string, string>> = {
   target_depth_short_rate: "Short-target rate",
   target_depth_intermediate_rate: "Intermediate-target rate",
   target_depth_deep_rate: "Deep-target rate",
+  distinct_qb_team_seasons: "QB team-seasons",
 };
 
 export function metricLabel(value: string): string {

@@ -20,6 +20,7 @@ _REQUIRED_KINDS = {
     AnalyticalTask.GET_QB_PROJECTION: (EntityKind.QB,),
     AnalyticalTask.GET_COACH_ASSIGNMENTS: (EntityKind.COACH,),
     AnalyticalTask.GET_COACH_QB_CONTEXT: (EntityKind.COACH,),
+    AnalyticalTask.GET_QB_COACHING_CONTEXT: (EntityKind.QB,),
     AnalyticalTask.GET_TEAM_SCHEME: (EntityKind.TEAM,),
     AnalyticalTask.GET_PLAYCALLER_PCAE: (EntityKind.COACH,),
     AnalyticalTask.COMPARE_QB_MEASUREMENTS: (EntityKind.QB, EntityKind.QB),
@@ -34,6 +35,7 @@ _QUESTION_TASKS = {
     QuestionType.QB_PROJECTION: {AnalyticalTask.GET_QB_PROJECTION},
     QuestionType.COACH_HISTORY: {AnalyticalTask.GET_COACH_ASSIGNMENTS},
     QuestionType.COACH_QB_CONTEXT: {AnalyticalTask.GET_COACH_QB_CONTEXT},
+    QuestionType.QB_COACHING_CONTEXT: {AnalyticalTask.GET_QB_COACHING_CONTEXT},
     QuestionType.TEAM_SCHEME: {
         AnalyticalTask.GET_TEAM_SCHEME,
         AnalyticalTask.COMPARE_TEAM_SCHEME,

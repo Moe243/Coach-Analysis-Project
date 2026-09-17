@@ -1,13 +1,22 @@
 import type { Core } from "cytoscape";
 
-export function applyGraphSelection(core: Core, selected: string | null) {
+export function applyGraphSelection(
+  core: Core,
+  selected: string | readonly string[] | null,
+) {
   const all = core.elements();
   all.removeClass("is-highlighted is-faded");
   all.unselect();
-  if (!selected) return;
+  const selectedIds = new Set(
+    Array.isArray(selected) ? selected : selected ? [selected] : [],
+  );
+  if (selectedIds.size === 0) return;
   const selectedNodes = core.nodes().filter((node) => {
     const canonicalId = node.data("canonicalId") as string | undefined;
-    return node.id() === selected || canonicalId === selected;
+    return (
+      selectedIds.has(node.id()) ||
+      Boolean(canonicalId && selectedIds.has(canonicalId))
+    );
   });
   if (selectedNodes.empty()) return;
 

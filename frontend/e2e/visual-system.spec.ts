@@ -44,7 +44,7 @@ for (const view of [
     name: "ask",
     path: "/ask",
     heading: "Ask Anything",
-    ready: ".ask-page form",
+    ready: ".ask-v2-page form",
   },
 ]) {
   test(`workstation contrast, keyboard focus and responsive surface: ${view.name}`, async ({
@@ -61,13 +61,15 @@ for (const view of [
     });
     if (view.name === "ask") {
       await page
-        .getByLabel("Your football question")
+        .getByLabel("Ask a football question")
         .fill("Josh Allen projection 2026");
-      await page.getByRole("button", { name: "Ask the data" }).click();
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
       await expect(
-        page.getByRole("heading", { name: "SUPPORTED", exact: true }),
+        page.getByRole("region", {
+          name: "Answer to Josh Allen projection 2026",
+        }),
       ).toBeVisible();
-      await expect(page.locator(".ask-record")).toHaveCount(1);
+      await expect(page.locator(".ask-v2-explore-grid > *")).toHaveCount(4);
     }
     if (view.name === "relationship-tree") {
       await expect(page.locator(".network-canvas")).toHaveAttribute(

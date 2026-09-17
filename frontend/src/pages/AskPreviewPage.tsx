@@ -2,6 +2,7 @@ import { RotateCcw } from "lucide-react";
 import { AskComposer } from "../components/askV2/AskComposer";
 import { AskV2AssistantTurn } from "../components/askV2/AskV2AssistantTurn";
 import { useAskV2Conversation } from "../hooks/useAskV2Conversation";
+import type { AskV2ExploreAction } from "../lib/askV2Exploration";
 import "./AskPreviewPage.css";
 
 const examples = [
@@ -15,6 +16,13 @@ const examples = [
 
 export function AskPreviewPage() {
   const conversation = useAskV2Conversation();
+  const followUp = (action: AskV2ExploreAction) => {
+    if (!action.question) return;
+    conversation.submit(action.question, {
+      canonicalEntities: action.entities,
+      seasons: action.seasons,
+    });
+  };
   return (
     <section className="page ask-v2-page">
       <header className="ask-v2-page-header">
@@ -84,7 +92,7 @@ export function AskPreviewPage() {
                 turn={turn}
                 latest={index === conversation.turns.length - 1}
                 onClarify={(entity) => conversation.clarify(turn, entity)}
-                onFollowUp={conversation.submit}
+                onFollowUp={followUp}
                 onRetry={() => conversation.retry(turn.id)}
               />
             </div>

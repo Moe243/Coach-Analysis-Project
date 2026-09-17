@@ -25,11 +25,13 @@ vi.mock("../components/NetworkGraph", () => ({
     elements,
     onSelect,
     selected,
+    highlighted = [],
     register,
   }: {
     elements: ElementDefinition[];
     onSelect: (id: string) => void;
     selected: string | null;
+    highlighted?: readonly string[];
     register: (core: Core | null) => void;
   }) => {
     register(graphHarness as unknown as Core);
@@ -43,6 +45,13 @@ vi.mock("../components/NetworkGraph", () => ({
               type="button"
               data-selected={
                 selected === (element.data.canonicalId ?? element.data.id)
+                  ? "true"
+                  : "false"
+              }
+              data-highlighted={
+                highlighted.includes(
+                  String(element.data.canonicalId ?? element.data.id),
+                )
                   ? "true"
                   : "false"
               }
@@ -124,6 +133,25 @@ describe("NetworkPage Relationship Explorer", () => {
       expect(explorerRequests).toEqual([expectedRequest]);
     },
   );
+
+  it("restores a bounded multi-entity highlight from a safe deep link", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=full_network&anchor=all&start_season=2024&end_season=2025&selected=coach%3Acoach-1&highlights=coach%3Acoach-1%2Ccoach%3Acoach-2",
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(
+      screen
+        .getAllByRole("button", { name: /Graph Test Coach/ })
+        .some((node) => node.dataset.highlighted === "true"),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("button", { name: /Graph Second Coach/ })
+        .some((node) => node.dataset.highlighted === "true"),
+    ).toBe(true);
+  });
 
   it("shows one coach across multiple teams in Coach Journey", async () => {
     installApiFixture();

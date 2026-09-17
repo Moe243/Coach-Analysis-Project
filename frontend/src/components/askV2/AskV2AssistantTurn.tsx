@@ -1,57 +1,26 @@
 import { useEffect, useRef } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowUpRight,
-  CheckCircle2,
-  ChevronRight,
-  Database,
+  MessageCircleQuestion,
   RefreshCw,
-  ShieldCheck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AskV2ResolvedEntity, AskV2Response } from "../../api/askV2";
 import type { AskV2ConversationTurn } from "../../hooks/useAskV2Conversation";
+import { formatAskV2Value, metricLabel } from "../../lib/askV2";
 import {
-  entityHref,
-  formatAskV2Value,
-  humanize,
-  isAlignmentResponse,
-  isComparisonResponse,
-  isCounterfactualResponse,
-  metricLabel,
-  propositionUncertainty,
-} from "../../lib/askV2";
+  buildKeepExploringActions,
+  type AskV2ExploreAction,
+} from "../../lib/askV2Exploration";
 
 interface AssistantTurnProps {
   turn: AskV2ConversationTurn;
   latest: boolean;
   onClarify: (entity: AskV2ResolvedEntity) => void;
-  onFollowUp: (question: string) => void;
+  onFollowUp: (action: AskV2ExploreAction) => void;
   onRetry: () => void;
-}
-
-const answerabilityLabels: Record<AskV2Response["answerability"], string> = {
-  SUPPORTED: "Supported",
-  PARTIALLY_SUPPORTED: "Partially supported",
-  NOT_SUPPORTED: "Not supported",
-  CLARIFICATION_REQUIRED: "Clarification needed",
-  DATA_UNAVAILABLE: "Data unavailable",
-};
-
-function ModeBadge({ response }: { response: AskV2Response }) {
-  const grounded = response.answer_mode === "grounded_ai";
-  return (
-    <span
-      className="ask-v2-mode"
-      title={
-        grounded
-          ? "Grounded AI organizes approved project evidence. Every analytical claim is validated by the backend."
-          : "Generated directly from approved project evidence."
-      }
-    >
-      {grounded ? "Grounded AI" : "Deterministic"}
-    </span>
-  );
 }
 
 function MetricExplainer({ response }: { response: AskV2Response }) {
@@ -68,269 +37,152 @@ function MetricExplainer({ response }: { response: AskV2Response }) {
   );
 }
 
-function EntityLinks({ response }: { response: AskV2Response }) {
-  if (response.entities.length === 0) return null;
-  return (
-    <nav className="ask-v2-entity-links" aria-label="Related profiles">
-      {response.entities.map((entity) => (
-        <Link key={`${entity.kind}:${entity.id}`} to={entityHref(entity)}>
-          {entity.kind === "team" ? "Explore" : "View"} {entity.display_name}
-          <ArrowUpRight aria-hidden="true" />
-        </Link>
-      ))}
-    </nav>
+function KeyNumbers({ response }: { response: AskV2Response }) {
+  const permitted = new Set(
+    response.conclusion_permissions
+      .filter((permission) => permission.decision !== "DENIED")
+      .map((permission) => permission.permission_id),
   );
-}
-
-function ComparisonFrame({
-  response,
-  turnId,
-}: {
-  response: AskV2Response;
-  turnId: number;
-}) {
-  if (!isComparisonResponse(response)) return null;
+  const numbers = response.propositions
+    .filter(
+      (proposition) =>
+        proposition.metric &&
+        proposition.metric !== "distinct_qb_team_seasons" &&
+        proposition.kind !== "PLAYER_SCHEME_DESCRIPTIVE_ALIGNMENT" &&
+        proposition.predicate !== "same_metric_descriptive_comparison" &&
+        typeof proposition.value === "number" &&
+        permitted.has(proposition.permission_id),
+    )
+    .sort(
+      (left, right) =>
+        right.importance - left.importance ||
+        left.proposition_id.localeCompare(right.proposition_id),
+    )
+    .filter(
+      (proposition, index, values) =>
+        values.findIndex(
+          (candidate) =>
+            candidate.metric === proposition.metric &&
+            candidate.season === proposition.season &&
+            candidate.subject === proposition.subject,
+        ) === index,
+    )
+    .slice(0, 4);
+  if (numbers.length === 0) return null;
   return (
-    <section
-      className="ask-v2-comparison"
-      aria-labelledby={`comparison-${turnId}`}
-    >
-      <h3 id={`comparison-${turnId}`}>Comparison frame</h3>
+    <section className="ask-v2-key-numbers" aria-label="Key numbers">
+      <h3>Key numbers</h3>
       <div>
-        {response.entities.map((entity) => (
-          <article key={`${entity.kind}:${entity.id}`}>
-            <span>{humanize(entity.kind)}</span>
-            <strong>{entity.display_name}</strong>
-            <small>Evaluated from the same approved evidence contract</small>
+        {numbers.map((proposition) => (
+          <article key={proposition.proposition_id}>
+            <span>{metricLabel(proposition.metric ?? "metric")}</span>
+            <strong>
+              {formatAskV2Value(proposition.value, proposition.unit)}
+            </strong>
+            {(proposition.subject || proposition.season) && (
+              <small>
+                {[proposition.subject, proposition.season]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </small>
+            )}
           </article>
         ))}
       </div>
-      <p>
-        No overall winner is implied unless the backend explicitly permits that
-        conclusion.
-      </p>
     </section>
   );
 }
 
-function AlignmentFrame({ response }: { response: AskV2Response }) {
-  if (!isAlignmentResponse(response)) return null;
-  const player = response.entities.find((entity) => entity.kind === "qb");
-  const team = response.entities.find((entity) => entity.kind === "team");
-  const alignments = response.propositions.filter(
-    (item) => item.kind === "PLAYER_SCHEME_DESCRIPTIVE_ALIGNMENT",
-  );
+function publicLimitationText(response: AskV2Response) {
+  const unsupported = response.unsupported_portions[0];
+  if (!unsupported) {
+    const text = response.limitations[0];
+    if (!text) return null;
+    if (text.startsWith("BOUNDED_SCOPE:"))
+      return "This is a focused sample of the published history, not a complete record-by-record career comparison.";
+    return /\bC\d+\b|\b[A-Z][A-Z_]+:/.test(text)
+      ? "The answer is limited to the available observed evidence; some requested detail is unavailable."
+      : text;
+  }
+  switch (unsupported.reason_code) {
+    case "C17_SCENARIO_NOT_SUPPORTED":
+      return "Historical tendencies can be compared, but the research cannot reliably estimate performance in a different team environment.";
+    case "C18_COUNTERFACTUAL_NOT_IMPLEMENTED":
+      return "Observed histories can be compared, but the research cannot reliably estimate an alternate career.";
+    case "C20_ROOKIE_MODEL_NOT_ESTIMABLE":
+      return "The available evidence cannot support a reliable college-to-NFL rookie forecast.";
+    default:
+      return /\bC\d+\b/.test(unsupported.explanation)
+        ? "That requested analysis is not supported by the validated research, so this answer is limited to observed evidence."
+        : unsupported.explanation;
+  }
+}
+
+function PublicLimitation({ response }: { response: AskV2Response }) {
+  const limitation = publicLimitationText(response);
+  if (!limitation) return null;
   return (
-    <section
-      className="ask-v2-alignment"
-      aria-label="Player and team descriptive alignment"
-    >
-      <div className="ask-v2-alignment-parties">
-        <article>
-          <span>Player profile</span>
-          <strong>{player?.display_name ?? "Quarterback"}</strong>
-        </article>
-        <ChevronRight aria-hidden="true" />
-        <article>
-          <span>Historical scheme</span>
-          <strong>{team?.display_name ?? "Team"}</strong>
-        </article>
-      </div>
-      <h3>Comparable dimensions</h3>
-      <ul>
-        {alignments.map((proposition) => (
-          <li key={proposition.proposition_id}>{proposition.statement}</li>
-        ))}
-      </ul>
-      <p>Descriptive alignment only—not a destination forecast or fit grade.</p>
-    </section>
+    <p className="ask-v2-public-limitation">
+      <strong>Keep in mind:</strong> {limitation}
+    </p>
   );
 }
 
-function EvidenceCards({
+function KeepExploring({
   response,
   turnId,
+  onFollowUp,
 }: {
   response: AskV2Response;
   turnId: number;
+  onFollowUp: (action: AskV2ExploreAction) => void;
 }) {
-  if (response.evidence.length === 0) return null;
+  const actions = buildKeepExploringActions(response);
+  if (actions.length === 0) return null;
   return (
     <section
-      className="ask-v2-evidence-summary"
-      aria-labelledby={`strongest-evidence-${turnId}`}
+      className="ask-v2-explore"
+      aria-labelledby={`keep-exploring-${turnId}`}
     >
-      <h3 id={`strongest-evidence-${turnId}`}>Strongest evidence</h3>
-      <div className="ask-v2-evidence-grid">
-        {response.evidence.map((point) => {
-          const proposition = response.propositions.find((item) =>
-            item.evidence_ids.includes(point.evidence_id),
+      <div className="ask-v2-explore-heading">
+        <p className="eyebrow">Connected analysis</p>
+        <h3 id={`keep-exploring-${turnId}`}>Keep exploring</h3>
+      </div>
+      <div className="ask-v2-explore-grid">
+        {actions.map((action) => {
+          const body = (
+            <>
+              <span className="ask-v2-explore-kind">
+                {action.kind === "navigate" ? (
+                  <ArrowUpRight aria-hidden="true" />
+                ) : (
+                  <MessageCircleQuestion aria-hidden="true" />
+                )}
+                {action.kind === "navigate"
+                  ? "Open analytics"
+                  : "Ask follow-up"}
+              </span>
+              <strong>{action.label}</strong>
+              <small>{action.description}</small>
+              <ArrowRight className="ask-v2-explore-arrow" aria-hidden="true" />
+            </>
           );
-          const uncertainty = proposition
-            ? propositionUncertainty(proposition, response.uncertainty)
-            : undefined;
-          return (
-            <article key={point.evidence_id}>
-              <span>Evidence {point.rank}</span>
-              <p>{point.summary}</p>
-              {uncertainty && (
-                <small>
-                  {humanize(uncertainty.reliability)} reliability ·{" "}
-                  {uncertainty.explanation}
-                </small>
-              )}
-            </article>
+          return action.kind === "navigate" && action.href ? (
+            <Link key={action.id} to={action.href}>
+              {body}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              key={action.id}
+              onClick={() => onFollowUp(action)}
+            >
+              {body}
+            </button>
           );
         })}
       </div>
     </section>
-  );
-}
-
-function EvidenceDetails({ response }: { response: AskV2Response }) {
-  return (
-    <details className="ask-v2-details">
-      <summary>Evidence &amp; methodology</summary>
-      <div className="ask-v2-detail-body">
-        {response.propositions.length > 0 ? (
-          <ol className="ask-v2-propositions">
-            {response.propositions.map((proposition) => {
-              const uncertainty = propositionUncertainty(
-                proposition,
-                response.uncertainty,
-              );
-              return (
-                <li key={proposition.proposition_id}>
-                  <p>{proposition.statement}</p>
-                  <dl>
-                    <div>
-                      <dt>Claim type</dt>
-                      <dd>{humanize(proposition.kind)}</dd>
-                    </div>
-                    <div>
-                      <dt>Evidence</dt>
-                      <dd>
-                        {proposition.evidence_ids.join(", ") ||
-                          "No analytical record"}
-                      </dd>
-                    </div>
-                    {proposition.metric && (
-                      <div>
-                        <dt>{metricLabel(proposition.metric)}</dt>
-                        <dd>
-                          {formatAskV2Value(
-                            proposition.value,
-                            proposition.unit,
-                          )}
-                        </dd>
-                      </div>
-                    )}
-                    {proposition.season && (
-                      <div>
-                        <dt>Season</dt>
-                        <dd>{proposition.season}</dd>
-                      </div>
-                    )}
-                    {uncertainty && (
-                      <div>
-                        <dt>Reliability</dt>
-                        <dd>{humanize(uncertainty.reliability)}</dd>
-                      </div>
-                    )}
-                  </dl>
-                  {proposition.qualifier && (
-                    <small>{proposition.qualifier}</small>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <p>No analytical evidence was approved for this response.</p>
-        )}
-        {response.uncertainty.length > 0 && (
-          <section>
-            <h3>Uncertainty</h3>
-            <ul>
-              {response.uncertainty.map((item) => {
-                const proposition = response.propositions.find(
-                  (candidate) =>
-                    candidate.uncertainty_id === item.uncertainty_id,
-                );
-                return (
-                  <li key={item.uncertainty_id}>
-                    <strong>{humanize(item.reliability)} reliability.</strong>{" "}
-                    {item.explanation}
-                    {item.lower !== null && item.upper !== null
-                      ? ` Interval: ${formatAskV2Value(item.lower, proposition?.unit ?? null)} to ${formatAskV2Value(item.upper, proposition?.unit ?? null)}.`
-                      : ""}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-        {response.limitations.length > 0 && (
-          <section>
-            <h3>Methodological limits</h3>
-            <ul>
-              {response.limitations.map((limitation) => (
-                <li key={limitation}>{limitation}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
-    </details>
-  );
-}
-
-function Provenance({ response }: { response: AskV2Response }) {
-  const versions = response.versions;
-  return (
-    <details className="ask-v2-details ask-v2-provenance">
-      <summary>Versions &amp; provenance</summary>
-      <dl className="ask-v2-version-grid">
-        <div>
-          <dt>Ask contract</dt>
-          <dd>{versions.ask_contract_version}</dd>
-        </div>
-        <div>
-          <dt>Evidence reducer</dt>
-          <dd>{versions.evidence_reducer_version ?? "Not applicable"}</dd>
-        </div>
-        <div>
-          <dt>Analytical data</dt>
-          <dd>{versions.analytical_data_version ?? "Unavailable"}</dd>
-        </div>
-        <div>
-          <dt>Analytical models</dt>
-          <dd>
-            {versions.analytical_model_versions.join(", ") || "Not applicable"}
-          </dd>
-        </div>
-        <div>
-          <dt>Answer mode</dt>
-          <dd>
-            {response.answer_mode === "grounded_ai"
-              ? "Grounded AI"
-              : "Deterministic"}
-          </dd>
-        </div>
-        {versions.planner_model_version && (
-          <div>
-            <dt>Planner model</dt>
-            <dd>{versions.planner_model_version}</dd>
-          </div>
-        )}
-        {versions.synthesizer_model_version && (
-          <div>
-            <dt>Synthesizer model</dt>
-            <dd>{versions.synthesizer_model_version}</dd>
-          </div>
-        )}
-      </dl>
-    </details>
   );
 }
 
@@ -357,7 +209,7 @@ export function AskV2AssistantTurn({
         <p>
           {turn.retryAttempt > 0
             ? "The analytics API is waking up. Retrying automatically…"
-            : "Reviewing approved project evidence…"}
+            : "Analyzing the question…"}
         </p>
       </div>
     );
@@ -367,7 +219,7 @@ export function AskV2AssistantTurn({
       <div className="ask-v2-assistant ask-v2-error" role="alert">
         <AlertTriangle aria-hidden="true" />
         <div>
-          <strong>Published evidence could not be loaded.</strong>
+          <strong>Published data could not be loaded.</strong>
           <p>{turn.error}</p>
           <button
             className="button button-secondary"
@@ -385,27 +237,14 @@ export function AskV2AssistantTurn({
   }
   const response = turn.response;
   if (!response) return null;
-  const counterfactual = isCounterfactualResponse(response);
+
   return (
     <article className="ask-v2-assistant">
-      <header className="ask-v2-answer-header">
-        <div>
-          <ShieldCheck aria-hidden="true" />
-          <span
-            className={`ask-v2-status status-${response.answerability.toLowerCase()}`}
-          >
-            {answerabilityLabels[response.answerability]}
-          </span>
-        </div>
-        <ModeBadge response={response} />
-      </header>
       <section
         className="ask-v2-direct-answer"
         aria-labelledby={`answer-${turn.id}`}
       >
-        <p className="eyebrow">
-          {counterfactual ? "What we can compare" : "Answer"}
-        </p>
+        <p className="eyebrow">Answer</p>
         <h2
           ref={heading}
           tabIndex={-1}
@@ -438,61 +277,18 @@ export function AskV2AssistantTurn({
             </div>
           </section>
         )}
-      <EntityLinks response={response} />
-      <ComparisonFrame response={response} turnId={turn.id} />
-      <AlignmentFrame response={response} />
-      <EvidenceCards response={response} turnId={turn.id} />
-      {response.unsupported_portions.length > 0 && (
-        <section
-          className="ask-v2-unsupported"
-          aria-labelledby={`unsupported-${turn.id}`}
-        >
-          <AlertTriangle aria-hidden="true" />
-          <div>
-            <h3 id={`unsupported-${turn.id}`}>
-              {counterfactual
-                ? "What we cannot estimate"
-                : "What the model can't estimate"}
-            </h3>
-            {response.unsupported_portions.map((portion) => (
-              <div key={`${portion.reason_code}:${portion.description}`}>
-                <strong>{portion.description}</strong>
-                <p>{portion.explanation}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-      {response.follow_ups.length > 0 && (
-        <section
-          className="ask-v2-followups"
-          aria-labelledby={`followups-${turn.id}`}
-        >
-          <h3 id={`followups-${turn.id}`}>Keep exploring</h3>
-          <div>
-            {response.follow_ups.map((followUp) => (
-              <button
-                type="button"
-                key={`${followUp.label}:${followUp.question}`}
-                onClick={() => onFollowUp(followUp.question)}
-              >
-                <CheckCircle2 aria-hidden="true" /> {followUp.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      <EvidenceDetails response={response} />
-      <Provenance response={response} />
+      <KeyNumbers response={response} />
+      <PublicLimitation response={response} />
+      <KeepExploring
+        response={response}
+        turnId={turn.id}
+        onFollowUp={onFollowUp}
+      />
       {turn.contextTrimmed && (
         <p className="ask-v2-context-note">
           Earlier turns remain visible but are no longer being used as context.
         </p>
       )}
-      <footer className="ask-v2-authority-note">
-        <Database aria-hidden="true" /> Analytics first. Language assistance
-        cannot expand what the evidence supports.
-      </footer>
     </article>
   );
 }

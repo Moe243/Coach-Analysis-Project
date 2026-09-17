@@ -180,6 +180,24 @@ describe("applyGraphSelection", () => {
     core.destroy();
   });
 
+  it("highlights multiple canonical people and the union of their branches", () => {
+    const core = branchCore();
+    applyGraphSelection(core, ["coach:a", "coach:b"]);
+    expect(core.elements(".is-faded")).toHaveLength(0);
+    for (const id of [
+      "appearance:coach:a:one",
+      "appearance:coach:b:two",
+      "team:one",
+      "team:two",
+      "appearance:qb:a:one",
+      "appearance:qb:b:two",
+    ]) {
+      expect(core.getElementById(id).hasClass("is-highlighted")).toBe(true);
+    }
+    expect(core.$(":selected")).toHaveLength(2);
+    core.destroy();
+  });
+
   it("highlights an entire fixed Journey branch through branch metadata", () => {
     const core = cytoscape({
       headless: true,

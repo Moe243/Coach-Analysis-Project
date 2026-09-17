@@ -142,6 +142,7 @@ class ConclusionEngine:
         scheme_metric = requested_metric if requested_metric in SCHEME_FEATURE_UNITS else None
         if question_type in {
             QuestionType.QB_HISTORY,
+            QuestionType.QB_COACHING_CONTEXT,
             QuestionType.COMPARISON,
             QuestionType.CAREER_COUNTERFACTUAL,
         }:
@@ -456,7 +457,7 @@ class ConclusionEngine:
                         f"{fields['role'].replace('_', ' ')} assignment with "
                         f"{team.display_name} in {record.season} "
                         f"(weeks {fields['start_week']}–{fields['end_week']}; "
-                        f"{fields['interval_basis']})."
+                        "recorded assignment interval)."
                     ),
                     evidence=(record,),
                     subject=coach.display_name,
@@ -465,7 +466,7 @@ class ConclusionEngine:
                     value=fields["role"],
                     season=record.season,
                     qualifier="Verified source-backed assignment.",
-                    importance=85,
+                    importance=87 if fields["role"] == "head_coach" else 85,
                 )
             )
         return result

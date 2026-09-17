@@ -81,7 +81,7 @@ test("primary, preview-alias, and legacy routes preserve browser navigation", as
   await expect(page).toHaveURL(/\/ask\/legacy$/);
 });
 
-test("Josh Allen answer leads with evidence and supports a contextual follow-up", async ({
+test("Josh Allen answer leads with key numbers and supports a contextual follow-up", async ({
   page,
 }) => {
   await mockAskV2(page, (question) =>
@@ -100,9 +100,19 @@ test("Josh Allen answer leads with evidence and supports a contextual follow-up"
       name: "Answer to How did Josh Allen perform in 2022?",
     }),
   ).toContainText("0.237 EPA/dropback");
+  await expect(
+    page.getByRole("heading", { name: "Key numbers" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".ask-v2-explore-grid").first().locator(":scope > *"),
+  ).toHaveCount(4);
+  await expect(
+    page.getByRole("link", { name: /View Josh Allen's career tree/ }),
+  ).toHaveAttribute(
+    "href",
+    "/network?mode=qb_journey&player_id=00-0034857&start_season=2022&end_season=2022&selected=qb%3A00-0034857",
+  );
   await expectNoAxeViolations(page);
-  await page.getByText("Evidence & methodology").click();
-  await expect(page.getByText("Historical Fact")).toBeVisible();
   await page.getByRole("button", { name: "View 2023" }).click();
   await expect(
     page.getByRole("region", {
@@ -133,8 +143,13 @@ test("Reid versus Tomlin remains neutral and carries context into Why", async ({
     page,
     "Who has stronger QB-development evidence, Andy Reid or Mike Tomlin?",
   );
-  await expect(page.getByText("Comparison frame")).toBeVisible();
-  await expect(page.getByText(/No overall winner is implied/)).toBeVisible();
+  await expect(page.getByText(/Andy Reid has clearer/)).toBeVisible();
+  await expect(
+    page.getByText(/not proof of better QB development/),
+  ).toBeVisible();
+  await expect(
+    page.locator(".ask-v2-explore-grid").first().locator(":scope > *"),
+  ).toHaveCount(4);
   await expectNoAxeViolations(page);
   await submit(page, "Why?");
   await expect.poll(() => requests.length).toBe(2);
@@ -149,7 +164,7 @@ test("Reid versus Tomlin remains neutral and carries context into Why", async ({
   });
   if (testInfo.project.name === "mobile") {
     const columns = await page
-      .locator(".ask-v2-comparison > div")
+      .locator(".ask-v2-explore-grid")
       .first()
       .evaluate((element) =>
         getComputedStyle(element).gridTemplateColumns.split(" "),
@@ -173,16 +188,22 @@ test("partial alignment and counterfactual questions remain useful without fake 
   );
   await page.goto("/ask");
   await submit(page, "How would Kyler Murray fit Minnesota?");
-  await expect(page.getByText("Comparable dimensions")).toBeVisible();
-  await expect(page.getByText(/Descriptive alignment only/)).toBeVisible();
+  await expect(
+    page.getByText(/measured tendencies can be compared/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", {
+      name: /Explore Kyler Murray \+ Minnesota Vikings/,
+    }),
+  ).toHaveAttribute(
+    "href",
+    "/network?mode=team_history&team_id=team_min&start_season=2010&end_season=2025&selected=qb%3A00-0035228",
+  );
   await expect(page.getByText(/Fit Score/i)).toHaveCount(0);
   await expectNoAxeViolations(page);
   await submit(page, "What if Chicago drafted Patrick Mahomes?");
   await expect(
-    page.getByRole("heading", { name: "What we cannot estimate" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText(/validated alternate-career model/),
+    page.getByText(/cannot reliably estimate an alternate career/),
   ).toBeVisible();
 });
 
@@ -217,7 +238,7 @@ test("failed evidence request is an accessible retry state", async ({
   await page.goto("/ask");
   await submit(page, "How did Josh Allen perform in 2022?");
   await expect(page.getByRole("alert")).toContainText(
-    "Published evidence could not be loaded",
+    "Published data could not be loaded",
   );
   await expect(
     page.getByRole("button", { name: "Retry this question" }),

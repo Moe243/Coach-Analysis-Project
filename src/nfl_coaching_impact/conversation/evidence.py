@@ -651,6 +651,54 @@ class EvidenceService:
             ),
         )
 
+    def qb_coaching_context(
+        self, player_id: str, season: int | None = None, *, best_seasons: bool = False
+    ) -> ReducerResult:
+        """Bounded factual navigation context; no coach effect or exposure is inferred."""
+        self._entity(EntityKind.QB, player_id)
+        rows = [
+            row
+            for row in self.analytical.index["history"].get(player_id, ())
+            if (season is None or row["season"] == season)
+            and (not best_seasons or row["qualifies_default"])
+            and row["epa_per_dropback"] is not None
+        ]
+        rows.sort(
+            key=lambda row: (
+                -row["epa_per_dropback"] if best_seasons else -row["season"],
+                -row["season"],
+                row["team_id"],
+            )
+        )
+        ranked = []
+        uncertainty = []
+        models = set()
+        for row in rows[:3]:
+            history, intervals = self._history_evidence(row)
+            ranked.append(history)
+            uncertainty.extend(intervals)
+            if row["model_version"]:
+                models.add(row["model_version"])
+            for assignment in self._assignments_team_season.get(
+                (row["team_id"], row["season"]), ()
+            ):
+                if assignment["verification_status"] == "verified":
+                    ranked.append(self._assignment_evidence(assignment))
+        return ReducerResult(
+            ranked=tuple(ranked),
+            uncertainty=tuple(uncertainty),
+            model_versions=tuple(sorted(models)),
+            limitations=(
+                "Coaching context means a verified assignment in the same team-season, "
+                "not exact weekly QB exposure or proof of causation.",
+                "Only the three strongest recorded qualifying QB-team-seasons by EPA/dropback "
+                "are selected; qualifying means at least 200 dropbacks."
+                if best_seasons
+                else "Only the three most recent recorded QB-team-seasons are shown.",
+                "Historical coverage is 2010–2025; this is not an all-career ranking.",
+            ),
+        )
+
     def coach_qb_context(
         self,
         coach_id: str,

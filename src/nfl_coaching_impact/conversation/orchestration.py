@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 
 from .answerability import determine_answerability
@@ -76,6 +77,35 @@ class AskV2Orchestrator:
         authorization = self.authorizer.authorize(plan.proposal, plan.resolved_by_index)
         result = self._execute(plan, authorization)
         package = self._package(plan, authorization, result, exact_entities)
+        if plan.proposal.question_type is QuestionType.QB_COACHING_CONTEXT:
+            # Related navigation identities come only from retrieved verified assignments,
+            # never from assistant prose or inferred play-calling duties.
+            assignments = [
+                record for record in package.evidence if record.kind.value == "COACH_ASSIGNMENT"
+            ]
+            head_counts = Counter(
+                record.entities[0].id
+                for record in assignments
+                if next(value.value for value in record.values if value.name == "role")
+                == "head_coach"
+            )
+            related = sorted(
+                assignments,
+                key=lambda record: (
+                    next(value.value for value in record.values if value.name == "role")
+                    != "head_coach",
+                    -head_counts[record.entities[0].id],
+                    -(record.season or 0),
+                    record.evidence_id,
+                ),
+            )
+            linked = list(exact_entities)
+            for kind in ("coach", "team"):
+                for record in related:
+                    for entity in record.entities:
+                        if entity.kind.value == kind and entity not in linked and len(linked) < 8:
+                            linked.append(entity)
+            exact_entities = tuple(linked)
         answerability = determine_answerability(
             plan.proposal.question_type,
             plan.resolutions,
@@ -96,6 +126,7 @@ class AskV2Orchestrator:
             requested_metric=plan.requested_metric,
             young_only=plan.young_only,
             unsupported_season=plan.unsupported_season,
+            best_seasons=plan.best_seasons,
         )
         reason = synthesis.reason_code
         if answerability is Answerability.CLARIFICATION_REQUIRED:
@@ -176,16 +207,31 @@ class AskV2Orchestrator:
                     season,
                     young_only=plan.young_only,
                 )
+            elif task is AnalyticalTask.GET_QB_COACHING_CONTEXT:
+                result = self.evidence.qb_coaching_context(
+                    entities[0].id,
+                    season,
+                    best_seasons=plan.best_seasons,
+                )
             elif task is AnalyticalTask.GET_TEAM_SCHEME:
                 features = self._scheme_features(plan.requested_metric)
                 result = self.evidence.team_scheme(entities[0].id, season, features)
             elif task is AnalyticalTask.GET_PLAYCALLER_PCAE:
                 result = self.evidence.pcae(entities[0].id, season)
             elif task is AnalyticalTask.COMPARE_QB_MEASUREMENTS:
+                comparison_season = season
+                if comparison_season is None:
+                    # Preserve retired participants in unspecified historical context;
+                    # an explicit requested season is never replaced with another year.
+                    shared_seasons = set(range(2010, 2026))
+                    for entity in entities[:2]:
+                        rows = self.evidence.analytical.index["history"].get(entity.id, ())
+                        shared_seasons.intersection_update(row["season"] for row in rows)
+                    comparison_season = max(shared_seasons, default=2025)
                 result = self.evidence.compare_qbs(
                     entities[0].id,
                     entities[1].id,
-                    season or 2025,
+                    comparison_season,
                 )
             elif task is AnalyticalTask.COMPARE_TEAM_SCHEME:
                 result = self.evidence.compare_teams_scheme(
