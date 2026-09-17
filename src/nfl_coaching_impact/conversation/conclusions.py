@@ -228,10 +228,15 @@ class ConclusionEngine:
                 difference = first_fields[value_key] - second_fields[value_key]
                 unit = first_fields.get("unit") or metric_unit(metric)
                 renderer = percent if unit in {"rate", "rate_difference"} else number
+                metric_label = {
+                    "epa_per_dropback": "EPA/dropback",
+                    "performance_above_expectation": "PAE",
+                    "cpoe": "CPOE",
+                }.get(metric, metric.replace("_", " "))
                 statement = (
                     f"{first_entity.display_name} was {renderer(first_fields[value_key])} and "
                     f"{second_entity.display_name} was {renderer(second_fields[value_key])} for "
-                    f"{metric.replace('_', ' ')} in {season}; the direct difference was "
+                    f"{metric_label} in {season}; the direct difference was "
                     f"{renderer(difference)}."
                 )
                 result.append(
@@ -516,8 +521,8 @@ class ConclusionEngine:
                         kind=ConclusionKind.HISTORICAL_FACT,
                         permission_id="permission_historical",
                         statement=(
-                            f"{coach.display_name} has {count} distinct verified "
-                            "same-team-season QB context observations in the selected scope."
+                            f"The recorded history links {coach.display_name}'s verified "
+                            f"coaching roles to {count} quarterback seasons on the same teams."
                         ),
                         evidence=(record,),
                         subject=coach.display_name,
@@ -701,6 +706,17 @@ class ConclusionEngine:
                 "the available comparison evidence; this is not proof of better QB development."
             )
             outcome = "clearer_direct_offensive_attribution"
+        role_labels = {
+            name: ", ".join(role.replace("_", " ") for role in sorted(roles[name]))
+            for name in names
+        }
+        role_details = "; ".join(
+            f"{name} — {role_labels[name] or 'no verified role recorded'}" for name in names
+        )
+        statement += (
+            " That distinction concerns documented responsibilities, not who made "
+            f"quarterbacks better. The verified roles in this history are: {role_details}."
+        )
         all_records = tuple(record for name in names for record in records[name])
         return self.proposition(
             kind=ConclusionKind.DESCRIPTIVE_COMPARISON,

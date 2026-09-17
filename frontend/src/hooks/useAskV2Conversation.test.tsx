@@ -69,6 +69,25 @@ it("retries transient 503 and network failures within the configured bound", asy
   expect(result.current.turns[0]?.retryAttempt).toBe(2);
 });
 
+it("does not expose raw API diagnostics in public errors", async () => {
+  const client = vi
+    .fn()
+    .mockRejectedValue(
+      new ApiError(
+        "publication_id=private /private/snapshot provider_internal_error",
+        500,
+      ),
+    );
+  const { result } = renderHook(() =>
+    useAskV2Conversation({ client, automaticRetryLimit: 0 }),
+  );
+  act(() => result.current.submit("How did Josh Allen perform?"));
+  await waitFor(() => expect(result.current.turns[0]?.status).toBe("error"));
+  expect(result.current.turns[0].error).toBe(
+    "The answer could not be loaded. Please retry this question.",
+  );
+});
+
 it("aborts and ignores a delayed request when the conversation is reset", async () => {
   const pending = deferred<AskV2Response>();
   const client = vi

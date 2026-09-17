@@ -6,11 +6,65 @@ import {
 import { buildKeepExploringActions } from "./askV2Exploration";
 
 describe("Ask v2 connected exploration", () => {
+  it("does not offer the just-answered coach question again as a continuation", () => {
+    const question = "Which quarterbacks shared Mike McCarthy's team-seasons?";
+    const actions = buildKeepExploringActions(
+      askV2Response({
+        entities: [
+          {
+            kind: "coach",
+            id: "coach-mike-mccarthy",
+            display_name: "Mike McCarthy",
+          },
+        ],
+        propositions: [],
+        evidence: [],
+        follow_ups: [
+          {
+            label: "Show verified offensive roles",
+            question: "Show verified offensive roles",
+          },
+        ],
+      }),
+      question,
+    );
+    expect(actions).toHaveLength(4);
+    expect(actions.some((action) => action.question === question)).toBe(false);
+    expect(actions[3].id).toBe("coach-network");
+  });
+  it("offers a coach four specific continuations rather than a generic Why button", () => {
+    const actions = buildKeepExploringActions(
+      askV2Response({
+        entities: [
+          {
+            kind: "coach",
+            id: "coach-mike-mccarthy",
+            display_name: "Mike McCarthy",
+          },
+        ],
+        propositions: [],
+        evidence: [],
+        follow_ups: [],
+      }),
+    );
+    expect(actions).toHaveLength(4);
+    expect(actions.map((action) => action.question).filter(Boolean)).toEqual([
+      "Which quarterbacks shared Mike McCarthy's team-seasons?",
+    ]);
+    expect(actions[3].href).toContain(
+      "mode=full_network&anchor=coach&coach_id=coach-mike-mccarthy",
+    );
+    expect(
+      actions.some((action) =>
+        /canonical|Explain the result/.test(action.description + action.label),
+      ),
+    ).toBe(false);
+  });
   it("builds exactly four canonical QB actions with season-aware URLs", () => {
     const actions = buildKeepExploringActions(askV2Response());
     expect(actions).toHaveLength(4);
     expect(actions.map((action) => action.href).filter(Boolean)).toEqual([
-      "/network?mode=qb_journey&player_id=00-0034857&start_season=2022&end_season=2022&selected=qb%3A00-0034857",
+      "/network?mode=qb_journey&player_id=00-0034857&start_season=2010&end_season=2025&selected=qb%3A00-0034857",
       "/statistics?player=Josh+Allen&season=2022",
     ]);
     expect(actions[2]).toMatchObject({
@@ -34,7 +88,7 @@ describe("Ask v2 connected exploration", () => {
     });
     expect(actions[2]).toMatchObject({
       kind: "navigate",
-      href: "/network?mode=team_history&team_id=team_min&start_season=2010&end_season=2025&selected=qb%3A00-0035228",
+      href: "/network?mode=full_network&anchor=all&start_season=2021&end_season=2025&selected=qb%3A00-0035228&highlights=qb%3A00-0035228%2Cteam-season%3Ateam_min%3A2021%2Cteam-season%3Ateam_min%3A2022%2Cteam-season%3Ateam_min%3A2023%2Cteam-season%3Ateam_min%3A2024%2Cteam-season%3Ateam_min%3A2025",
     });
     expect(actions).toEqual(
       expect.arrayContaining([

@@ -116,7 +116,7 @@ class DeterministicSynthesizer:
                         "These are the strongest recorded QB-team-seasons by EPA/dropback "
                         "with at least 200 dropbacks, within 2010–2025. "
                         if best_seasons
-                        else "These are the most recent recorded QB-team-seasons. "
+                        else "These are the recorded QB-team-seasons in the requested scope. "
                     )
                     + "Recorded staff context is not proof that one coach "
                     "caused the quarterback's performance.",
@@ -312,6 +312,8 @@ class DeterministicSynthesizer:
             )
         else:
             answer = direct.statement
+            if direct.predicate == "same_metric_descriptive_comparison":
+                answer += " This is a same-season comparison, not a career ranking."
         return answer
 
     @staticmethod

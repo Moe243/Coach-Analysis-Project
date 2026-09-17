@@ -153,6 +153,23 @@ describe("NetworkPage Relationship Explorer", () => {
     ).toBe(true);
   });
 
+  it("restores separate QB and team-season contexts without a hypothetical relationship", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=full_network&anchor=all&start_season=2024&end_season=2025&selected=qb%3Aqb-1&highlights=qb%3Aqb-1%2Cteam-season%3Ateam_hou%3A2025",
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(
+      screen.getByRole("button", { name: "Graph HOU 2025" }),
+    ).toHaveAttribute("data-highlighted", "true");
+    expect(
+      screen
+        .getAllByRole("button", { name: /Graph Test Quarterback/ })
+        .some((node) => node.dataset.highlighted === "true"),
+    ).toBe(true);
+  });
+
   it("shows one coach across multiple teams in Coach Journey", async () => {
     installApiFixture();
     renderRoute(
@@ -297,13 +314,32 @@ describe("NetworkPage Relationship Explorer", () => {
       "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025&roles=quarterbacks_coach",
     );
     await screen.findByRole("heading", { name: "Relationship explorer list" });
-    expect(screen.queryByText(/Assignment den-/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Coaching assignment")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/QB-team-season qb-1 · team_den · 2024/),
+      screen.getByRole("heading", { name: "Test Quarterback → DEN 2024" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/QB-team-season qb-2 · team_den · 2025/),
+      screen.getByRole("heading", { name: "Reserve Quarterback → DEN 2025" }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps source-backed metadata without exposing internal identifiers or versions", async () => {
+    installApiFixture();
+    renderRoute(
+      <NetworkPage />,
+      "/network?mode=team_history&team_id=team_den&start_season=2024&end_season=2025",
+    );
+    await screen.findByRole("heading", { name: "Relationship explorer list" });
+    expect(document.body.textContent).not.toMatch(
+      /API v|canonical|Assignment den-|QB-team-season qb-|Publication c|Metric checkpoint/,
+    );
+    expect(screen.getAllByText("Coaching assignment").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByText(/confidence/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: /source/i }).length,
+    ).toBeGreaterThan(0);
   });
 
   it("renders unavailable PAE as an em dash instead of zero", async () => {
@@ -312,9 +348,9 @@ describe("NetworkPage Relationship Explorer", () => {
       <NetworkPage />,
       "/network?mode=team_history&team_id=team_den&start_season=2025&end_season=2025",
     );
-    const card = await screen.findByText(
-      /QB-team-season qb-2 · team_den · 2025/,
-    );
+    const card = await screen.findByRole("heading", {
+      name: "Reserve Quarterback → DEN 2025",
+    });
     const article = card.closest("article");
     expect(article).not.toBeNull();
     expect(article).toHaveTextContent("PAE—");
@@ -375,7 +411,7 @@ describe("NetworkPage Relationship Explorer", () => {
       expect(screen.getByText("Select an entity")).toBeInTheDocument(),
     );
     expect(
-      screen.getByText(/QB-team-season qb-1 · team_den · 2024/),
+      screen.getByRole("heading", { name: "Test Quarterback → DEN 2024" }),
     ).toBeInTheDocument();
   });
 

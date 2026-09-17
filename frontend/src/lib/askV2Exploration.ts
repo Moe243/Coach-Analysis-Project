@@ -131,7 +131,8 @@ function fullNetworkHref(
   const people = entities.filter(
     (entity) => entity.kind === "qb" || entity.kind === "coach",
   );
-  if (people.length < 2) return undefined;
+  const teams = entities.filter((entity) => entity.kind === "team");
+  if (people.length === 0 || people.length + teams.length < 2) return undefined;
   const historicalSeasons = observedSeasonContext(seasons);
   // A retired player's recorded season must not be silently replaced by a window
   // containing only the other participant. Scope the main pair's observed history.
@@ -149,6 +150,9 @@ function fullNetworkHref(
   const nodeIds = people.map((entity) =>
     entity.kind === "qb" ? `qb:${entity.id}` : `coach:${entity.id}`,
   );
+  for (const team of teams)
+    for (let season = startSeason; season <= endSeason; season += 1)
+      nodeIds.push(`team-season:${team.id}:${season}`);
   return addQuery("/network", {
     mode: "full_network",
     anchor: "all",
@@ -187,6 +191,7 @@ function actionKey(action: AskV2ExploreAction) {
 
 export function buildKeepExploringActions(
   response: AskV2Response,
+  currentQuestion?: string,
 ): AskV2ExploreAction[] {
   if (response.answerability === "CLARIFICATION_REQUIRED") return [];
   const entities = response.entities;
@@ -200,7 +205,12 @@ export function buildKeepExploringActions(
   const add = (action: AskV2ExploreAction) => candidates.push(action);
 
   const addJourney = (entity: AskV2ResolvedEntity) => {
-    const href = explorerHref([entity], seasons);
+    // A career tree must show the supported career, not just the answer's one season.
+    // Season-specific statistics and relationship actions retain the answer's scope.
+    const href = explorerHref(
+      [entity],
+      entity.kind === "qb" ? undefined : seasons,
+    );
     if (!href) return;
     add({
       id: `${entity.kind}-journey:${entity.id}`,
@@ -283,13 +293,11 @@ export function buildKeepExploringActions(
   }
 
   const relationshipHref =
-    qbs.length + coaches.length >= 2
+    qbs.length + coaches.length >= 2 || (qb && team)
       ? fullNetworkHref(entities, seasons, response)
-      : qb && team
-        ? explorerHref([qb, team], seasons)
-        : coaches[0] && team
-          ? explorerHref([coaches[0], team], seasons)
-          : undefined;
+      : coaches[0] && team
+        ? explorerHref([coaches[0], team], seasons)
+        : undefined;
   if (relationshipHref) {
     add({
       id: "relationship-explorer",
@@ -302,7 +310,7 @@ export function buildKeepExploringActions(
               .join(" + ")}`
           : "Explore the relationship context",
       description:
-        "Open supported history; entities appear only where observed.",
+        "Explore observed histories, not a hypothetical coaching relationship.",
       href: relationshipHref,
       entities: canonicalEntities,
       ...(seasons ? { seasons } : {}),
@@ -328,7 +336,7 @@ export function buildKeepExploringActions(
       id: "follow-up:qb-comparison-context",
       kind: "ask",
       label: "Compare the coaches around their best seasons",
-      description: "Continue with both quarterbacks in canonical context.",
+      description: "Review recorded coaching context for both quarterbacks.",
       question: `Which coaches were involved in ${possessive(qbs[0].display_name)} and ${possessive(qbs[1].display_name)} best seasons?`,
       entities: canonicalEntities,
       ...(seasons ? { seasons } : {}),
@@ -376,9 +384,9 @@ export function buildKeepExploringActions(
     add({
       id: "follow-up:coach-context",
       kind: "ask",
-      label: `Which QB contexts are verified?`,
+      label: `Which quarterbacks shared ${possessive(coaches[0].display_name)} teams?`,
       description: `Review source-backed context for ${coaches[0].display_name}.`,
-      question: `Which quarterback contexts are directly verified for ${coaches[0].display_name}?`,
+      question: `Which quarterbacks shared ${possessive(coaches[0].display_name)} team-seasons?`,
       entities: [canonical(coaches[0])],
       ...(seasons ? { seasons } : {}),
     });
@@ -396,20 +404,40 @@ export function buildKeepExploringActions(
 
   if (qbs.length >= 2 || coaches.length >= 2) addBackendFollowUps();
 
-  if (canonicalEntities.length > 0) {
+  if (coaches.length === 1 && !qb && !team) {
+    const endSeason = observedSeasonContext(seasons).end_season;
     add({
-      id: "follow-up:explain",
-      kind: "ask",
-      label: "Explain the result",
-      description: "Ask for a plain-language explanation of this answer.",
-      question: "Why?",
-      entities: canonicalEntities,
-      ...(seasons ? { seasons } : {}),
+      id: "coach-network",
+      kind: "navigate",
+      label: `Explore ${possessive(coaches[0].display_name)} quarterback network`,
+      description:
+        "See recorded team-season connections, not individual coaching effects.",
+      href: addQuery("/network", {
+        mode: "full_network",
+        anchor: "coach",
+        coach_id: coaches[0].id,
+        start_season: Math.max(2010, endSeason - 4),
+        end_season: endSeason,
+        selected: `coach:${coaches[0].id}`,
+      }),
+      entities: [canonical(coaches[0])],
     });
   }
 
   const unique = new Map<string, AskV2ExploreAction>();
+  const normalizeQuestion = (question: string) =>
+    question
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
   for (const action of candidates) {
+    if (
+      currentQuestion &&
+      action.kind === "ask" &&
+      action.question &&
+      normalizeQuestion(action.question) === normalizeQuestion(currentQuestion)
+    )
+      continue;
     const key = actionKey(action);
     if (!unique.has(key)) unique.set(key, action);
   }

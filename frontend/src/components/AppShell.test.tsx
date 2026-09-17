@@ -7,7 +7,7 @@ import { AppShell } from "./AppShell";
 vi.mock("../api/client", () => ({ apiGet: vi.fn() }));
 
 describe("public Ask shell", () => {
-  beforeEach(() => vi.mocked(apiGet).mockResolvedValue(versions));
+  beforeEach(() => vi.mocked(apiGet).mockReset().mockResolvedValue(versions));
 
   it("hides analytical version metadata on the public Ask route", async () => {
     renderRoute(<AppShell />, "/ask");
@@ -17,8 +17,12 @@ describe("public Ask shell", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("preserves version metadata on analytical routes", async () => {
+  it("hides version metadata on connected analytical routes too", async () => {
     renderRoute(<AppShell />, "/statistics");
-    expect(await screen.findByText(/Coach model/)).toBeVisible();
+    expect(await screen.findByText(/Adjusted associations/)).toBeVisible();
+    expect(
+      screen.queryByText(/Coach model|Version metadata/),
+    ).not.toBeInTheDocument();
+    expect(apiGet).not.toHaveBeenCalled();
   });
 });

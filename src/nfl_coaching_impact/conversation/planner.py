@@ -380,6 +380,7 @@ class DeterministicPlanner:
             re.fullmatch(
                 r"(?:why|why .*|what about .*|how about .*|and .*|now .*|only .*|"
                 r"who is better|which is better|by how much|"
+                r"who (?:coached|coaches|was coaching) (?:him|her|them|the quarterback)|"
                 r"which parts are descriptive rather than predictive)",
                 question,
             )
@@ -409,6 +410,13 @@ class DeterministicPlanner:
         result = list(current)
         if follow_up and not current:
             result = list(context)
+            if re.fullmatch(
+                r"who (?:coached|coaches|was coaching) (?:him|her|them|the quarterback)",
+                question,
+            ):
+                # Staff identities added for navigation are not the pronoun's subject.
+                qbs = [entity for entity in context if entity.kind is EntityKind.QB]
+                result = qbs if len(qbs) == 1 or question.endswith("them") else []
         elif follow_up:
             for entity in context:
                 surname = normalize(entity.display_name).split()[-1]
@@ -555,7 +563,7 @@ class DeterministicPlanner:
             return QuestionType.QB_PROJECTION
         if (
             EntityKind.QB in kinds
-            and re.search(r"\b(coach|coaches|coaching|staff)\b", question)
+            and re.search(r"\b(coach|coaches|coached|coaching|staff)\b", question)
             and EntityKind.COACH not in kinds
         ):
             return QuestionType.QB_COACHING_CONTEXT
@@ -579,7 +587,8 @@ class DeterministicPlanner:
         ):
             return QuestionType.TEAM_SCHEME
         if EntityKind.COACH in kinds and re.search(
-            r"\b(coach|role|staff|history|play caller|verified|assignment)\b", question
+            r"\b(coach|role|staff|history|play caller|verified|assignment|who was|who is)\b",
+            question,
         ):
             return QuestionType.COACH_HISTORY
         if EntityKind.QB in kinds and re.search(

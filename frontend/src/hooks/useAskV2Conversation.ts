@@ -46,7 +46,9 @@ interface UseAskV2ConversationOptions {
 }
 
 function publicError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
+  // API error detail may contain internal diagnostics; never render it publicly.
+  if (error instanceof ApiError)
+    return "The answer could not be loaded. Please retry this question.";
   if (error instanceof TypeError)
     return "The analytics API could not be reached.";
   return "The analytics request could not be completed.";

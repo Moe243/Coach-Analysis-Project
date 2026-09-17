@@ -43,9 +43,9 @@ const modeLabels: Record<RelationshipMode, string> = {
 };
 const modeDescriptions: Record<RelationshipMode, string> = {
   coach_journey:
-    "Follow one canonical coach across teams, seasons, roles, and QB contexts.",
+    "Follow one coach across teams, seasons, roles, and QB contexts.",
   qb_journey:
-    "Follow one canonical quarterback across every visible QB-team-season record.",
+    "Follow one quarterback across every visible QB-team-season record.",
   team_history:
     "Read a team's coaching assignments and QB facts on a fixed chronological season spine.",
   full_network:
@@ -78,7 +78,7 @@ function relationshipTitle(
 ): string {
   const source = nodes.get(relationship.source_node_id);
   const target = nodes.get(relationship.target_node_id);
-  return `${source ? nodeLabel(source) : relationship.source_node_id} → ${target ? nodeLabel(target) : relationship.target_node_id}`;
+  return `${source ? nodeLabel(source) : "Person unavailable"} → ${target ? nodeLabel(target) : "Team-season unavailable"}`;
 }
 
 function RelationshipBadges({ relationship }: { relationship: Relationship }) {
@@ -205,7 +205,7 @@ function RelationshipTimeline({
                         onClick={() => onSelect(assignment.source_node_id)}
                       >
                         <strong>
-                          {coach ? nodeLabel(coach) : assignment.coach_id}
+                          {coach ? nodeLabel(coach) : "Coach unavailable"}
                         </strong>
                         <span>
                           {roleLabel(assignment.role)} · Weeks{" "}
@@ -237,7 +237,9 @@ function RelationshipTimeline({
                         key={qbFact.relationship_id}
                         onClick={() => onSelect(qbFact.source_node_id)}
                       >
-                        <strong>{qb ? nodeLabel(qb) : qbFact.player_id}</strong>
+                        <strong>
+                          {qb ? nodeLabel(qb) : "Quarterback unavailable"}
+                        </strong>
                         <QbMetrics relationship={qbFact} />
                         <RelationshipBadges relationship={qbFact} />
                       </button>
@@ -281,7 +283,11 @@ export function NetworkPage() {
     () =>
       (params.get("highlights") ?? "")
         .split(",")
-        .filter((value) => /^(coach|qb):[A-Za-z0-9._-]+$/.test(value))
+        .filter((value) =>
+          /^(coach|qb):[A-Za-z0-9._-]+$|^team-season:[A-Za-z0-9._-]+:20\d{2}$/.test(
+            value,
+          ),
+        )
         .slice(0, 8),
     [params],
   );
@@ -655,7 +661,7 @@ export function NetworkPage() {
       <div className="page-heading">
         <div>
           <p className="eyebrow">
-            Canonical entities · Source-backed intervals · API v1.5
+            Coaches, quarterbacks and teams · Source-backed intervals
           </p>
           <h1>Relationship Explorer</h1>
           <p>
@@ -1060,7 +1066,7 @@ export function NetworkPage() {
         <EmptyState
           title={`Choose a ${mode === "qb_journey" ? "quarterback" : mode === "coach_journey" ? "coach" : "team"}`}
         >
-          Select a canonical anchor to build this bounded relationship view.
+          Select a coach, quarterback or team to explore this history.
         </EmptyState>
       ) : !graph || graph.relationships.length === 0 ? (
         <EmptyState title="No visible relationships">
@@ -1074,10 +1080,10 @@ export function NetworkPage() {
             <div className="graph-panel">
               <div className="graph-toolbar">
                 <p>
-                  <strong>{graph.nodes.length}</strong> canonical entities ·{" "}
-                  <strong>{graph.appearanceCount}</strong>{" "}
+                  <strong>{graph.nodes.length}</strong> people and team-seasons
+                  · <strong>{graph.appearanceCount}</strong>{" "}
                   {mode === "coach_journey" || mode === "qb_journey"
-                    ? "canonical people"
+                    ? "people"
                     : "chronological appearances"}{" "}
                   · <strong>{graph.relationships.length}</strong> relationships
                   · {startSeason}–{endSeason}
@@ -1315,13 +1321,13 @@ export function NetworkPage() {
                 </h2>
               </div>
               <p>
-                Every card preserves the authoritative relationship grain and
-                the same Select and Focus actions.
+                Explore the same coaching roles, season results and source links
+                with Select and Focus.
               </p>
             </div>
             <div
               className="accessible-entity-list"
-              aria-label="Visible canonical entities"
+              aria-label="Visible people and team-seasons"
             >
               {graph.nodes.map((node) => (
                 <article
@@ -1366,7 +1372,6 @@ export function NetworkPage() {
                       held this role. No coach node or assignment is created.
                     </p>
                     <StatusBadge value="verified no designated role" />
-                    <small>Evidence {row.evidence_version}</small>
                     {row.source_urls.length > 0 && (
                       <ul className="relationship-citations">
                         {row.source_urls.map((sourceUrl) => (
@@ -1391,8 +1396,8 @@ export function NetworkPage() {
                 <article key={relationship.relationship_id}>
                   <p className="relationship-grain">
                     {relationship.relationship_type === "coach_assignment"
-                      ? `Assignment ${relationship.assignment_key}`
-                      : `QB-team-season ${relationship.player_id} · ${relationship.team_id} · ${relationship.season}`}
+                      ? "Coaching assignment"
+                      : "Quarterback team-season"}
                   </p>
                   <h3>{relationshipTitle(relationship, nodeMap)}</h3>
                   {relationship.relationship_type === "coach_assignment" ? (
@@ -1425,9 +1430,6 @@ export function NetworkPage() {
                                 {citation.source_title ??
                                   "Open assignment source"}
                               </a>
-                              {citation.evidence_locator && (
-                                <small>{citation.evidence_locator}</small>
-                              )}
                             </li>
                           ))}
                         </ul>
@@ -1441,11 +1443,6 @@ export function NetworkPage() {
                       </p>
                       <QbMetrics relationship={relationship} />
                       <RelationshipBadges relationship={relationship} />
-                      <small>
-                        Metric {relationship.metric_version} · Model{" "}
-                        {relationship.model_version ?? "unavailable"} ·
-                        Publication {relationship.publication_version}
-                      </small>
                     </>
                   )}
                   <div className="relationship-actions">

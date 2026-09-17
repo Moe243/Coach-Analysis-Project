@@ -11,11 +11,12 @@ import { apiGet } from "../api/client";
 import type { Versions } from "../api/contracts";
 
 export function AppShell() {
-  const publicAsk = ["/ask", "/ask/preview"].includes(useLocation().pathname);
+  const legacyAsk = useLocation().pathname === "/ask/legacy";
   const versions = useQuery({
     queryKey: ["versions"],
     queryFn: ({ signal }) => apiGet<Versions>("/versions", {}, signal),
     staleTime: Infinity,
+    enabled: legacyAsk,
   });
   return (
     <div className="app-shell">
@@ -59,7 +60,7 @@ export function AppShell() {
           <Activity aria-hidden="true" />
           <span>Adjusted associations, not causal estimates.</span>
         </div>
-        {!publicAsk && (
+        {legacyAsk && (
           <p>
             {versions.data
               ? `Data ${versions.data.expected_data_version} · Coach model ${versions.data.coach_model_version}`

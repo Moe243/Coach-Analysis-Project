@@ -139,9 +139,7 @@ export function CoachDetailPage() {
       </Link>
       <header className="profile-header">
         <div>
-          <p className="eyebrow">
-            Coach profile · {profile.data.coach.coach_id}
-          </p>
+          <p className="eyebrow">Coach profile</p>
           <h1>{profile.data.coach.canonical_name}</h1>
           <p>
             {history.length} published role intervals ·{" "}
@@ -235,15 +233,14 @@ export function CoachDetailPage() {
                   </div>
                 </dl>
                 <small>
-                  {row.rank_exclusion_reason ??
-                    "Ranking eligibility is not supported."}
+                  These exploratory estimates do not support a coaching ranking.
                 </small>
               </article>
             ))}
           </div>
         ) : (
           <EmptyState title="No model row">
-            This coach has assignment history but no checkpoint-six effect row.
+            This coach has assignment history but no eligible research estimate.
           </EmptyState>
         )}
       </section>
@@ -277,7 +274,6 @@ export function CoachDetailPage() {
                     {row.is_shared && <StatusBadge value="shared duty" />}
                     {row.is_interim && <StatusBadge value="interim" />}
                   </div>
-                  {row.notes && <small>{row.notes}</small>}
                 </div>
               </article>
             ))}
@@ -349,7 +345,7 @@ export function CoachDetailPage() {
           </div>
         ) : (
           <EmptyState title="No citation rows">
-            Only source-backed citations present in checkpoint seven are shown.
+            Only recorded source-backed assignment citations are shown.
           </EmptyState>
         )}
       </section>

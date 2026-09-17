@@ -47,6 +47,65 @@ function clarificationResponse() {
 describe("Ask Anything v2", () => {
   beforeEach(() => vi.mocked(askQuestionV2).mockReset());
 
+  it("does not collapse multiple team stints into a misleading season key number", async () => {
+    const response = askV2Response();
+    vi.mocked(askQuestionV2).mockResolvedValue(
+      askV2Response({
+        answer:
+          "Trent Edwards had separate Buffalo and Jacksonville records in 2010.",
+        propositions: [
+          {
+            ...response.propositions[0],
+            subject: "Trent Edwards",
+            season: 2010,
+            value: -0.1,
+          },
+          {
+            ...response.propositions[0],
+            proposition_id: "second-stint",
+            subject: "Trent Edwards",
+            season: 2010,
+            value: -0.2,
+          },
+        ],
+      }),
+    );
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("How did Trent Edwards perform in 2010?");
+    await screen.findByText(/separate Buffalo and Jacksonville/);
+    expect(
+      screen.queryByRole("heading", { name: "Key numbers" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("creates only one follow-up from a double-click even without a pending request", async () => {
+    const followUp = vi.fn();
+    renderRoute(
+      <AskV2AssistantTurn
+        turn={{
+          id: 1,
+          question: "How did Josh Allen perform in 2022?",
+          request: {
+            question: "How did Josh Allen perform in 2022?",
+            context: { turns: [], entities: [] },
+          },
+          status: "success",
+          response: askV2Response(),
+          contextTrimmed: false,
+          retryAttempt: 0,
+        }}
+        latest
+        onClarify={vi.fn()}
+        onFollowUp={followUp}
+        onRetry={vi.fn()}
+      />,
+    );
+    await userEvent
+      .setup()
+      .dblClick(screen.getAllByRole("button", { name: /Ask follow-up/ })[0]);
+    expect(followUp).toHaveBeenCalledTimes(1);
+  });
+
   it("shows an answer-first experience with supported examples", () => {
     renderRoute(<AskPreviewPage />, "/ask");
     expect(screen.getByRole("heading", { name: "Ask Anything" })).toBeVisible();
@@ -57,6 +116,13 @@ describe("Ask Anything v2", () => {
     expect(screen.queryByText("Rookie forecast")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Ask$/ })).toBeDisabled();
     expect(screen.queryByText(/preview/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Ask a football question").compareDocumentPosition(
+        screen.getByRole("heading", {
+          name: "Start with a question the project can answer",
+        }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("submits an example and renders the direct answer before key numbers", async () => {
@@ -94,7 +160,7 @@ describe("Ask Anything v2", () => {
       screen.getByRole("link", { name: /View Josh Allen's career tree/ }),
     ).toHaveAttribute(
       "href",
-      "/network?mode=qb_journey&player_id=00-0034857&start_season=2022&end_season=2022&selected=qb%3A00-0034857",
+      "/network?mode=qb_journey&player_id=00-0034857&start_season=2010&end_season=2025&selected=qb%3A00-0034857",
     );
     expect(
       screen.getByRole("link", { name: /View Josh Allen's 2022 statistics/ }),
@@ -168,7 +234,7 @@ describe("Ask Anything v2", () => {
       screen.getByRole("link", { name: /Aaron Rodgers' career tree/ }),
     ).toHaveAttribute(
       "href",
-      "/network?mode=qb_journey&player_id=qb-rodgers&start_season=2011&end_season=2011&selected=qb%3Aqb-rodgers",
+      "/network?mode=qb_journey&player_id=qb-rodgers&start_season=2010&end_season=2025&selected=qb%3Aqb-rodgers",
     );
     expect(
       screen.getByRole("link", { name: /Mike McCarthy's coach tree/ }),
@@ -605,7 +671,7 @@ describe("Ask Anything v2", () => {
     );
     await user.click(screen.getByRole("button", { name: /^Ask$/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Temporary server failure",
+      "The answer could not be loaded. Please retry this question.",
     );
     const priorAnswer = screen.getByRole("region", {
       name: "Answer to How did Josh Allen perform in 2022?",

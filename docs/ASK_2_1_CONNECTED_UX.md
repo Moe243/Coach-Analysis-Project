@@ -7,6 +7,8 @@ not public answer panels. Ask also suppresses the application version footer.
 Key numbers use permitted single-measurement propositions, not internal coverage
 counts or two-sided comparison values that could be mislabeled as a player's metric.
 Comparison values remain in the approved prose with their correct player/team labels.
+If multiple team stints produce the same unqualified player-season metric, Key numbers
+omits that metric rather than selecting one team's value or inventing an aggregate.
 
 ## Navigation and context
 
@@ -23,6 +25,10 @@ Statistics uses its existing name-search `player` and optional `season` query fi
 It does not introduce a new exact-ID statistics API. Graph URLs retain canonical IDs.
 Graph selection highlights the union of the selected entities' supported branches and
 fits that context. Manual selection, focus and reset leave multi-selection mode.
+Career Tree actions open the complete supported 2010–2025 history; season-specific
+Statistics and relationship actions preserve the answer's relevant historical scope.
+Player-plus-team exploration shows their separately observed histories, not a fabricated
+destination-team stint. Independent team-season highlights retain that context on reload.
 
 Follow-up buttons submit real turns with bounded canonical and season context. Only
 user turns, not assistant prose, inform interpretation. A newly named unrelated entity
@@ -33,6 +39,11 @@ season. They cannot reuse or extend the frozen projection into a new forecast.
 An explicit short replacement can resolve a unique exact catalog surname; ambiguous
 or unknown names require clarification rather than silently keeping the old pair.
 Bounded-evidence diagnostics become natural public caveats, not raw status codes.
+The conversation lives in application memory for this browser tab. Exploring a route
+and returning with browser Back preserves it; reloading or New conversation clears it.
+Follow-up buttons ignore immediate duplicate clicks. Generic filler is not added merely
+to force four actions when fewer than four meaningful supported candidates exist.
+The just-answered question is not offered again as a generated follow-up.
 Without an explicit year, two-QB comparisons use their latest shared recorded
 analysis season, so retired QBs are not silently scoped to an empty 2025 record.
 Explicit years are preserved, including when a participant has no record that year.
@@ -61,7 +72,7 @@ text. Providers may select/rank valid action IDs but never invent routes. A futu
 writer may use the same `openai/gpt-oss-120b` model as the planner; this is a design
 preference, not a production setting or a new approved scientific capability.
 
-## Validation and product review
+## Original implementation gate
 
 Validation on 2026-09-16 used baseline
 `07ec827ca04a16bb8bd0b2cec04767db9ad91f56` and a disposable local PostgreSQL/API
@@ -82,3 +93,45 @@ Regression fixes prevent an unrelated inherited season, ambiguous counterpart re
 retired-player loss, public diagnostic leaks and mislabeled comparison numbers.
 Routine browser color-environment and temporary build-directory warnings were benign.
 The free-form answer writer remains a future design, not implemented or activated.
+
+## Independent product review and corrective gate
+
+The candidate starting at `65edc2a75001ccc6ff0c6b206a81d9e1f0dfe40b` was reviewed
+against the actual frozen deterministic local application, not just fixture responses.
+Desktop, tablet and mobile views and live local PostgreSQL-backed destinations were
+checked with providers and external sharing disabled.
+
+Corrective changes preserve conversation state across route navigation; resolve
+historical `Who coached him?` and coach-information follow-ups; explain the verified
+role basis of Reid/Tomlin comparisons; retain the complete supported QB Career Tree;
+show both independently observed sides of player/team exploration; put the initial
+mobile composer above examples; suppress raw API error details and ambiguous
+multi-team Key numbers; and prevent immediate duplicate follow-up submission.
+Coach exploration uses specific football questions and a bounded quarterback network
+instead of a generic fourth filler action. Numerical comparisons keep their approved
+values, readable units and explicit same-season (not career-ranking) scope.
+
+The independent final gate consists of 522 backend Ask/release/provider regression
+passes, 157 frontend unit/component passes and 90 browser passes across all three
+viewports, with zero failures or skips in those final runs. Browser checks include axe,
+keyboard operation, overflow, retry, frozen-backend golden answers, contextual turns,
+deep-link reload and return navigation. TypeScript, ESLint, Prettier, Ruff, Python
+formatting/compilation and diff checks pass. Two clean production builds are
+byte-identical. No external-provider smoke was run or claimed.
+Intermediate browser runs interrupted by local review-server restarts, active edits
+or a Statistics search timing timeout were not counted as passes; the frozen final
+run passed all 90 tests without retries or skips.
+
+The Ask answer surface and its connected profile/Explorer destinations contain no
+internal IDs or version panels. Provider metadata and raw scientific status codes do
+not appear in Ask. Canonical identifiers and version lineage remain in API/URL state,
+not public answer or relationship cards. Source links, assignment intervals,
+verification/confidence and uncertainty remain visible. The legacy Ask route retains
+its frozen research-oriented presentation. No analytical
+model, scientific policy, database migration or production configuration changed.
+
+Remaining limitations are deliberate: deterministic prose is structured; coverage
+starts in 2010 (earlier Rodgers/Favre Green Bay history is not fabricated); coach
+information is limited to available verified project records; and dense Full Network
+views still benefit from zoom and the equivalent accessible relationship cards.
+No provider answer writer, causal coaching winner or destination forecast is enabled.

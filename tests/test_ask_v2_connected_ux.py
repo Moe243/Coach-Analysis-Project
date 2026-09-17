@@ -61,6 +61,15 @@ def test_best_season_context_uses_exact_source_team_season_and_verified_citation
     assert any("200 dropbacks" in line for line in result.response.limitations)
 
 
+def test_coach_context_summary_uses_public_football_language(orchestrator):
+    result = orchestrator.analyze(
+        AskV2Request(question="Which quarterbacks shared Mike McCarthy's team-seasons?")
+    )
+    assert "quarterback seasons on the same teams" in result.response.answer
+    assert "context observations" not in result.response.answer
+    assert "distinct verified" not in result.response.answer
+
+
 def test_new_named_player_does_not_inherit_unrelated_season(orchestrator):
     request = AskV2Request(
         question="Who was coaching Aaron Rodgers during his best seasons?",
@@ -225,6 +234,8 @@ def test_unspecified_two_qb_context_retains_retired_history_without_overriding_e
     assert {item.subject for item in history} == {"Aaron Rodgers", "Brett Favre"}
     assert {item.season for item in history} == {2010}
     assert "2010" in comparison.answer
+    assert "EPA/dropback" in comparison.answer
+    assert "same-season comparison, not a career ranking" in comparison.answer
     explicit = orchestrator.answer(
         AskV2Request(question="Compare Aaron Rodgers and Brett Favre in 2025.")
     )
@@ -238,6 +249,93 @@ def test_connected_context_is_byte_deterministic_and_snapshot_unchanged(orchestr
     first = orchestrator.answer(request)
     assert first.model_dump_json() == orchestrator.answer(request).model_dump_json()
     assert orchestrator.evidence.analytical.version == before == release.VERSION
+
+
+@pytest.mark.parametrize("question", ["Who coached him?", "Who was coaching him?"])
+def test_pronoun_coaching_followup_keeps_player_and_historical_season(orchestrator, question):
+    result = orchestrator.analyze(
+        AskV2Request(
+            question=question,
+            context={
+                "turns": [
+                    {"role": "user", "content": "Tell me about Aaron Rodgers in 2011."},
+                    {"role": "user", "content": "What about the next season?"},
+                ],
+                "entities": [{"kind": "qb", "id": "00-0023459"}],
+                "seasons": {"start_season": 2012, "end_season": 2012},
+            },
+        )
+    )
+    assert result.plan.proposal.question_type is QuestionType.QB_COACHING_CONTEXT
+    assert result.response.answerability.value == "SUPPORTED"
+    assert "Mike McCarthy" in result.response.answer
+    assert {record.season for record in result.package.evidence} == {2012}
+    assert "proof that one coach caused" in result.response.answer
+
+
+@pytest.mark.parametrize("question", ["Who was Mike McCarthy?", "Who is Mike McCarthy?"])
+def test_coach_information_question_uses_verified_history_not_clarification(orchestrator, question):
+    result = orchestrator.analyze(AskV2Request(question=question))
+    assert result.plan.proposal.question_type is QuestionType.COACH_HISTORY
+    assert result.response.answerability.value == "SUPPORTED"
+    assert [entity.id for entity in result.response.entities] == ["coach-mike-mccarthy"]
+    assert result.package.evidence
+    assert all(record.sources for record in result.package.evidence)
+
+
+def test_pronoun_subject_does_not_become_navigation_staff_or_an_arbitrary_qb(orchestrator):
+    context = {
+        "entities": [
+            {"kind": "qb", "id": "00-0023459"},
+            {"kind": "coach", "id": "coach-mike-mccarthy"},
+        ],
+        "seasons": {"start_season": 2012, "end_season": 2012},
+    }
+    plan = orchestrator.planner.plan(AskV2Request(question="Who coached him?", context=context))
+    assert [entity.id for entity in plan.resolved_by_index.values()] == ["00-0023459"]
+    assert plan.proposal.question_type is QuestionType.QB_COACHING_CONTEXT
+    context["entities"].append({"kind": "qb", "id": "00-0005106"})
+    response = orchestrator.answer(AskV2Request(question="Who coached him?", context=context))
+    assert response.answerability.value == "CLARIFICATION_REQUIRED"
+    assert not response.propositions
+
+
+def test_why_explains_documented_roles_without_a_development_winner(orchestrator):
+    result = orchestrator.analyze(
+        AskV2Request(
+            question="Why?",
+            context={
+                "turns": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Compare Andy Reid and Mike Tomlin's evidence "
+                            "around quarterback development."
+                        ),
+                    }
+                ],
+                "entities": [
+                    {"kind": "coach", "id": "coach-andy-reid"},
+                    {"kind": "coach", "id": "coach-mike-tomlin"},
+                ],
+            },
+        )
+    )
+    assert result.response.answerability.value == "PARTIALLY_SUPPORTED"
+    assert "documented responsibilities" in result.response.answer
+    summaries = {
+        record.entities[0].display_name: next(
+            value.value for value in record.values if value.name == "verified_roles"
+        ).split("|")
+        for record in result.package.evidence
+        if any(value.name == "verified_roles" for value in record.values)
+    }
+    for name, roles in summaries.items():
+        assert (
+            f"{name} — {', '.join(role.replace('_', ' ') for role in sorted(roles))}"
+            in result.response.answer
+        )
+    assert "not proof of better QB development" in result.response.answer
 
 
 def test_missing_staff_cannot_be_presented_as_verified_context(orchestrator, monkeypatch):

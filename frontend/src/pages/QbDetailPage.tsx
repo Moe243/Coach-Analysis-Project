@@ -100,9 +100,7 @@ export function QbDetailPage() {
       </Link>
       <header className="profile-header">
         <div>
-          <p className="eyebrow">
-            Quarterback profile · GSIS {profile.data.player.player_id}
-          </p>
+          <p className="eyebrow">Quarterback profile</p>
           <h1>{profile.data.player.display_name}</h1>
           <p>
             {seasons.length} published QB-team seasons ·{" "}
@@ -346,23 +344,11 @@ export function QbDetailPage() {
 
       <section className="provenance-panel">
         <div>
-          <span>Expected-performance version</span>
-          <strong>{latest?.data_version ?? "—"}</strong>
-        </div>
-        <div>
-          <span>Model version</span>
-          <strong>{latest?.model_version ?? "—"}</strong>
-        </div>
-        <div>
-          <span>Metric version</span>
-          <strong>{latestSeason?.metric_version ?? "—"}</strong>
-        </div>
-        <div>
           <span>Training cutoff</span>
           <strong>
             {latest?.payload.training_end_season
               ? String(latest.payload.training_end_season)
-              : "See model metadata"}
+              : "Unavailable"}
           </strong>
         </div>
       </section>

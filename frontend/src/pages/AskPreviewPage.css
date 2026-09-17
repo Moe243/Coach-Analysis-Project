@@ -130,6 +130,10 @@
   padding: clamp(1.25rem, 3vw, 2rem);
 }
 
+.ask-v2-composer-dock + .ask-v2-welcome {
+  margin-top: 2rem;
+}
+
 .ask-v2-answer-copy {
   max-width: 850px;
   margin: 0;

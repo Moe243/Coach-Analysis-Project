@@ -77,6 +77,13 @@ test("primary, preview-alias, and legacy routes preserve browser navigation", as
   await page.goBack();
   await expect(page).toHaveURL(/\/ask$/);
   await expect(page.getByText("Evidence-led conversation")).toBeVisible();
+  const composerBounds = await page
+    .getByLabel("Ask a football question")
+    .boundingBox();
+  expect(composerBounds).not.toBeNull();
+  expect(composerBounds!.y + composerBounds!.height).toBeLessThan(
+    page.viewportSize()!.height,
+  );
   await page.goForward();
   await expect(page).toHaveURL(/\/ask\/legacy$/);
 });
@@ -110,7 +117,7 @@ test("Josh Allen answer leads with key numbers and supports a contextual follow-
     page.getByRole("link", { name: /View Josh Allen's career tree/ }),
   ).toHaveAttribute(
     "href",
-    "/network?mode=qb_journey&player_id=00-0034857&start_season=2022&end_season=2022&selected=qb%3A00-0034857",
+    "/network?mode=qb_journey&player_id=00-0034857&start_season=2010&end_season=2025&selected=qb%3A00-0034857",
   );
   await expectNoAxeViolations(page);
   await page.getByRole("button", { name: "View 2023" }).click();
@@ -197,7 +204,7 @@ test("partial alignment and counterfactual questions remain useful without fake 
     }),
   ).toHaveAttribute(
     "href",
-    "/network?mode=team_history&team_id=team_min&start_season=2010&end_season=2025&selected=qb%3A00-0035228",
+    "/network?mode=full_network&anchor=all&start_season=2021&end_season=2025&selected=qb%3A00-0035228&highlights=qb%3A00-0035228%2Cteam-season%3Ateam_min%3A2021%2Cteam-season%3Ateam_min%3A2022%2Cteam-season%3Ateam_min%3A2023%2Cteam-season%3Ateam_min%3A2024%2Cteam-season%3Ateam_min%3A2025",
   );
   await expect(page.getByText(/Fit Score/i)).toHaveCount(0);
   await expectNoAxeViolations(page);

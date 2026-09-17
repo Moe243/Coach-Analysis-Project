@@ -59,13 +59,15 @@ function KeyNumbers({ response }: { response: AskV2Response }) {
         left.proposition_id.localeCompare(right.proposition_id),
     )
     .filter(
-      (proposition, index, values) =>
-        values.findIndex(
+      (proposition, _index, values) =>
+        // Public propositions do not carry a team label field. If a player-season
+        // has multiple stints, do not present one as an unqualified season metric.
+        values.filter(
           (candidate) =>
             candidate.metric === proposition.metric &&
             candidate.season === proposition.season &&
             candidate.subject === proposition.subject,
-        ) === index,
+        ).length === 1,
     )
     .slice(0, 4);
   if (numbers.length === 0) return null;
@@ -100,11 +102,15 @@ function publicLimitationText(response: AskV2Response) {
     if (!text) return null;
     if (text.startsWith("BOUNDED_SCOPE:"))
       return "This is a focused sample of the published history, not a complete record-by-record career comparison.";
+    if (text === "Expectation intervals are not newly fitted PAE intervals.")
+      return "PAE compares performance with a preseason estimate; it does not establish what caused the difference.";
     return /\bC\d+\b|\b[A-Z][A-Z_]+:/.test(text)
       ? "The answer is limited to the available observed evidence; some requested detail is unavailable."
       : text;
   }
   switch (unsupported.reason_code) {
+    case "DEVELOPMENT_CONCLUSION_NOT_PERMITTED":
+      return "A documented coaching role is not proof that a coach caused a quarterback's improvement.";
     case "C17_SCENARIO_NOT_SUPPORTED":
       return "Historical tendencies can be compared, but the research cannot reliably estimate performance in a different team environment.";
     case "C18_COUNTERFACTUAL_NOT_IMPLEMENTED":
@@ -131,13 +137,16 @@ function PublicLimitation({ response }: { response: AskV2Response }) {
 function KeepExploring({
   response,
   turnId,
+  question,
   onFollowUp,
 }: {
   response: AskV2Response;
   turnId: number;
+  question: string;
   onFollowUp: (action: AskV2ExploreAction) => void;
 }) {
-  const actions = buildKeepExploringActions(response);
+  const lastFollowUp = useRef<{ id: string; at: number } | null>(null);
+  const actions = buildKeepExploringActions(response, question);
   if (actions.length === 0) return null;
   return (
     <section
@@ -175,7 +184,16 @@ function KeepExploring({
             <button
               type="button"
               key={action.id}
-              onClick={() => onFollowUp(action)}
+              onClick={() => {
+                const at = Date.now();
+                if (
+                  lastFollowUp.current?.id === action.id &&
+                  at - lastFollowUp.current.at < 500
+                )
+                  return;
+                lastFollowUp.current = { id: action.id, at };
+                onFollowUp(action);
+              }}
             >
               {body}
             </button>
@@ -282,6 +300,7 @@ export function AskV2AssistantTurn({
       <KeepExploring
         response={response}
         turnId={turn.id}
+        question={turn.question}
         onFollowUp={onFollowUp}
       />
       {turn.contextTrimmed && (

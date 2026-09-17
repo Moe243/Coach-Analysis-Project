@@ -208,8 +208,12 @@ test("keeps QB facts visible when coach role filters remove assignment cards", a
   await page.goto(
     "/network?mode=team_history&team_id=team_tb&start_season=2024&end_season=2025&roles=quarterbacks_coach",
   );
-  await expect(page.getByText(/QB-team-season/).first()).toBeVisible();
-  await expect(page.getByText(/^Assignment /)).toHaveCount(0);
+  await expect(
+    page.getByText("Quarterback team-season", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Coaching assignment", { exact: true }),
+  ).toHaveCount(0);
 });
 
 test("shows a complete 413 boundary state and asks for a narrower scope", async ({

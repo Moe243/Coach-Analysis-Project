@@ -9,7 +9,7 @@ import { renderRoute } from "../test/render";
 describe("detail pages", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("shows a QB history with actual, expected, PAE, coaching status, and model version", async () => {
+  it("shows QB measurements and coaching status without public internal IDs or versions", async () => {
     installApiFixture();
     renderRoute(
       <Routes>
@@ -24,7 +24,10 @@ describe("detail pages", () => {
       screen.getByText("Out-of-sample expectations only."),
     ).toBeInTheDocument();
     expect(screen.getAllByText("+0.070").length).toBeGreaterThan(0);
-    expect(screen.getByText("expected-test")).toBeInTheDocument();
+    expect(screen.queryByText("expected-test")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/GSIS|Model version|Metric version/),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Head coach · Weeks 1–18")).toBeInTheDocument();
     expect(screen.getByText("4,450 yards · 35 TD")).toBeInTheDocument();
     expect(screen.getByText(/Starter record: 11-6-0/)).toBeInTheDocument();
@@ -50,6 +53,10 @@ describe("detail pages", () => {
       screen.getByText("Coach effects are exploratory and suppressed."),
     ).toBeInTheDocument();
     expect(screen.getByText("suppressed exploratory")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Coach profile · coach-/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/checkpoint-six/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View source/ })).toHaveAttribute(
       "href",
       "https://example.com/source",

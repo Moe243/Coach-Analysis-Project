@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/DataState";
 import { StatisticsPage } from "./pages/StatisticsPage";
+import { useAskV2Conversation } from "./hooks/useAskV2Conversation";
 
 const AskPage = lazy(() =>
   import("./pages/AskPage").then((module) => ({ default: module.AskPage })),
@@ -34,6 +35,9 @@ const QbDetailPage = lazy(() =>
 );
 
 export function App() {
+  // Keep the conversation in this tab while users explore other application routes.
+  // A reload or New conversation still clears it; nothing is persisted to storage.
+  const conversation = useAskV2Conversation();
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -43,7 +47,7 @@ export function App() {
           path="ask"
           element={
             <Suspense fallback={<LoadingState label="Loading Ask Anything" />}>
-              <AskPreviewPage />
+              <AskPreviewPage conversation={conversation} />
             </Suspense>
           }
         />

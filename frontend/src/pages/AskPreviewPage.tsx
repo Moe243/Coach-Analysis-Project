@@ -14,8 +14,26 @@ const examples = [
   "How would Kyler Murray fit Minnesota?",
 ];
 
-export function AskPreviewPage() {
+type Conversation = ReturnType<typeof useAskV2Conversation>;
+
+export function AskPreviewPage({
+  conversation,
+}: {
+  conversation?: Conversation;
+}) {
+  return conversation ? (
+    <AskConversationPage conversation={conversation} />
+  ) : (
+    <StandaloneAskPage />
+  );
+}
+
+function StandaloneAskPage() {
   const conversation = useAskV2Conversation();
+  return <AskConversationPage conversation={conversation} />;
+}
+
+function AskConversationPage({ conversation }: { conversation: Conversation }) {
   const followUp = (action: AskV2ExploreAction) => {
     if (!action.question) return;
     conversation.submit(action.question, {
@@ -23,6 +41,18 @@ export function AskPreviewPage() {
       seasons: action.seasons,
     });
   };
+  const composer = (
+    <div className="ask-v2-composer-dock">
+      <AskComposer
+        disabled={conversation.isPending}
+        onSubmit={conversation.submit}
+      />
+      <p>
+        Observational evidence is not proof of causation. Unsupported
+        projections and counterfactuals remain explicitly unavailable.
+      </p>
+    </div>
+  );
   return (
     <section className="page ask-v2-page">
       <header className="ask-v2-page-header">
@@ -44,6 +74,8 @@ export function AskPreviewPage() {
           </button>
         )}
       </header>
+
+      {conversation.turns.length === 0 && composer}
 
       {conversation.turns.length === 0 && (
         <section
@@ -100,16 +132,7 @@ export function AskPreviewPage() {
         </section>
       )}
 
-      <div className="ask-v2-composer-dock">
-        <AskComposer
-          disabled={conversation.isPending}
-          onSubmit={conversation.submit}
-        />
-        <p>
-          Observational evidence is not proof of causation. Unsupported
-          projections and counterfactuals remain explicitly unavailable.
-        </p>
-      </div>
+      {conversation.turns.length > 0 && composer}
     </section>
   );
 }
