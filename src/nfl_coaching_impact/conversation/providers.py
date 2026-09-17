@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from .contracts import ProviderPlannerInput, ProviderSynthesisInput
 
 if TYPE_CHECKING:
+    from .answer_writer import ApprovedAnswerBrief
     from .provider_drafts import ProviderDraftInput
 
 MAX_PROVIDER_PAYLOAD_BYTES = 48 * 1024
@@ -36,6 +37,19 @@ class ProviderFailureCategory(StrEnum):
     CONCURRENCY_LIMIT = "concurrency_limit"
     ENTITY_RESOLUTION_ERROR = "entity_resolution_error"
     TASK_TRANSLATION_ERROR = "task_translation_error"
+
+
+class WriterValidationCategory(StrEnum):
+    WRITER_VALID = "writer_valid"
+    UNKNOWN_SUPPORT_ID = "unknown_support_id"
+    UNAPPROVED_NUMBER = "unapproved_number"
+    UNAPPROVED_ENTITY = "unapproved_entity"
+    MISSING_LIMITATION = "missing_limitation"
+    CAUSAL_VIOLATION = "causal_violation"
+    PREDICTIVE_VIOLATION = "predictive_violation"
+    SCHEMA_INVALID = "schema_invalid"
+    TOO_LONG = "too_long"
+    UNSUPPORTED_SENTENCE = "unsupported_sentence"
 
 
 class ProviderName(StrEnum):
@@ -82,8 +96,15 @@ class SynthesizerProvider(Protocol):
     def synthesize(self, request: ProviderSynthesisInput, *, timeout: float) -> Any: ...
 
 
+class AnswerWriterProvider(Protocol):
+    implementation_version: str
+    model_version: str
+
+    def write(self, request: ApprovedAnswerBrief, *, timeout: float) -> Any: ...
+
+
 _OPENAI_MODEL_ID = re.compile(r"^(?:gpt-[A-Za-z0-9._:-]{1,95}|o[1-9][A-Za-z0-9._:-]{0,97})$")
-_GROQ_STRUCTURED_OUTPUT_MODELS = frozenset({"openai/gpt-oss-120b", "openai/gpt-oss-20b"})
+_GROQ_STRUCTURED_OUTPUT_MODELS = frozenset({"openai/gpt-oss-120b"})
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off", ""})
 
@@ -147,7 +168,11 @@ class ProviderConfiguration:
     provider: ProviderName = ProviderName.OPENAI
 
     @property
-    def planner_only(self) -> bool:
+    def uses_answer_writer(self) -> bool:
+        return self.provider is ProviderName.GROQ
+
+    @property
+    def uses_draft_planner(self) -> bool:
         return self.provider is ProviderName.GROQ
 
     @property
@@ -159,7 +184,7 @@ class ProviderConfiguration:
             and self.external_sharing_enabled
             and self.api_key
             and self.planner_model
-            and (self.planner_only or self.synthesizer_model)
+            and self.synthesizer_model
         )
 
     @classmethod
@@ -185,7 +210,9 @@ class ProviderConfiguration:
         if provider is ProviderName.GROQ:
             api_key = source.get("GROQ_API_KEY", "").strip()
             planner_model = source.get("ASK_V2_GROQ_PLANNER_MODEL", "").strip()
-            synthesizer_model = source.get("ASK_V2_GROQ_SYNTHESIZER_MODEL", "").strip()
+            # The approved 120B model is intentionally shared by planner and writer.
+            # No second Groq model or arbitrary endpoint is configurable.
+            synthesizer_model = planner_model
         elif provider is ProviderName.OPENAI:
             api_key = source.get("OPENAI_API_KEY", "").strip()
             planner_model = source.get("ASK_V2_PLANNER_MODEL", "").strip()
@@ -204,7 +231,10 @@ class ProviderConfiguration:
             source, "ASK_V2_SYNTHESIZER_MAX_OUTPUT_TOKENS", 800, 128, 1_500
         )
         if provider is ProviderName.GROQ:
-            models_valid = bool(planner_model in _GROQ_STRUCTURED_OUTPUT_MODELS)
+            models_valid = bool(
+                planner_model in _GROQ_STRUCTURED_OUTPUT_MODELS
+                and synthesizer_model == planner_model
+            )
             key_valid = bool(re.fullmatch(r"gsk_[A-Za-z0-9_-]{16,}", api_key))
         elif provider is ProviderName.OPENAI:
             models_valid = bool(
@@ -215,9 +245,13 @@ class ProviderConfiguration:
         else:
             models_valid = True
             key_valid = True
-        numeric_values = (planner_timeout, total_timeout, planner_tokens)
-        if provider is not ProviderName.GROQ:
-            numeric_values += (synthesizer_timeout, synthesizer_tokens)
+        numeric_values = (
+            planner_timeout,
+            synthesizer_timeout,
+            total_timeout,
+            planner_tokens,
+            synthesizer_tokens,
+        )
         numeric_valid = all(value is not None for value in numeric_values)
         valid = bool(
             provider_valid
@@ -226,8 +260,7 @@ class ProviderConfiguration:
             and (not enabled or key_valid)
             and (not enabled or models_valid)
             and numeric_valid
-            and float(planner_timeout or 0)
-            + (0 if provider is ProviderName.GROQ else float(synthesizer_timeout or 0))
+            and float(planner_timeout or 0) + float(synthesizer_timeout or 0)
             <= float(total_timeout or 0)
         )
         return cls(
@@ -252,13 +285,14 @@ class ProviderRuntime:
     planner: PlannerProvider | None = None
     synthesizer: SynthesizerProvider | None = None
     initialization_failure: ProviderFailureCategory | None = None
+    writer: AnswerWriterProvider | None = None
 
     @property
     def ready(self) -> bool:
         return bool(
             self.configuration.ready
             and self.planner
-            and (self.configuration.planner_only or self.synthesizer)
+            and (self.writer if self.configuration.uses_answer_writer else self.synthesizer)
         )
 
 

@@ -10,7 +10,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from threading import Lock
 
-from .providers import ProviderConfiguration, ProviderFailureCategory, ProviderName
+from .providers import (
+    ProviderConfiguration,
+    ProviderFailureCategory,
+    ProviderName,
+    WriterValidationCategory,
+)
 
 
 class ProviderPhase(StrEnum):
@@ -21,6 +26,7 @@ class ProviderPhase(StrEnum):
     DRAFT_TRANSLATION = "draft_translation"
     AUTHORIZATION = "authorization"
     SYNTHESIS_VALIDATION = "synthesis_validation"
+    WRITER_VALIDATION = "writer_validation"
     COMPLETED = "completed"
 
 
@@ -94,7 +100,7 @@ def _safe_model(configuration: ProviderConfiguration, component: str) -> str | N
         configuration.planner_model if component == "planner" else configuration.synthesizer_model
     )
     if configuration.provider is ProviderName.GROQ:
-        return model if model in {"openai/gpt-oss-120b", "openai/gpt-oss-20b"} else None
+        return model if model == "openai/gpt-oss-120b" else None
     if re.fullmatch(r"(?:gpt-[A-Za-z0-9._:-]{1,95}|o[1-9][A-Za-z0-9._:-]{0,97})", model):
         return model
     return None
@@ -111,6 +117,8 @@ def provider_event(
     error: BaseException | None = None,
     latency_ms: int | None = None,
     runtime_ready: bool | None = None,
+    validation_outcome: WriterValidationCategory | None = None,
+    fallback: bool = False,
 ) -> None:
     """Best effort: invalid fields, formatters and sinks can never break Ask."""
     try:
@@ -124,6 +132,8 @@ def provider_event(
             error=error,
             latency_ms=latency_ms,
             runtime_ready=runtime_ready,
+            validation_outcome=validation_outcome,
+            fallback=fallback,
         )
     except Exception:
         # Never log the logging error or a repr of arguments that caused it.
@@ -141,9 +151,11 @@ def _emit_provider_event(
     error: BaseException | None,
     latency_ms: int | None,
     runtime_ready: bool | None,
+    validation_outcome: WriterValidationCategory | None,
+    fallback: bool,
 ) -> None:
     """No arbitrary message/extra dict, exception text, headers, or request input."""
-    if component not in {"planner", "synthesizer"}:
+    if component not in {"planner", "synthesizer", "writer"}:
         raise ValueError("unknown provider component")
     status = safe_http_status(error)
     payload = {
@@ -158,6 +170,12 @@ def _emit_provider_event(
         "http_status_family": f"{status // 100}xx" if status else None,
         "latency_ms": safe_latency_ms(latency_ms),
         "model": _safe_model(configuration, component),
+        "validation_outcome": (
+            WriterValidationCategory(validation_outcome).value
+            if validation_outcome is not None
+            else None
+        ),
+        "fallback": bool(fallback),
     }
     if phase in {ProviderPhase.READINESS, ProviderPhase.INITIALIZATION}:
         payload.update(

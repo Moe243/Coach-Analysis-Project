@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import sys
 from pathlib import Path
@@ -11,6 +12,12 @@ import httpx
 import pytest
 
 from nfl_coaching_impact import release_snapshot as release
+from nfl_coaching_impact.conversation.answer_writer import (
+    ApprovedAnswerBrief,
+    WriterResult,
+    WriterSentence,
+    approved_answer_brief,
+)
 from nfl_coaching_impact.conversation.contracts import (
     AnalyticalTaskProposal,
     AskV2Request,
@@ -35,6 +42,7 @@ from nfl_coaching_impact.conversation.groq_provider import (
     GROQ_BASE_URL,
     GROQ_PLANNER_REASONING_EFFORT,
     GROQ_SYNTHESIZER_REASONING_EFFORT,
+    GroqAnswerWriter,
     GroqPlanner,
     GroqSynthesizer,
     groq_runtime,
@@ -51,6 +59,7 @@ from nfl_coaching_impact.conversation.provider_drafts import (
 )
 from nfl_coaching_impact.conversation.provider_orchestration import ProviderOrchestrator
 from nfl_coaching_impact.conversation.providers import (
+    AnswerWriterProvider,
     PlannerProvider,
     ProviderConfiguration,
     ProviderName,
@@ -78,7 +87,6 @@ def groq_environment(**overrides: str) -> dict[str, str]:
         "ASK_V2_EXTERNAL_SHARING_ENABLED": "true",
         "GROQ_API_KEY": TEST_GROQ_KEY,
         "ASK_V2_GROQ_PLANNER_MODEL": "openai/gpt-oss-120b",
-        "ASK_V2_GROQ_SYNTHESIZER_MODEL": "openai/gpt-oss-20b",
     }
     values.update(overrides)
     return values
@@ -90,7 +98,7 @@ def groq_configuration(**overrides) -> ProviderConfiguration:
         "external_sharing_enabled": True,
         "api_key": TEST_GROQ_KEY,
         "planner_model": "openai/gpt-oss-120b",
-        "synthesizer_model": "openai/gpt-oss-20b",
+        "synthesizer_model": "openai/gpt-oss-120b",
         "planner_timeout_seconds": 10.0,
         "synthesizer_timeout_seconds": 15.0,
         "total_timeout_seconds": 30.0,
@@ -197,8 +205,22 @@ class LocalPlanner(PlannerProvider):
             return self.value
         if isinstance(request, ProviderDraftInput):
             plan = self.local.plan(AskV2Request(question=request.question))
+
+            def literal(proposal):
+                labels = [proposal.mention]
+                for row in self.local.source_entities:
+                    if row["name"] == proposal.mention:
+                        labels.extend(row.get("aliases", ()))
+                present = [
+                    label for label in labels if label.casefold() in request.question.casefold()
+                ]
+                return max(present, key=len) if present else proposal.mention
+
             capabilities = {
                 QuestionType.QB_HISTORY: RequestedCapability.QB_HISTORY,
+                QuestionType.QB_PROJECTION: RequestedCapability.QB_PROJECTION,
+                QuestionType.COACH_HISTORY: RequestedCapability.COACH_HISTORY,
+                QuestionType.COACH_QB_CONTEXT: RequestedCapability.COACH_QB_CONTEXT,
                 QuestionType.COMPARISON: RequestedCapability.COACH_COMPARISON,
                 QuestionType.PLAYER_TEAM_SCENARIO: (
                     RequestedCapability.PLAYER_TEAM_DESCRIPTIVE_COMPARISON
@@ -207,12 +229,12 @@ class LocalPlanner(PlannerProvider):
             return ProviderPlanDraft(
                 question_type=plan.proposal.question_type,
                 entity_mentions=tuple(
-                    ProviderEntityMention(text=e.mention, kind_hint=e.kind)
+                    ProviderEntityMention(text=literal(e), kind_hint=e.kind)
                     for e in plan.proposal.entities
                 ),
-                season_mentions=(plan.proposal.tasks[0].seasons.start_season,)
-                if plan.proposal.tasks and plan.proposal.tasks[0].seasons
-                else (),
+                season_mentions=tuple(
+                    int(year) for year in re.findall(r"\b20\d{2}\b", request.question)
+                ),
                 requested_capabilities=(
                     capabilities.get(plan.proposal.question_type, RequestedCapability.QB_HISTORY),
                 ),
@@ -224,7 +246,7 @@ class LocalPlanner(PlannerProvider):
 
 class LocalSynthesizer(SynthesizerProvider):
     implementation_version = "groq-fake-synthesizer"
-    model_version = "openai/gpt-oss-20b"
+    model_version = "openai/gpt-oss-120b"
 
     def __init__(self, value=None, error=None):
         self.value = value
@@ -238,11 +260,68 @@ class LocalSynthesizer(SynthesizerProvider):
         return compliant_synthesis(request) if self.value is None else self.value
 
 
-def groq_orchestrator(evidence, planner=None, synthesizer=None):
+def compliant_writer_result(brief: ApprovedAnswerBrief) -> WriterResult:
+    proposition = next(item for item in brief.supports if item.kind.value == "proposition")
+    main_measurements = tuple(
+        item.measurement_id
+        for item in brief.measurements
+        if item.support_id == proposition.support_id
+    )
+    sentence = WriterSentence(
+        text=proposition.phrasings[-1] if proposition.phrasings else proposition.text,
+        support_ids=(proposition.support_id,),
+        measurement_ids=main_measurements,
+        entity_ids=proposition.entity_ids,
+    )
+    limitations = tuple(
+        item for item in brief.supports if item.support_id in brief.required_limitation_ids
+    )
+    limitation = None
+    if limitations:
+        limitation_measurements = tuple(
+            item.measurement_id
+            for item in brief.measurements
+            if item.support_id in brief.required_limitation_ids
+        )
+        limitation = WriterSentence(
+            text=" ".join(item.text for item in limitations),
+            support_ids=tuple(item.support_id for item in limitations),
+            measurement_ids=limitation_measurements,
+        )
+    all_sentences = (sentence, *((limitation,) if limitation else ()))
+    return WriterResult(
+        sentences=(sentence,),
+        limitation=limitation,
+        used_support_ids=tuple(
+            dict.fromkeys(item for part in all_sentences for item in part.support_ids)
+        ),
+        used_measurement_ids=tuple(
+            dict.fromkeys(item for part in all_sentences for item in part.measurement_ids)
+        ),
+    )
+
+
+class LocalWriter(AnswerWriterProvider):
+    implementation_version = "groq-fake-writer"
+    model_version = "openai/gpt-oss-120b"
+
+    def __init__(self, value=None, error=None):
+        self.value = value
+        self.error = error
+        self.calls = 0
+
+    def write(self, request: ApprovedAnswerBrief, *, timeout: float):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return compliant_writer_result(request) if self.value is None else self.value
+
+
+def groq_orchestrator(evidence, planner=None, writer=None):
     runtime = ProviderRuntime(
         configuration=groq_configuration(),
         planner=planner or LocalPlanner(evidence),
-        synthesizer=synthesizer or LocalSynthesizer(),
+        writer=writer or LocalWriter(),
     )
     return ProviderOrchestrator(evidence, runtime)
 
@@ -286,9 +365,9 @@ def experimental_orchestrator(evidence, synthesizer):
             False,
         ),
         (
-            {**groq_environment(), "ASK_V2_GROQ_SYNTHESIZER_MODEL": ""},
+            {**groq_environment(), "ASK_V2_GROQ_PLANNER_MODEL": "openai/gpt-oss-20b"},
             ProviderName.GROQ,
-            True,
+            False,
         ),
         (groq_environment(), ProviderName.GROQ, True),
         ({"ASK_V2_PROVIDER": "arbitrary"}, ProviderName.NONE, False),
@@ -385,6 +464,17 @@ def test_groq_adapters_use_strict_responses_contract_without_tools(evidence):
     assert synthesis_call["reasoning"] == {"effort": GROQ_SYNTHESIZER_REASONING_EFFORT}
     assert synthesis_call["tools"] == [] and synthesis_call["tool_choice"] == "none"
     assert synthesis_call["max_output_tokens"] == 800
+
+    brief = approved_answer_brief(result)
+    writer_value = compliant_writer_result(brief)
+    writer_client = FakeClient(writer_value)
+    writer = GroqAnswerWriter(writer_client, groq_configuration())
+    assert writer.write(brief, timeout=14) == writer_value
+    writer_call = writer_client.responses.calls[0]
+    assert writer_call["text_format"] is WriterResult
+    assert writer_call["reasoning"] == {"effort": GROQ_SYNTHESIZER_REASONING_EFFORT}
+    assert writer_call["tools"] == [] and writer_call["tool_choice"] == "none"
+    assert writer_call["model"] == "openai/gpt-oss-120b"
 
 
 @pytest.mark.parametrize(

@@ -47,6 +47,29 @@ function clarificationResponse() {
 describe("Ask Anything v2", () => {
   beforeEach(() => vi.mocked(askQuestionV2).mockReset());
 
+  it("renders validated writer prose without changing numbers, limitations or exploration", async () => {
+    const answer =
+      "With Buffalo Bills in 2022, Josh Allen produced 0.237 EPA per dropback " +
+      "against a preseason expectation of 0.122. His PAE was +0.115 across 651 dropbacks.";
+    vi.mocked(askQuestionV2).mockResolvedValue(
+      askV2Response({ answer, answer_mode: "grounded_ai" }),
+    );
+    renderRoute(<AskPreviewPage />, "/ask");
+    await submit("How did Josh Allen perform in 2022?");
+    expect(await screen.findByText(answer)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Key numbers" })).toBeVisible();
+    expect(screen.getByText("Keep in mind:")).toBeVisible();
+    expect(document.querySelectorAll(".ask-v2-explore-grid > *")).toHaveLength(
+      4,
+    );
+    expect(
+      screen.getByRole("link", { name: /2022 statistics/ }),
+    ).toHaveAttribute("href", "/statistics?player=Josh+Allen&season=2022");
+    expect(
+      screen.queryByText(/Groq|fallback mode|provider disabled/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not collapse multiple team stints into a misleading season key number", async () => {
     const response = askV2Response();
     vi.mocked(askQuestionV2).mockResolvedValue(

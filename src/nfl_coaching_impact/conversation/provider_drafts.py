@@ -253,9 +253,15 @@ class ProviderDraftTranslator:
                         len(entities) != 2
                         or kinds != {required}
                         or (not draft.comparison_requested and not followup)
-                        or not re.search(
-                            r"\b(compare|between|whose|versus|vs|stronger|better)\b",
-                            intent_question,
+                        or (
+                            # The backend already recognizes a canonical comparison
+                            # continuation such as Why? -> What about McVay?. Do not
+                            # require the immediately preceding "Why?" to repeat compare.
+                            not (followup and native is QuestionType.COMPARISON)
+                            and not re.search(
+                                r"\b(compare|between|whose|versus|vs|stronger|better)\b",
+                                intent_question,
+                            )
                         )
                     ):
                         raise DraftRejected("comparison lacks unambiguous literal intent")

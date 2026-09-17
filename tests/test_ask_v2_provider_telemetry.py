@@ -20,6 +20,7 @@ from nfl_coaching_impact import release_snapshot as release
 from nfl_coaching_impact.api import app
 from nfl_coaching_impact.ask_api import _load
 from nfl_coaching_impact.conversation import provider_telemetry as telemetry
+from nfl_coaching_impact.conversation.answer_writer import WriterResult, WriterSentence
 from nfl_coaching_impact.conversation.api import _cached_evidence
 from nfl_coaching_impact.conversation.contracts import AskV2Request
 from nfl_coaching_impact.conversation.evidence import EvidenceService
@@ -106,19 +107,54 @@ class Planner:
         )
 
 
+class Writer:
+    implementation_version = "offline-writer"
+    model_version = "openai/gpt-oss-120b"
+
+    def write(self, brief, *, timeout):
+        support = brief.supports[0]
+        limitations = tuple(
+            s for s in brief.supports if s.support_id in brief.required_limitation_ids
+        )
+
+        def sentence(supports):
+            return WriterSentence(
+                text=" ".join(s.text for s in supports),
+                support_ids=tuple(s.support_id for s in supports),
+                entity_ids=tuple(dict.fromkeys(e for s in supports for e in s.entity_ids)),
+                measurement_ids=tuple(
+                    m.measurement_id
+                    for m in brief.measurements
+                    if m.support_id in {s.support_id for s in supports}
+                ),
+            )
+
+        main = sentence((support,))
+        limitation = sentence(limitations) if limitations else None
+        parts = (main, *((limitation,) if limitation else ()))
+        return WriterResult(
+            sentences=(main,),
+            limitation=limitation,
+            used_support_ids=tuple(s for part in parts for s in part.support_ids),
+            used_measurement_ids=tuple(m for part in parts for m in part.measurement_ids),
+        )
+
+
 def ask(evidence, planner, **overrides):
     config = ProviderConfiguration.from_environment(environment(**overrides))
-    orchestrator = ProviderOrchestrator(evidence, ProviderRuntime(config, planner=planner))
+    orchestrator = ProviderOrchestrator(
+        evidence, ProviderRuntime(config, planner=planner, writer=Writer())
+    )
     request = AskV2Request(question="How did Josh Allen perform in 2022?")
     return orchestrator, request
 
 
 @pytest.mark.parametrize("value", ["true", " TRUE ", "yes", "ON", "1"])
-def test_groq_readiness_parses_flags_without_synthesizer(value):
+def test_groq_readiness_reuses_same_model_for_writer(value):
     config = ProviderConfiguration.from_environment(
         environment(ASK_V2_PROVIDER=" GROQ ", ASK_V2_EXTERNAL_SHARING_ENABLED=value)
     )
-    assert config.ready and not config.synthesizer_model
+    assert config.ready and config.synthesizer_model == config.planner_model
 
 
 @pytest.mark.parametrize(
@@ -366,7 +402,7 @@ def test_logging_failure_never_changes_api_response(evidence, monkeypatch, scena
     def build(config):
         if scenario == "initialization":
             raise RuntimeError("private initialization error")
-        return ProviderRuntime(config, planner=planner)
+        return ProviderRuntime(config, planner=planner, writer=Writer())
 
     monkeypatch.setattr("nfl_coaching_impact.conversation.groq_provider.groq_runtime", build)
     request = AskV2Request(question="How did Josh Allen perform in 2022?")
@@ -485,3 +521,64 @@ def test_attempt_clock_failure_cannot_prevent_cleanup():
     attempt = telemetry.ProviderAttempt(attempted=True)
     telemetry.finish_attempt(attempt, float("nan"))
     assert attempt.latency_ms is None
+
+
+def test_writer_success_has_content_free_diagnostics(evidence, events):
+    orchestrator, request = ask(evidence, Planner())
+    response = orchestrator.answer(request)
+    assert response.answer_mode.value == "grounded_ai"
+    writer_events = [event for event in events() if event["component"] == "writer"]
+    assert len(writer_events) == 2
+    assert writer_events[-1]["validation_outcome"] == "writer_valid"
+    assert writer_events[-1]["success"] and not writer_events[-1]["fallback"]
+    serialized = json.dumps(events())
+    assert all(text not in serialized for text in ("Josh Allen", "0.237", "gsk_", "support_ids"))
+
+
+@pytest.mark.parametrize("failure", ["http", "support", "causal"])
+def test_writer_failures_are_bounded_and_content_free(evidence, events, failure):
+    class FailedWriter(Writer):
+        def write(self, brief, *, timeout):
+            if failure == "http":
+                error = RuntimeError("PRIVATE_BODY secret key /private/path user question")
+                error.status_code = 403
+                raise error
+            result = super().write(brief, timeout=timeout).model_dump(mode="python")
+            if failure == "support":
+                result["sentences"][0]["support_ids"] = ("invalid_support",)
+            else:
+                result["sentences"][0]["text"] += " He caused stronger quarterback performance."
+            return result
+
+    runtime = ProviderRuntime(
+        ProviderConfiguration.from_environment(environment()),
+        planner=Planner(),
+        writer=FailedWriter(),
+    )
+    request = AskV2Request(question="How did Josh Allen perform in 2022?")
+    assert ProviderOrchestrator(evidence, runtime).answer(request) == AskV2Orchestrator(
+        evidence
+    ).answer(request)
+    event = events()[-1]
+    assert event["component"] == "writer" and event["fallback"]
+    if failure == "http":
+        assert event["fallback_category"] == "permission_error" and event["http_status"] == 403
+    else:
+        assert event["validation_outcome"] == (
+            "unknown_support_id" if failure == "support" else "causal_violation"
+        )
+    assert all(
+        text not in json.dumps(events())
+        for text in ("PRIVATE_BODY", "/private/path", "Josh Allen", "0.237")
+    )
+
+
+def test_invalid_writer_telemetry_category_is_silently_dropped(events):
+    config = ProviderConfiguration.from_environment(environment())
+    telemetry.provider_event(
+        config,
+        component="writer",
+        phase=telemetry.ProviderPhase.WRITER_VALIDATION,
+        validation_outcome="PRIVATE_PAYLOAD",
+    )
+    assert events() == []

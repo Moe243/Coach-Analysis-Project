@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .answer_writer import ApprovedAnswerBrief, WriterResult
 from .contracts import (
     STAGE_D_IMPLEMENTATION_VERSION,
     ProviderSynthesisInput,
@@ -18,6 +19,9 @@ GROQ_PLANNER_REASONING_EFFORT = "medium"
 GROQ_SYNTHESIZER_REASONING_EFFORT = "low"
 GROQ_PROVIDER_IMPLEMENTATION_VERSION = (
     STAGE_D_IMPLEMENTATION_VERSION + "/groq-draft-planner-v1-responses-3.14"
+)
+GROQ_WRITER_IMPLEMENTATION_VERSION = (
+    STAGE_D_IMPLEMENTATION_VERSION + "/groq-grounded-writer-v1-responses-3.14"
 )
 
 _DRAFT_INSTRUCTIONS = """\
@@ -40,6 +44,23 @@ Why? -> inherit prior request type; []; []; EXPLANATION; false; EXPLANATION.
 What about 2023? -> inherit prior request type/capability; []; [2023]; false; REFINE_SCOPE.
 Never propose a supported projection to satisfy a counterfactual, destination prediction,
 forward PAE, rookie, or Coach Effect request. Classify the actual requested intent instead.
+"""
+
+_WRITER_INSTRUCTIONS = """\
+Write a concise, natural football-analysis answer using only the supplied approved answer brief.
+Return the strict WriterResult schema and nothing else. Do not calculate, round, infer, or add
+facts, entities, seasons, rankings, scores, probabilities, causal claims, or predictions. Every
+factual sentence must cite its approved support IDs, every number must cite its exact approved
+measurement IDs, and every named football entity must cite its approved canonical entity ID.
+Select complete clauses from each support's phrasings (or text when no phrasings exist).
+You may reorder/combine those clauses with punctuation or and/also/in addition/for context/
+however/meanwhile. Do not freely paraphrase factual clauses: backend validation requires
+complete approved clauses with their metric labels and context intact. Leading + on a positive
+number and percent/% typography are allowed. Choose natural phrasings over technical originals.
+Use every required limitation ID in the separate limitation sentence, retaining its complete
+approved caveat text. Never expose IDs in sentence text. Do not repeat navigation options, discuss
+provider internals, or provide reasoning steps. Keep the complete answer under the brief's word
+limit. A team-independent projection must remain explicitly team-independent.
 """
 
 
@@ -86,6 +107,38 @@ class GroqSynthesizer(OpenAISynthesizer):
         return arguments
 
 
+class GroqAnswerWriter:
+    """Author natural prose from a bounded backend-approved answer brief."""
+
+    implementation_version = GROQ_WRITER_IMPLEMENTATION_VERSION
+
+    def __init__(self, client: Any, configuration: ProviderConfiguration):
+        self.client = client
+        self.configuration = configuration
+        self.model_version = configuration.synthesizer_model
+
+    def write(self, request: ApprovedAnswerBrief, *, timeout: float) -> WriterResult:
+        response = self.client.responses.parse(**self._request_arguments(request, timeout))
+        return _parsed(response, WriterResult)
+
+    def _request_arguments(self, request: ApprovedAnswerBrief, timeout: float) -> dict[str, Any]:
+        return dict(
+            model=self.model_version,
+            instructions=_WRITER_INSTRUCTIONS,
+            input=canonical_json_bytes(request).decode("ascii"),
+            text_format=WriterResult,
+            store=False,
+            background=False,
+            stream=False,
+            tools=[],
+            tool_choice="none",
+            parallel_tool_calls=False,
+            reasoning={"effort": GROQ_SYNTHESIZER_REASONING_EFFORT},
+            max_output_tokens=self.configuration.synthesizer_max_output_tokens,
+            timeout=timeout,
+        )
+
+
 def groq_runtime(configuration: ProviderConfiguration) -> ProviderRuntime:
     """Create a Groq client only after provider and sharing gates validate."""
     if not configuration.ready:
@@ -100,6 +153,5 @@ def groq_runtime(configuration: ProviderConfiguration) -> ProviderRuntime:
     return ProviderRuntime(
         configuration=configuration,
         planner=GroqPlanner(client, configuration),
-        # Groq synthesis remains experimental; no evidence is sent to it in this mode.
-        synthesizer=None,
+        writer=GroqAnswerWriter(client, configuration),
     )

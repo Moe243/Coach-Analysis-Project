@@ -1,4 +1,4 @@
-"""Offline literal-grounding, task-binding and one-call Groq-mode regressions."""
+"""Offline literal-grounding, task-binding and bounded Groq-mode regressions."""
 
 import socket
 from pathlib import Path
@@ -37,7 +37,7 @@ from nfl_coaching_impact.conversation.provider_drafts import (
 from nfl_coaching_impact.conversation.provider_orchestration import ProviderOrchestrator
 from nfl_coaching_impact.conversation.providers import ProviderConfiguration, ProviderRuntime
 from nfl_coaching_impact.conversation.serialization import canonical_json_bytes
-from tests.test_ask_v2_groq_provider import groq_configuration
+from tests.test_ask_v2_groq_provider import LocalWriter, groq_configuration
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -450,28 +450,28 @@ class FakeDraftPlanner:
         ),
     ],
 )
-def test_groq_one_call_and_exact_deterministic_scientific_rendering(evidence, question, value):
+def test_groq_two_calls_preserve_deterministic_scientific_evidence(evidence, question, value):
     planner = FakeDraftPlanner(value)
 
     class NoSynthesis:
         def synthesize(self, *args, **kwargs):
             raise AssertionError("Groq synthesis must never run")
 
+    writer = LocalWriter()
     runtime = ProviderRuntime(
-        configuration=groq_configuration(synthesizer_model=""),
+        configuration=groq_configuration(),
         planner=planner,
         synthesizer=NoSynthesis(),
+        writer=writer,
     )
     request = AskV2Request(question=question)
     response = ProviderOrchestrator(evidence, runtime).answer(request)
     expected = (
         AskV2Orchestrator(evidence).analyze(request, translate(evidence, request, value)).response
     )
-    assert response.answer_mode is AnswerMode.GROUNDED_AI and planner.calls == 1
-    assert response.versions.synthesizer_model_version is None
-    assert response.versions.synthesizer_implementation_version == "ask-v2-stage-c"
+    assert response.answer_mode is AnswerMode.GROUNDED_AI and planner.calls == writer.calls == 1
+    assert response.versions.synthesizer_model_version == "openai/gpt-oss-120b"
     for field in (
-        "answer",
         "answerability",
         "evidence",
         "propositions",
@@ -488,7 +488,9 @@ def test_invalid_draft_exact_deterministic_fallback(evidence):
     planner = FakeDraftPlanner(
         draft(RequestedCapability.QB_PROJECTION, (("Josh Allen", EntityKind.QB),))
     )
-    runtime = ProviderRuntime(configuration=groq_configuration(), planner=planner)
+    runtime = ProviderRuntime(
+        configuration=groq_configuration(), planner=planner, writer=LocalWriter()
+    )
     response = ProviderOrchestrator(evidence, runtime).answer(request)
     assert canonical_json_bytes(response) == canonical_json_bytes(
         AskV2Orchestrator(evidence).answer(request)
@@ -496,7 +498,7 @@ def test_invalid_draft_exact_deterministic_fallback(evidence):
     assert planner.calls == 1
 
 
-def test_groq_configuration_does_not_require_unused_synthesis():
+def test_groq_configuration_requires_valid_writer_budget_not_a_second_model():
     from tests.test_ask_v2_groq_provider import groq_environment
 
     c = ProviderConfiguration.from_environment(
@@ -506,4 +508,6 @@ def test_groq_configuration_does_not_require_unused_synthesis():
             ASK_V2_SYNTHESIZER_MAX_OUTPUT_TOKENS="invalid-unused",
         )
     )
-    assert c.ready and c.planner_only
+    assert not c.ready
+    c = ProviderConfiguration.from_environment(groq_environment(ASK_V2_GROQ_SYNTHESIZER_MODEL=""))
+    assert c.ready and c.uses_draft_planner and c.uses_answer_writer
