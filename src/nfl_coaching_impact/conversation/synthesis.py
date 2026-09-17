@@ -84,6 +84,27 @@ class DeterministicSynthesizer:
             answer = self._team_scheme(propositions)
         elif question_type is QuestionType.COACH_QB_CONTEXT:
             answer = self._coach_qb_context(propositions)
+        elif (
+            question_type is QuestionType.COACH_HISTORY
+            and requested_metric == "verified_offensive_roles"
+        ):
+            roles = [item for item in propositions if item.predicate == "verified_role_attribution"]
+            offensive_roles = [
+                item
+                for item in roles
+                if item.value in {"offensive_coordinator", "quarterbacks_coach", "play_caller"}
+            ]
+            shown = []
+            for item in offensive_roles or roles:
+                if item.value not in {role.value for role in shown}:
+                    shown.append(item)
+            answer = " ".join(item.statement for item in shown[:3])
+            if not offensive_roles:
+                answer += (
+                    " The returned evidence does not separately verify offensive coordinator, "
+                    "quarterback coach, or play-calling duties. Those duties are not inferred "
+                    "from a head-coach title."
+                )
         elif question_type is QuestionType.QB_COACHING_CONTEXT:
             history = sorted(
                 (item for item in propositions if item.predicate == "historical_qb_performance"),

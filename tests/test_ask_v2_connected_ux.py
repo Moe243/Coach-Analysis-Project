@@ -1,12 +1,24 @@
 """Real frozen-evidence regressions for connected Ask interpretation/context."""
 
+import socket
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from nfl_coaching_impact import release_snapshot as release
-from nfl_coaching_impact.conversation.contracts import AskV2Request
-from nfl_coaching_impact.conversation.enums import AnalyticalTask, EntityKind, QuestionType
+from nfl_coaching_impact.api import app
+from nfl_coaching_impact.ask_api import _load
+from nfl_coaching_impact.conversation.api import _cached_evidence
+from nfl_coaching_impact.conversation.contracts import AskV2Request, AskV2Response
+from nfl_coaching_impact.conversation.enums import (
+    AnalyticalTask,
+    Answerability,
+    AnswerMode,
+    ConclusionKind,
+    EntityKind,
+    QuestionType,
+)
 from nfl_coaching_impact.conversation.evidence import EvidenceService
 from nfl_coaching_impact.conversation.orchestration import AskV2Orchestrator
 
@@ -346,3 +358,217 @@ def test_missing_staff_cannot_be_presented_as_verified_context(orchestrator, mon
     assert response.answerability.value == "PARTIALLY_SUPPORTED"
     assert "No verified coaching assignment" in response.answer
     assert not any(entity.kind is EntityKind.COACH for entity in response.entities)
+
+
+def _frontend_context(history):
+    """Mirror the bounded frontend's user turns, latest entities, and season scope."""
+    latest = history[-1][1]
+    seasons = {item.season for item in latest.propositions if item.season is not None}
+    return {
+        "turns": [{"role": "user", "content": question} for question, _ in history[-8:]],
+        "entities": sorted(
+            [{"kind": entity.kind.value, "id": entity.id} for entity in latest.entities],
+            key=lambda entity: f"{entity['kind']}:{entity['id']}",
+        ),
+        **(
+            {"seasons": {"start_season": min(seasons), "end_season": min(seasons)}}
+            if len(seasons) == 1
+            else {}
+        ),
+    }
+
+
+def _assert_verified_coach_roles(result, coach_id):
+    assert result.plan.follow_up
+    assert result.plan.proposal.question_type is QuestionType.COACH_HISTORY
+    assert [task.task for task in result.package.approved_tasks] == [
+        AnalyticalTask.GET_COACH_ASSIGNMENTS
+    ]
+    assert result.response.answerability is Answerability.SUPPORTED
+    assert result.response.answer_mode is AnswerMode.DETERMINISTIC
+    assert [entity.id for entity in result.response.entities] == [coach_id]
+    assert result.package.evidence
+    for record in result.package.evidence:
+        assert record.entities[0].id == coach_id
+        assert record.kind.value == "COACH_ASSIGNMENT"
+        assert record.sources
+        assert (
+            next(value.value for value in record.values if value.name == "verification_status")
+            == "verified"
+        )
+        assert all(source.source_url for source in record.sources)
+    assert result.response.propositions
+    assert all(
+        item.kind is ConclusionKind.VERIFIED_ROLE_ATTRIBUTION
+        for item in result.response.propositions
+    )
+    assert result.response.versions.planner_model_version is None
+    assert result.response.versions.synthesizer_model_version is None
+    for private_term in (coach_id, "checkpoint", "CLARIFICATION_REQUIRED", "evidence_"):
+        assert private_term not in result.response.answer
+
+
+def test_mccarthy_generated_role_followup_uses_exact_frontend_context(orchestrator):
+    history = []
+    for question in (
+        "Who was Mike McCarthy?",
+        "Which quarterbacks shared Mike McCarthy's team-seasons?",
+    ):
+        response = orchestrator.answer(
+            AskV2Request(question=question, context=_frontend_context(history) if history else {})
+        )
+        history.append((question, response))
+    followup = history[-1][1].follow_ups[0].question
+    assert followup == "Show verified offensive roles"
+    context = _frontend_context(history)
+    assert context["entities"] == [{"kind": "coach", "id": "coach-mike-mccarthy"}]
+    result = orchestrator.analyze(AskV2Request(question=followup, context=context))
+    _assert_verified_coach_roles(result, "coach-mike-mccarthy")
+    source_roles = {
+        row["role"]
+        for row in orchestrator.evidence.analytical.index["assignments"]["coach-mike-mccarthy"]
+        if row["verification_status"] == "verified"
+    }
+    assert {item.value for item in result.response.propositions} == source_roles - {"head_coach"}
+    assert "play caller assignment" in result.response.answer
+    assert "does not separately verify" not in result.response.answer
+
+
+@pytest.mark.parametrize(
+    "entities",
+    [
+        [],
+        [{"kind": "qb", "id": "00-0034857"}],
+        [{"kind": "team", "id": "team_gb"}],
+        [
+            {"kind": "coach", "id": "coach-andy-reid"},
+            {"kind": "coach", "id": "coach-mike-tomlin"},
+        ],
+    ],
+)
+def test_role_followup_never_guesses_missing_incompatible_or_ambiguous_coach(
+    orchestrator, entities
+):
+    result = orchestrator.analyze(
+        AskV2Request(question="Show verified offensive roles", context={"entities": entities})
+    )
+    assert result.response.answerability is Answerability.CLARIFICATION_REQUIRED
+    assert result.package.approved_tasks == ()
+    assert not result.response.entities
+    assert not result.response.propositions
+    assert not result.response.evidence
+
+
+@pytest.mark.parametrize("mixed_context", [False, True])
+def test_role_followup_binds_only_one_compatible_coach(orchestrator, mixed_context):
+    entities = [{"kind": "coach", "id": "coach-andy-reid"}]
+    if mixed_context:
+        entities.extend([{"kind": "qb", "id": "00-0034857"}, {"kind": "team", "id": "team_buf"}])
+    result = orchestrator.analyze(
+        AskV2Request(question="Show verified offensive roles", context={"entities": entities})
+    )
+    _assert_verified_coach_roles(result, "coach-andy-reid")
+    assert "play caller assignment" in result.response.answer
+
+
+def test_role_followup_uses_mcvay_replacement_not_previous_reid(orchestrator):
+    question = "Who was Andy Reid?"
+    history = [(question, orchestrator.answer(AskV2Request(question=question)))]
+    replacement = orchestrator.answer(
+        AskV2Request(question="What about McVay?", context=_frontend_context(history))
+    )
+    assert [entity.id for entity in replacement.entities] == ["coach-sean-mcvay"]
+    history.append(("What about McVay?", replacement))
+    result = orchestrator.analyze(
+        AskV2Request(question="Show verified offensive roles", context=_frontend_context(history))
+    )
+    _assert_verified_coach_roles(result, "coach-sean-mcvay")
+    assert "offensive coordinator assignment" in result.response.answer
+    assert "play caller assignment" in result.response.answer
+
+
+def test_role_followup_does_not_infer_offensive_duties_from_head_coach_title(orchestrator):
+    result = orchestrator.analyze(
+        AskV2Request(
+            question="Show verified offensive roles",
+            context={"entities": [{"kind": "coach", "id": "coach-mike-tomlin"}]},
+        )
+    )
+    _assert_verified_coach_roles(result, "coach-mike-tomlin")
+    assert {item.value for item in result.response.propositions} == {"head_coach"}
+    assert "does not separately verify" in result.response.answer
+    assert "not inferred from a head-coach title" in result.response.answer
+
+
+def test_role_followup_does_not_restore_old_coach_when_active_context_is_a_qb(orchestrator):
+    result = orchestrator.analyze(
+        AskV2Request(
+            question="Show verified offensive roles",
+            context={
+                "turns": [{"role": "user", "content": "Who was Andy Reid?"}],
+                "entities": [{"kind": "qb", "id": "00-0034857"}],
+            },
+        )
+    )
+    assert result.response.answerability is Answerability.CLARIFICATION_REQUIRED
+    assert not result.package.approved_tasks
+    assert not result.response.entities
+
+
+def test_role_followup_of_actual_coach_comparison_requests_clarification(orchestrator):
+    question = "Compare Andy Reid and Mike Tomlin."
+    comparison = orchestrator.answer(AskV2Request(question=question))
+    result = orchestrator.analyze(
+        AskV2Request(
+            question="Show verified offensive roles",
+            context=_frontend_context([(question, comparison)]),
+        )
+    )
+    assert result.response.answerability is Answerability.CLARIFICATION_REQUIRED
+    assert not result.package.approved_tasks
+    assert not result.response.propositions
+
+
+def test_mccarthy_role_followup_api_is_deterministic_and_has_no_network(monkeypatch):
+    monkeypatch.setenv(
+        "ASK_DATA_DIR",
+        str(Path(__file__).resolve().parents[1] / "data/processed/ask_anything" / release.VERSION),
+    )
+    monkeypatch.setenv("ASK_V2_EXTERNAL_SHARING_ENABLED", "false")
+    monkeypatch.setenv("ASK_V2_OPENAI_ENABLED", "false")
+    monkeypatch.setattr(
+        socket,
+        "create_connection",
+        lambda *_args, **_kwargs: pytest.fail("Deterministic followups must not call a provider"),
+    )
+    _load.cache_clear()
+    _cached_evidence.cache_clear()
+    try:
+        client = TestClient(app)
+        history = []
+        for question in (
+            "Who was Mike McCarthy?",
+            "Which quarterbacks shared Mike McCarthy's team-seasons?",
+            "Show verified offensive roles",
+        ):
+            response = client.post(
+                "/ask/v2",
+                json={
+                    "question": question,
+                    "context": _frontend_context(history) if history else {},
+                },
+            )
+            assert response.status_code == 200
+            answer = AskV2Response.model_validate(response.json())
+            history.append((question, answer))
+        assert answer.answerability is Answerability.SUPPORTED
+        assert answer.answer_mode is AnswerMode.DETERMINISTIC
+        assert [entity.id for entity in answer.entities] == ["coach-mike-mccarthy"]
+        assert all(
+            item.kind is ConclusionKind.VERIFIED_ROLE_ATTRIBUTION for item in answer.propositions
+        )
+        assert answer.versions.planner_model_version is None
+        assert answer.versions.synthesizer_model_version is None
+    finally:
+        _load.cache_clear()
+        _cached_evidence.cache_clear()

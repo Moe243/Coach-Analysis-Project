@@ -74,6 +74,8 @@ _METRICS = {
     "success": "success_rate",
 }
 
+_COACH_ROLE_CONTINUATION = re.compile(r"(?:show|list)(?: the)? verified offensive roles")
+
 
 def _contains(text: str, phrase: str) -> bool:
     return bool(phrase) and f" {phrase} " in f" {text} "
@@ -347,6 +349,13 @@ class DeterministicPlanner:
                 explicit.append(result.resolved[0])
             else:
                 failures.append(result)
+        if (
+            _COACH_ROLE_CONTINUATION.fullmatch(normalize(request.question))
+            and request.context.entities
+        ):
+            # The frontend supplies the latest active canonical identities. For this
+            # continuation, older named turns must not revive a replaced coach.
+            return tuple(explicit), tuple(failures)
         prior: list[ResolvedEntity] = []
         for turn in reversed(request.context.turns):
             if turn.role is ConversationRole.USER:
@@ -377,7 +386,8 @@ class DeterministicPlanner:
     @staticmethod
     def _is_follow_up(question: str) -> bool:
         return bool(
-            re.fullmatch(
+            _COACH_ROLE_CONTINUATION.fullmatch(question)
+            or re.fullmatch(
                 r"(?:why|why .*|what about .*|how about .*|and .*|now .*|only .*|"
                 r"who is better|which is better|by how much|"
                 r"who (?:coached|coaches|was coaching) (?:him|her|them|the quarterback)|"
@@ -392,6 +402,8 @@ class DeterministicPlanner:
         question_type: QuestionType,
         resolutions: list[EntityResolution] | tuple[EntityResolution, ...],
     ) -> str | None:
+        if _COACH_ROLE_CONTINUATION.fullmatch(question):
+            return "verified_offensive_roles"
         metric = next((value for key, value in _METRICS.items() if _contains(question, key)), None)
         if question_type is QuestionType.QB_PROJECTION and any(
             resolution.kind is EntityKind.COACH and resolution.lookup_authorized
@@ -410,7 +422,12 @@ class DeterministicPlanner:
         result = list(current)
         if follow_up and not current:
             result = list(context)
-            if re.fullmatch(
+            if _COACH_ROLE_CONTINUATION.fullmatch(question):
+                # Role continuations bind only one compatible coach, never a QB/team
+                # or an arbitrary member of an active coach comparison.
+                coaches = [entity for entity in context if entity.kind is EntityKind.COACH]
+                result = coaches if len(coaches) == 1 else []
+            elif re.fullmatch(
                 r"who (?:coached|coaches|was coaching) (?:him|her|them|the quarterback)",
                 question,
             ):

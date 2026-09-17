@@ -155,7 +155,20 @@ class ConclusionEngine:
             QuestionType.CAREER_COUNTERFACTUAL,
         }:
             propositions.extend(self._scheme(evidence, scheme_metric))
-        propositions.extend(self._roles(evidence))
+        roles = self._roles(evidence)
+        if (
+            question_type is QuestionType.COACH_HISTORY
+            and requested_metric == "verified_offensive_roles"
+        ):
+            # Retain requested offensive assignments before the bounded claim cap;
+            # numerous head-coach seasons must not crowd out direct role evidence.
+            offensive_roles = [
+                item
+                for item in roles
+                if item.value in {"offensive_coordinator", "quarterbacks_coach", "play_caller"}
+            ]
+            roles = offensive_roles or roles
+        propositions.extend(roles)
         propositions.extend(self._contexts(evidence))
         propositions.extend(self._context_summaries(evidence))
         propositions.extend(self._pcae(evidence))
