@@ -17,6 +17,7 @@ from .answer_writer import (
     validate_writer_result,
 )
 from .contracts import ContractModel
+from .enums import QuestionType
 from .providers import WriterValidationCategory
 from .serialization import canonical_json_bytes
 
@@ -100,7 +101,7 @@ def approved_phrases(brief: ApprovedAnswerBrief) -> tuple[ApprovedPhrase, ...]:
 def composition_provider_input(brief: ApprovedAnswerBrief) -> dict:
     """Compact wire catalog; IDs select prose, never confer analytical authority."""
     phrases = approved_phrases(brief)
-    return {
+    payload = {
         "question_type": brief.question_type,
         "topic": brief.topic,
         "maximum_words": brief.maximum_words,
@@ -111,6 +112,15 @@ def composition_provider_input(brief: ApprovedAnswerBrief) -> dict:
             for p in phrases
         ],
     }
+    if brief.question_type is QuestionType.PLAYER_TEAM_SCENARIO:
+        payload["composition_rules"] = {
+            "facts_before_limitations": True,
+            "minimum_facts": min(
+                2, sum(s.kind is BriefSupportKind.PROPOSITION for s in brief.supports)
+            ),
+            "limitation_connector": Connector.NONE,
+        }
+    return payload
 
 
 def validate_composition(
@@ -142,6 +152,25 @@ def validate_composition(
             WriterValidationCategory.SCHEMA_INVALID,
             "composition must lead with a fact and contain at most eight facts",
         )
+    if brief.question_type is QuestionType.PLAYER_TEAM_SCENARIO:
+        available = sum(s.kind is BriefSupportKind.PROPOSITION for s in brief.supports)
+        actual = sum(p.kind is BriefSupportKind.PROPOSITION for p in facts)
+        first_limit = next(
+            (i for i, p in enumerate(chosen) if p.kind is BriefSupportKind.LIMITATION), len(chosen)
+        )
+        if (
+            actual < min(2, available)
+            or any(p.kind is not BriefSupportKind.LIMITATION for p in chosen[first_limit:])
+            or any(
+                item.connector is not Connector.NONE
+                for item, p in zip(items, chosen, strict=True)
+                if p.kind is BriefSupportKind.LIMITATION
+            )
+        ):
+            raise WriterRejected(
+                WriterValidationCategory.SCHEMA_INVALID,
+                "scenario needs useful comparisons before unprefixed caveats",
+            )
     for item, phrase in zip(items, chosen, strict=True):
         if item.connector is Connector.LIMITATION_TRANSITION and (
             phrase.kind is not BriefSupportKind.LIMITATION

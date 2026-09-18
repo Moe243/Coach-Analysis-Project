@@ -260,7 +260,7 @@ corrections uncommitted. Main, Render, Neon, OpenAI and production sharing were 
 It motivated the separately authorized composition-only corrective round below; the
 rejected wording itself is unknown and no exact offending sentence is asserted.
 
-## Current composition corrective round — offline only
+## Historical composition corrective round — offline only
 
 Private writer implementation identity is now
 `ask-v2-stage-d/groq-composition-writer-v2-responses-3.14`; analytical versions and
@@ -301,3 +301,48 @@ resolved with narrowly granted cache access, not skipped or counted as a test pa
 No frontend source, analytical pipeline/model, frozen snapshot, database/migration,
 production configuration or deployment file changed. No live Groq/OpenAI calls occurred;
 Render and Neon were not accessed. The future paced smoke plan above remains required.
+
+## Current descriptive-scenario composition polish
+
+The subsequent paced smoke accepted all four planner/writer compositions without
+fallback, retry or 429. Its product gate failed only for Kyler/Minnesota: fragmented
+rate comparisons were interrupted by two mandatory passages totaling 68 words, with
+repeated “For context” introductions. This is a presentation defect, not unsupported
+scientific evidence or a provider transport defect.
+
+Private writer identity is now
+`ask-v2-stage-d/groq-composition-writer-v2.1-responses-3.14`. Reusable descriptive
+phrases are complete player-first/team-first sentences. “Higher than”, “lower than”
+and “the same as” describe the exact approved rates using Decimal comparisons; they
+do not infer similarity thresholds, suitability, improvement or predictive fit.
+No metric, analytical model, scientific permission or frozen snapshot changes.
+
+Only `PLAYER_TEAM_SCENARIO` combines the complete known six-warning bundle into one
+33-word mandatory phrase: limited coverage, preseason/not-live history, unavailable
+missing measurements, no coaching causation, no predictive fit and no forecast of
+performance/improvement with another team. Consolidation requires all six known
+meanings; partial bundles and additional/unknown warnings are retained. The original
+backend response and its limitations remain unchanged. Other question types,
+including the Reid/Tomlin development limitation, are not shortened.
+
+Scenario wire rules require at least two approved factual points when two are
+available, all facts before caveats, and `none` for caveat connectors. The backend
+enforces the same bounds, preventing interruption and repeated introductions without
+fixing the chosen facts, variants, ordering or paragraph grouping. Groq still chooses
+composition; the existing strict phrase-ID schema and all grounding/fallback checks
+remain. No connector with new factual or causal meaning was added.
+
+Kyler/Minnesota's canonical wire catalog is **2,481 bytes**, versus **2,764 bytes**
+before polish (excluding instructions/schema). Multiple two-/four-point, player-/team-
+first offline goldens pass. Extra-warning, partial-bundle, exact-direction, interrupted-
+facts, prefixed-caveat and predictive-prose attack regressions are included.
+
+The final live check requires separate completion after the offline fix commit:
+exactly one Kyler/Minnesota question, one planner and one writer call, no retry or
+repair, with the prior safe reset/pacing honored. No production activation is included.
+
+Offline gate: **746 backend tests passed**, **66 frontend Ask tests passed**, with
+zero failures/skips. TypeScript, ESLint, Prettier, Ruff, Python formatting (104 files),
+compilation, production frontend build and `git diff --check` pass. Allen 2022,
+Reid/Tomlin, Allen 2026, McCarthy and Rodgers goldens remain grounded and pass.
+The live result is intentionally not asserted by this offline commit.

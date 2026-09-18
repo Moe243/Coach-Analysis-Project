@@ -189,7 +189,7 @@ def test_product_quality_goldens_remain_grounded_and_concise(engine, question):
         assert len(brief.required_limitation_ids) == 1
     elif question == KYLER:
         assert "Kyler Murray" in text and "Minnesota Vikings" in text
-        assert "not a predictive fit rating" in text
+        assert "do not establish coaching causation or predictive fit" in text
         assert "cannot forecast" in text
     elif question == PROJECTION:
         assert all(x in text for x in ("team-independent", "0.120", "-0.248", "0.488", "95%"))
@@ -562,9 +562,9 @@ def test_comparison_and_alignment_have_shorter_approved_football_phrasings(engin
         assert "bounded historical summary" in text
     else:
         assert "Kyler Murray" in text and "Minnesota Vikings" in text
-        assert "not a predictive fit rating" in text
+        assert "do not establish coaching causation or predictive fit" in text
         assert "cannot forecast performance or improvement with a different team" in text
-        assert "not current or live performance" in text
+        assert "not live performance" in text
 
 
 def test_late_planner_leaves_only_the_remaining_total_budget_for_writer(

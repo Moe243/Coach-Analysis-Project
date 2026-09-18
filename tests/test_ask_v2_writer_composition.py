@@ -52,7 +52,9 @@ def composed_plan(brief, *, alternative=False):
 
     fact_items = [item(s) for s in facts]
     limits = [item(s) for s in brief.supports if s.support_id in brief.required_limitation_ids]
-    if alternative and limits:
+    if alternative and limits and brief.question_type.value == "PLAYER_TEAM_SCENARIO":
+        paragraphs = [{"items": fact_items[:2]}, {"items": [*fact_items[2:], *limits]}]
+    elif alternative and limits:
         limits[0]["connector"] = "limitation_transition"
         paragraphs = [{"items": [fact_items[0], *limits]}, {"items": fact_items[1:]}]
         paragraphs = [p for p in paragraphs if p["items"]]
@@ -315,3 +317,155 @@ def test_paragraph_and_total_item_caps_cannot_be_bypassed(engine):
                 ]
             }
         )
+
+
+@pytest.mark.parametrize("alternative", [False, True])
+@pytest.mark.parametrize("point_count", [2, 4])
+def test_scenario_polish_has_natural_comparisons_and_one_final_caveat(
+    engine, alternative, point_count
+):
+    brief = brief_for(engine, KYLER)
+    phrases = approved_phrases(brief)
+    supports = [s for s in brief.supports if s.kind is BriefSupportKind.PROPOSITION]
+    selected = supports[:point_count]
+    if alternative:
+        selected.reverse()
+    facts = [
+        {
+            "phrase_id": [p for p in phrases if p.support_id == s.support_id][
+                -1 if alternative else 0
+            ].phrase_id,
+            "connector": "none",
+        }
+        for s in selected
+    ]
+    limitation = next(p for p in phrases if p.kind is BriefSupportKind.LIMITATION)
+    plan = {
+        "paragraphs": [
+            {"items": facts},
+            {"items": [{"phrase_id": limitation.phrase_id, "connector": "none"}]},
+        ]
+    }
+    answer = render(engine, brief, plan)
+    assert len(brief.required_limitation_ids) == 1
+    assert len(limitation.text.split()) <= 40
+    assert answer.endswith(limitation.text)
+    assert "For context" not in answer
+    assert "Kyler Murray" in answer and "Minnesota Vikings" in answer
+    assert "higher than" in answer or "lower than" in answer
+    assert all(value in answer for value in ("10.5%", "12.8%", "69.9%", "64.9%"))
+    for meaning in (
+        "limited",
+        "preseason history",
+        "not live performance",
+        "missing measurements stay unavailable",
+        "coaching causation",
+        "do not establish",
+        "predictive fit",
+        "cannot forecast",
+        "performance or improvement with a different team",
+    ):
+        assert meaning in limitation.text
+
+
+def test_scenario_consolidation_never_changes_backend_or_drops_extra_restriction(engine):
+    from dataclasses import replace
+
+    result = engine.analyze(AskV2Request(question=KYLER))
+    original = canonical_json_bytes(result.response)
+    changed = replace(
+        result,
+        response=result.response.model_copy(
+            update={
+                "limitations": (
+                    *result.response.limitations,
+                    "Additional source-specific warning remains.",
+                )
+            }
+        ),
+    )
+    brief = approved_answer_brief(changed)
+    assert "Additional source-specific warning remains." in render(
+        engine, brief, composed_plan(brief)
+    )
+    assert canonical_json_bytes(result.response) == original
+    # A partial bundle is never silently replaced by the global complete bundle.
+    partial = replace(
+        result,
+        response=result.response.model_copy(
+            update={
+                "limitations": tuple(
+                    text
+                    for text in result.response.limitations
+                    if text
+                    != (
+                        "Missing scheme values remain unavailable "
+                        "and are never league-average filled."
+                    )
+                )
+            }
+        ),
+    )
+    partial_brief = approved_answer_brief(partial)
+    assert not any("These are limited comparisons" in s.text for s in partial_brief.supports)
+
+
+@pytest.mark.parametrize("attack", ["interrupted_facts", "prefixed_caveat", "one_of_four_facts"])
+def test_bad_scenario_compositions_fail_closed(evidence, engine, attack):
+    brief = brief_for(engine, KYLER)
+    plan = composed_plan(brief).model_dump(mode="json")
+    if attack == "interrupted_facts":
+        plan["paragraphs"][0]["items"].insert(1, plan["paragraphs"][1]["items"].pop())
+        plan["paragraphs"].pop()
+    elif attack == "prefixed_caveat":
+        plan["paragraphs"][1]["items"][0]["connector"] = "limitation_transition"
+    else:
+        plan["paragraphs"][0]["items"] = plan["paragraphs"][0]["items"][:1]
+    runtime = ProviderRuntime(
+        groq_configuration(), planner=LocalPlanner(evidence), writer=LocalWriter(value=plan)
+    )
+    assert ProviderOrchestrator(evidence, runtime).answer(
+        AskV2Request(question=KYLER)
+    ) == engine.answer(AskV2Request(question=KYLER))
+
+
+@pytest.mark.parametrize(
+    "unsupported",
+    [
+        "Minnesota is a great fit",
+        "Kyler would improve",
+        "Kyler projects to 0.30",
+        "75% improvement chance",
+        "fit score 95",
+        "destination EPA 0.30",
+        "destination PAE 0.20",
+    ],
+)
+def test_polished_alignment_still_cannot_smuggle_predictive_prose(engine, unsupported):
+    brief = brief_for(engine, KYLER)
+    plan = composed_plan(brief).model_dump(mode="json")
+    plan["paragraphs"][0]["items"][0]["text"] = unsupported
+    with pytest.raises(WriterRejected):
+        render(engine, brief, plan)
+
+
+@pytest.mark.parametrize(
+    "player_rate,team_rate,word",
+    [
+        ("10.5%", "12.8%", "lower than"),
+        ("13.0%", "12.8%", "higher than"),
+        ("12.8%", "12.8%", "the same as"),
+    ],
+)
+def test_comparison_direction_is_exact_generic_description(player_rate, team_rate, word):
+    from nfl_coaching_impact.conversation.answer_writer import _public_phrasings
+
+    fact = (
+        f"Fixture QB's measured recent deep-target rate was {player_rate}; "
+        f"Fixture Team' historical deep-target rate was {team_rate}."
+    )
+    variants = _public_phrasings("descriptive_player_scheme_alignment", fact)
+    assert len(variants) == 2 and word in variants[0]
+    assert variants[0].startswith("Fixture QB") and variants[1].startswith("Fixture Team")
+    assert all(player_rate in text and team_rate in text for text in variants)
+    assert not any("fit" in text or "improve" in text for text in variants)

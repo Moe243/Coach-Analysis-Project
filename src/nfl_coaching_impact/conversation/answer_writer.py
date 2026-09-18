@@ -399,13 +399,22 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
         )
         if match:
             player, metric, player_value, team, team_value = match.groups()
-            phrasings.append(
-                f"{player}'s recent measured {metric}: {player_value}, "
-                f"versus {team}' historical {team_value}."
+            player_number = Decimal(player_value.rstrip("%"))
+            team_number = Decimal(team_value.rstrip("%"))
+            player_comparison, team_comparison = (
+                ("lower than", "higher than")
+                if player_number < team_number
+                else ("higher than", "lower than")
+                if player_number > team_number
+                else ("the same as", "the same as")
             )
             phrasings.append(
-                f"Historical {metric}: {player}'s recent measured {player_value}, "
-                f"versus {team}' historical {team_value}."
+                f"{player}'s recent measured {metric} was {player_value}, "
+                f"{player_comparison} {team}' historical {team_value}."
+            )
+            phrasings.append(
+                f"{team}' historical {metric} was {team_value}, "
+                f"{team_comparison} {player}'s recent measured {player_value}."
             )
     elif predicate == "qb_context_summary":
         match = re.fullmatch(
@@ -463,6 +472,29 @@ def _brief_limitations(result: AuthoritativeResult) -> tuple[str, ...]:
         translated = _public_limitation(text)
         if translated not in texts:
             texts.append(translated)
+    if result.plan.proposal.question_type is QuestionType.PLAYER_TEAM_SCENARIO:
+        # Consolidate only this complete, known semantic bundle. Other answer
+        # types and every additional/unknown restriction remain untouched.
+        scenario_bundle = {
+            _public_limitation(note)
+            for note in (
+                "Alignment compares declared compatible tendencies only; it is not a fit score.",
+                "BOUNDED_SCOPE:",
+                "Historical scheme is observed team-season behavior, not causal coach ownership.",
+                "Missing scheme values remain unavailable and are never league-average filled.",
+                "Player State is entering-season evidence, not current or live performance.",
+                "The destination-team research does not support a prediction "
+                "or improvement adjustment.",
+            )
+        }
+        if scenario_bundle <= set(texts):
+            texts = [
+                "These are limited comparisons of preseason history, not live performance; "
+                "missing measurements stay unavailable. They do not establish coaching "
+                "causation or predictive fit and cannot forecast performance or improvement "
+                "with a different team.",
+                *(text for text in texts if text not in scenario_bundle),
+            ]
     # One concise caveat paragraph where possible. Every applicable restriction is
     # still mandatory; grouping avoids repeated reference arrays for separate notes.
     paragraphs: list[str] = []

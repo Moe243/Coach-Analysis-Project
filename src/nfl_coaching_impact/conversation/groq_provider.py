@@ -23,7 +23,7 @@ GROQ_PROVIDER_IMPLEMENTATION_VERSION = (
     STAGE_D_IMPLEMENTATION_VERSION + "/groq-draft-planner-v1-responses-3.14"
 )
 GROQ_WRITER_IMPLEMENTATION_VERSION = (
-    STAGE_D_IMPLEMENTATION_VERSION + "/groq-composition-writer-v2-responses-3.14"
+    STAGE_D_IMPLEMENTATION_VERSION + "/groq-composition-writer-v2.1-responses-3.14"
 )
 
 _DRAFT_INSTRUCTIONS = """\
@@ -60,6 +60,11 @@ Place limitations naturally, without separating them into a visible list. Preser
 scope. Aim for 60–180 words, less when sufficient; never exceed maximum_words including connectors.
 Do not repeat navigation options, IDs, metadata or reasoning. At most eight factual/definition
 phrases and sixteen total phrases. Choose fewer facts when needed to fit all mandatory caveats.
+For PLAYER_TEAM_SCENARIO, follow composition_rules: select at least minimum_facts useful
+historical comparisons, player-first or team-first. Group the football points naturally, then
+put ALL limitations after ALL facts, with connector=none. Prefer two short paragraphs: football
+comparison first, one concise global caveat last. Never interrupt comparisons with caveats.
+Avoid repetitive introductions; the approved comparisons already express direction, not fit.
 """
 
 

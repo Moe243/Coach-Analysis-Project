@@ -269,6 +269,17 @@ def compliant_composition_plan(brief: ApprovedAnswerBrief):
     phrases = approved_phrases(brief)
     primary = [p for p in phrases if p.support_id == brief.supports[0].support_id][-1]
     items = [{"phrase_id": primary.phrase_id, "connector": "none"}]
+    if brief.question_type.value == "PLAYER_TEAM_SCENARIO":
+        second = next(
+            (
+                p
+                for p in phrases
+                if p.kind.value == "proposition" and p.support_id != primary.support_id
+            ),
+            None,
+        )
+        if second:
+            items.append({"phrase_id": second.phrase_id, "connector": "none"})
     limits = [
         {
             "phrase_id": next(p.phrase_id for p in phrases if p.support_id == sid),
