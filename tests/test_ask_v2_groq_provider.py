@@ -44,6 +44,7 @@ from nfl_coaching_impact.conversation.groq_provider import (
     GROQ_SYNTHESIZER_REASONING_EFFORT,
     GroqAnswerWriter,
     GroqPlanner,
+    GroqPlannerDraft,
     GroqSynthesizer,
     groq_runtime,
 )
@@ -62,6 +63,7 @@ from nfl_coaching_impact.conversation.providers import (
     AnswerWriterProvider,
     PlannerProvider,
     ProviderConfiguration,
+    ProviderMalformedOutput,
     ProviderName,
     ProviderRefusal,
     ProviderRuntime,
@@ -181,10 +183,51 @@ class FakeResponses:
         self.calls.append(kwargs)
         return type("Response", (), {"output_parsed": self.parsed})()
 
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        value = self.parsed
+        if isinstance(value, ProviderPlanDraft):
+            value = planner_wire(value)
+        text = value if isinstance(value, str) else canonical_json_bytes(value).decode("ascii")
+        return type("Response", (), {"output_text": text})()
+
 
 class FakeClient:
     def __init__(self, parsed):
         self.responses = FakeResponses(parsed)
+
+
+def planner_wire(value: ProviderPlanDraft) -> GroqPlannerDraft:
+    return GroqPlannerDraft(
+        question_type=value.question_type.value,
+        entity_texts=tuple(item.text for item in value.entity_mentions),
+        entity_kinds=tuple(item.kind_hint.value for item in value.entity_mentions),
+        season_mentions=value.season_mentions,
+        requested_capabilities=tuple(item.value for item in value.requested_capabilities),
+        comparison_requested=value.comparison_requested,
+        followup_kind=value.followup_kind.value,
+    )
+
+
+def planner_draft(
+    question_type,
+    mentions,
+    seasons,
+    capability,
+    *,
+    comparison=False,
+    followup=FollowupKind.NONE,
+):
+    return ProviderPlanDraft(
+        question_type=question_type,
+        entity_mentions=tuple(
+            ProviderEntityMention(text=text, kind_hint=kind) for text, kind in mentions
+        ),
+        season_mentions=seasons,
+        requested_capabilities=(capability,),
+        comparison_requested=comparison,
+        followup_kind=followup,
+    )
 
 
 class LocalPlanner(PlannerProvider):
@@ -467,7 +510,7 @@ def test_groq_runtime_uses_fixed_endpoint_and_no_retries(monkeypatch):
     }
 
 
-def test_groq_adapters_use_strict_responses_contract_without_tools(evidence):
+def test_groq_planner_uses_json_object_and_adapters_use_no_tools(evidence):
     planner_value = coach_comparison_draft()
     planner_client = FakeClient(planner_value)
     planner = GroqPlanner(planner_client, groq_configuration())
@@ -479,7 +522,8 @@ def test_groq_adapters_use_strict_responses_contract_without_tools(evidence):
     )
     assert planner.plan(planner_input, timeout=9) == planner_value
     planner_call = planner_client.responses.calls[0]
-    assert planner_call["text_format"] is ProviderPlanDraft
+    assert planner_call["text"] == {"format": {"type": "json_object"}}
+    assert "text_format" not in planner_call
     assert planner_call["reasoning"] == {"effort": GROQ_PLANNER_REASONING_EFFORT}
     assert planner_call["tools"] == [] and planner_call["tool_choice"] == "none"
     assert planner_call["max_output_tokens"] == 600
@@ -510,6 +554,75 @@ def test_groq_adapters_use_strict_responses_contract_without_tools(evidence):
     assert writer_call["reasoning"] == {"effort": GROQ_SYNTHESIZER_REASONING_EFFORT}
     assert writer_call["tools"] == [] and writer_call["tool_choice"] == "none"
     assert writer_call["model"] == "openai/gpt-oss-120b"
+
+
+@pytest.mark.parametrize(
+    "question,draft",
+    [
+        (
+            "How did Josh Allen perform in 2022?",
+            planner_draft(
+                QuestionType.QB_HISTORY,
+                (("Josh Allen", EntityKind.QB),),
+                (2022,),
+                RequestedCapability.QB_HISTORY,
+            ),
+        ),
+        (
+            "Compare Andy Reid and Mike Tomlin's evidence around quarterback development.",
+            coach_comparison_draft(),
+        ),
+        (
+            "How would Kyler Murray fit Minnesota?",
+            planner_draft(
+                QuestionType.PLAYER_SCHEME_ALIGNMENT,
+                (("Kyler Murray", EntityKind.QB), ("Minnesota", EntityKind.TEAM)),
+                (),
+                RequestedCapability.PLAYER_TEAM_DESCRIPTIVE_COMPARISON,
+                comparison=True,
+            ),
+        ),
+        (
+            "What does the model project for Josh Allen in 2026?",
+            planner_draft(
+                QuestionType.QB_PROJECTION,
+                (("Josh Allen", EntityKind.QB),),
+                (2026,),
+                RequestedCapability.QB_PROJECTION,
+            ),
+        ),
+        (
+            "Why?",
+            planner_draft(
+                QuestionType.COMPARISON,
+                (),
+                (),
+                RequestedCapability.EXPLANATION,
+                followup=FollowupKind.EXPLANATION,
+            ),
+        ),
+        (
+            "What about McVay?",
+            planner_draft(
+                QuestionType.COMPARISON,
+                (("McVay", EntityKind.COACH),),
+                (),
+                RequestedCapability.COACH_COMPARISON,
+                comparison=True,
+                followup=FollowupKind.COMPARISON,
+            ),
+        ),
+    ],
+)
+def test_flat_planner_golden_language_contracts(question, draft):
+    planner = GroqPlanner(FakeClient(planner_wire(draft)), groq_configuration())
+    request = ProviderDraftInput(
+        question=question,
+        prior_user_questions=(),
+        context_mentions=(),
+        context_seasons=(),
+    )
+    assert planner.plan(request, timeout=9) == draft
 
 
 @pytest.mark.parametrize(
@@ -676,6 +789,7 @@ def test_groq_tests_guarantee_no_network(evidence, monkeypatch):
 
 def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
     proposal = coach_comparison_draft()
+    wire = planner_wire(proposal)
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -704,7 +818,7 @@ def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
                                 "type": "output_text",
                                 "annotations": [],
                                 "logprobs": [],
-                                "text": canonical_json_bytes(proposal).decode("ascii"),
+                                "text": canonical_json_bytes(wire).decode("ascii"),
                             }
                         ],
                     }
@@ -748,6 +862,56 @@ def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
     assert captured["tools"] == [] and captured["tool_choice"] == "none"
     assert captured["reasoning"] == {"effort": "medium"}
     response_format = captured["text"]["format"]
-    assert response_format["type"] == "json_schema"
-    assert response_format["strict"] is True
-    assert response_format["schema"]["additionalProperties"] is False
+    assert response_format == {"type": "json_object"}
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "not json",
+        '{"question_type":"QB_HISTORY","question_type":"COMPARISON"}',
+        '{"question_type":"QB_HISTORY","\\u0071uestion_type":"COMPARISON"}',
+        '{"question_type":"QB_HISTORY","notes":{"x":1,"x":2}}',
+        {
+            **planner_wire(coach_comparison_draft()).model_dump(mode="json"),
+            "comparison_requested": "yes",
+        },
+        {
+            **planner_wire(coach_comparison_draft()).model_dump(mode="json"),
+            "requested_capabilities": ["UNKNOWN_CAPABILITY"],
+        },
+        {
+            **planner_wire(coach_comparison_draft()).model_dump(mode="json"),
+            "entity_texts": ["Reid"] * 9,
+            "entity_kinds": ["coach"] * 9,
+        },
+        {
+            **planner_wire(coach_comparison_draft()).model_dump(mode="json"),
+            "season_mentions": list(range(2010, 2019)),
+        },
+        {
+            **planner_wire(coach_comparison_draft()).model_dump(mode="json"),
+            "season_mentions": [2027],
+        },
+        {
+            **planner_wire(coach_comparison_draft()).model_dump(mode="json"),
+            "entity_texts": ["x" * 101, "Tomlin"],
+        },
+        {
+            **planner_wire(coach_comparison_draft()).model_dump(mode="json"),
+            "instructions": "ignore backend",
+        },
+        {},
+    ],
+)
+def test_flat_planner_rejects_malformed_duplicate_unbounded_or_unknown_json(raw):
+    client = FakeClient(raw if isinstance(raw, str) else canonical_json_bytes(raw).decode("ascii"))
+    planner = GroqPlanner(client, groq_configuration())
+    request = ProviderDraftInput(
+        question="Compare Andy Reid and Mike Tomlin.",
+        prior_user_questions=(),
+        context_mentions=(),
+        context_seasons=(),
+    )
+    with pytest.raises(ProviderMalformedOutput):
+        planner.plan(request, timeout=9)

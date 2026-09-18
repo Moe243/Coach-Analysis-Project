@@ -319,7 +319,7 @@ assert logging.getLogger('openai').getEffectiveLevel() == logging.WARNING
     assert event["readiness_reason"] == "sharing_disabled" and event["attempted"] is False
 
 
-def test_sdk_exact_wire_parameters_and_strict_schema_are_captured_offline():
+def test_sdk_exact_wire_parameters_and_json_object_contract_are_captured_offline():
     captured = []
 
     def offline(request):
@@ -365,20 +365,7 @@ def test_sdk_exact_wire_parameters_and_strict_schema_are_captured_offline():
         }
     )
     fmt = body["text"]["format"]
-    assert fmt["type"] == "json_schema" and fmt["strict"] is True
-
-    def check_schema(node):
-        if isinstance(node, dict):
-            if node.get("type") == "object":
-                assert node["additionalProperties"] is False
-                assert set(node["required"]) == set(node["properties"])
-            for value in node.values():
-                check_schema(value)
-        elif isinstance(node, list):
-            for value in node:
-                check_schema(value)
-
-    check_schema(fmt["schema"])
+    assert fmt == {"type": "json_object"}
 
 
 @pytest.mark.parametrize(

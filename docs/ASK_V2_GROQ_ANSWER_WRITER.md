@@ -379,3 +379,41 @@ and **66 frontend Ask tests passed**, with zero failures/skips. TypeScript, ESLi
 Prettier, Ruff, Python formatting (104 files), compilation, production build and
 `git diff --check` pass. All six product goldens remain grounded and pass; the final
 live result is not asserted by this offline commit.
+
+## Current planner reliability correction
+
+The next single planner request reached Groq but returned HTTP 400 with the bounded
+diagnostic `json_validate_failed`; the writer was not invoked and the exact
+deterministic response was returned. That diagnostic establishes failure inside the
+provider's strict structured-output validation, but does not identify a particular
+invalid field or prove a general model defect.
+
+The planner's provider-facing contract is now JSON-object mode with a flat primitive
+shape: question type, parallel entity text/kind arrays, season array, capability array,
+comparison flag and follow-up kind. The provider no longer has to satisfy the former
+nested enum-heavy JSON Schema. It still has no fields for IDs, tasks, evidence,
+calculations, reasoning, instructions, answers or scientific status.
+
+All provider output remains untrusted. Raw JSON is parsed with recursive duplicate-key
+rejection, including escaped and nested duplicates. A strict frozen Pydantic wire model
+rejects missing/unknown fields, wrong types, unequal entity arrays, more than eight
+entities/seasons/capabilities, entity text over 100 characters and seasons outside
+2010–2026. Values are then revalidated through the existing `ProviderPlanDraft`, which
+enforces entity syntax/kinds, allowlisted question/capability/follow-up enums and
+duplicate controls. The unchanged translator still resolves canonical entities, checks
+literal mentions/seasons, binds tasks and owns every analytical/scientific permission.
+Any failure returns the exact deterministic response with no retry.
+
+The private planner identity is now
+`ask-v2-stage-d/groq-json-planner-v2-responses-3.14`. Model, token/time budgets,
+reasoning effort, fixed endpoint, no-tools/no-retry policy, writer contract,
+connector de-duplication and scientific restrictions are unchanged. Offline fixtures
+cover Allen 2022, Reid/Tomlin, Kyler/Minnesota, Allen 2026, Why?, McVay replacement,
+the pinned SDK's realistic Responses payload and malformed/adversarial JSON.
+
+Offline gate: **117 focused planner/translator tests passed**, and the complete Ask,
+provider, context, release and Checkpoint 19 regression set passed **775 tests**.
+The frontend Ask set passed **66 tests**. All had zero failures/skips. TypeScript,
+ESLint, Prettier, Ruff, Python formatting (104 files), compilation, production build
+and `git diff --check` pass. No live provider call occurred during implementation;
+the separately authorized check remains gated on this committed offline result.

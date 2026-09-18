@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field, StrictBool, StrictInt, StrictStr, model_validator
 
 from .answer_writer import ApprovedAnswerBrief
 from .contracts import (
+    MAX_SEASON,
+    MIN_SEASON,
     STAGE_D_IMPLEMENTATION_VERSION,
+    ContractModel,
     ProviderSynthesisInput,
 )
 from .openai_provider import OpenAISynthesizer, _parsed
@@ -20,7 +25,7 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_PLANNER_REASONING_EFFORT = "medium"
 GROQ_SYNTHESIZER_REASONING_EFFORT = "low"
 GROQ_PROVIDER_IMPLEMENTATION_VERSION = (
-    STAGE_D_IMPLEMENTATION_VERSION + "/groq-draft-planner-v1-responses-3.14"
+    STAGE_D_IMPLEMENTATION_VERSION + "/groq-json-planner-v2-responses-3.14"
 )
 GROQ_WRITER_IMPLEMENTATION_VERSION = (
     STAGE_D_IMPLEMENTATION_VERSION + "/groq-composition-writer-v2.2-responses-3.14"
@@ -28,22 +33,30 @@ GROQ_WRITER_IMPLEMENTATION_VERSION = (
 
 _DRAFT_INSTRUCTIONS = """\
 Interpret language only; do not answer the football question or determine scientific support.
-Return the strict draft. Extract literal entity names and literal years only from the question
+Return one JSON object with exactly these fields: question_type, entity_texts, entity_kinds,
+season_mentions, requested_capabilities, comparison_requested, followup_kind. All arrays contain
+only primitive values; entity_texts and entity_kinds are parallel arrays. Extract literal entity
+names and literal years only from the question
 or relevant prior USER context. Do not expand surnames, invent years, create IDs, bind entities
 to tasks, or calculate anything. Backend resolves identities, binds tasks/seasons and authorizes
 all evidence and conclusions. Choose broad requested capabilities, not internal executable tasks.
 Use one primary capability; unknown/ambiguous requests must not be guessed.
-Examples (entity entries have text and kind_hint):
+Examples, shown as compact field sequences in the required key order:
 Between Reid and Tomlin, whose résumé has stronger QB evidence? -> COMPARISON;
-Reid/coach, Tomlin/coach; []; COACH_COMPARISON; comparison_requested=true; NONE.
+[Reid,Tomlin]; [coach,coach]; []; [COACH_COMPARISON]; true; NONE.
 Does Kyler Murray's style resemble Minnesota's offense? -> PLAYER_SCHEME_ALIGNMENT;
-Kyler Murray/qb, Minnesota/team; []; PLAYER_TEAM_DESCRIPTIVE_COMPARISON; true; NONE.
+[Kyler Murray,Minnesota]; [qb,team]; []; [PLAYER_TEAM_DESCRIPTIVE_COMPARISON]; true; NONE.
 What does the model project for Josh Allen in 2026? -> QB_PROJECTION;
-Josh Allen/qb; [2026]; QB_PROJECTION; false; NONE.
+[Josh Allen]; [qb]; [2026]; [QB_PROJECTION]; false; NONE.
 What if Chicago drafted Mahomes? -> CAREER_COUNTERFACTUAL;
-Chicago/team, Mahomes/qb; []; CAREER_COUNTERFACTUAL_REQUEST; false; NONE.
-Why? -> inherit prior request type; []; []; EXPLANATION; false; EXPLANATION.
-What about 2023? -> inherit prior request type/capability; []; [2023]; false; REFINE_SCOPE.
+[Chicago,Mahomes]; [team,qb]; []; [CAREER_COUNTERFACTUAL_REQUEST]; false; NONE.
+Why? -> inherit prior request type; []; []; []; [EXPLANATION]; false; EXPLANATION.
+What about 2023? -> inherit prior request type/capability; []; []; [2023]; [EXPLANATION];
+false; REFINE_SCOPE.
+For the Kyler example, the complete object is:
+{"question_type":"PLAYER_SCHEME_ALIGNMENT","entity_texts":["Kyler Murray","Minnesota"],
+"entity_kinds":["qb","team"],"season_mentions":[],"requested_capabilities":
+["PLAYER_TEAM_DESCRIPTIVE_COMPARISON"],"comparison_requested":true,"followup_kind":"NONE"}
 Never propose a supported projection to satisfy a counterfactual, destination prediction,
 forward PAE, rookie, or Coach Effect request. Classify the actual requested intent instead.
 """
@@ -73,6 +86,45 @@ def writer_provider_input(brief: ApprovedAnswerBrief) -> dict[str, Any]:
     return composition_provider_input(brief)
 
 
+PlannerSeason = Annotated[StrictInt, Field(ge=MIN_SEASON, le=MAX_SEASON)]
+
+
+class GroqPlannerDraft(ContractModel):
+    """Flat provider JSON; strict backend contracts remain the authority."""
+
+    question_type: StrictStr = Field(min_length=1, max_length=64)
+    entity_texts: tuple[StrictStr, ...] = Field(max_length=8)
+    entity_kinds: tuple[StrictStr, ...] = Field(max_length=8)
+    season_mentions: tuple[PlannerSeason, ...] = Field(max_length=8)
+    requested_capabilities: tuple[StrictStr, ...] = Field(min_length=1, max_length=8)
+    comparison_requested: StrictBool
+    followup_kind: StrictStr = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def parallel_entities(self):
+        if len(self.entity_texts) != len(self.entity_kinds):
+            raise ValueError("entity text and kind arrays must have equal lengths")
+        if any(not text or len(text) > 100 for text in self.entity_texts):
+            raise ValueError("entity text must contain 1 through 100 characters")
+        return self
+
+    def backend_draft(self) -> ProviderPlanDraft:
+        """Revalidate every untrusted value through the unchanged backend schema."""
+        return ProviderPlanDraft.model_validate(
+            {
+                "question_type": self.question_type,
+                "entity_mentions": [
+                    {"text": text, "kind_hint": kind}
+                    for text, kind in zip(self.entity_texts, self.entity_kinds, strict=True)
+                ],
+                "season_mentions": self.season_mentions,
+                "requested_capabilities": self.requested_capabilities,
+                "comparison_requested": self.comparison_requested,
+                "followup_kind": self.followup_kind,
+            }
+        )
+
+
 class GroqPlanner:
     """Extract an untrusted language draft, without internal task mechanics."""
 
@@ -84,15 +136,23 @@ class GroqPlanner:
         self.model_version = configuration.planner_model
 
     def plan(self, request: ProviderDraftInput, *, timeout: float) -> ProviderPlanDraft:
-        response = self.client.responses.parse(**self._request_arguments(request, timeout))
-        return _parsed(response, ProviderPlanDraft)
+        response = self.client.responses.create(**self._request_arguments(request, timeout))
+        raw_text = getattr(response, "output_text", None)
+        if not isinstance(raw_text, str):
+            raise ProviderMalformedOutput("planner returned no JSON object")
+        try:
+            raw = json.loads(raw_text, object_pairs_hook=_unique_json_object)
+            provider_draft = GroqPlannerDraft.model_validate(raw)
+            return provider_draft.backend_draft()
+        except (TypeError, ValueError) as error:
+            raise ProviderMalformedOutput("planner returned an invalid JSON object") from error
 
     def _request_arguments(self, request: ProviderDraftInput, timeout: float) -> dict[str, Any]:
         return dict(
             model=self.model_version,
             instructions=_DRAFT_INSTRUCTIONS,
             input=canonical_json_bytes(request).decode("ascii"),
-            text_format=ProviderPlanDraft,
+            text={"format": {"type": "json_object"}},
             store=False,
             background=False,
             stream=False,
