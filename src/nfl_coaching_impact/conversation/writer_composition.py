@@ -31,12 +31,36 @@ class Connector(StrEnum):
 
 
 _CONNECTORS = {
-    Connector.NONE: "",
-    Connector.CONTINUATION: "Also, ",
-    Connector.CONTRAST: "However, ",
-    Connector.COMPARISON: "Meanwhile, ",
-    Connector.LIMITATION_TRANSITION: "For context, ",
+    Connector.NONE: ("",),
+    Connector.CONTINUATION: ("Also, ", "Additionally, ", "In addition, "),
+    Connector.CONTRAST: ("However, ", "In contrast, ", "By contrast, "),
+    Connector.COMPARISON: ("Meanwhile, ", "For comparison, ", "By comparison, "),
+    Connector.LIMITATION_TRANSITION: (
+        "For context, ",
+        "To put that in context, ",
+        "For perspective, ",
+    ),
 }
+
+
+def _render_composition(plan: CompositionPlan, by_id: Mapping[str, ApprovedPhrase]) -> str:
+    """Vary surfaces within their class, never facts or connector semantics.
+
+    Remember the preceding two clauses across paragraph boundaries, including
+    unprefixed clauses. Three equivalent surfaces prevent adjacent/near-adjacent
+    repetition without randomness, provider prose or changing semantic class.
+    """
+    recent: list[str] = []
+    paragraphs = []
+    for paragraph in plan.paragraphs:
+        clauses = []
+        for item in paragraph.items:
+            variants = _CONNECTORS[item.connector]
+            surface = next((text for text in variants if text not in recent), variants[0])
+            clauses.append(surface + by_id[item.phrase_id].text)
+            recent = [*recent[-1:], surface]
+        paragraphs.append(" ".join(clauses))
+    return "\n\n".join(paragraphs)
 
 
 class CompositionItem(ContractModel):
@@ -207,12 +231,7 @@ def validate_composition(
         brief,
         catalog=resolved_catalog,
     )
-    answer = "\n\n".join(
-        " ".join(
-            _CONNECTORS[item.connector] + by_id[item.phrase_id].text for item in paragraph.items
-        )
-        for paragraph in plan.paragraphs
-    )
+    answer = _render_composition(plan, by_id)
     if len(answer.split()) > brief.maximum_words:
         raise WriterRejected(
             WriterValidationCategory.TOO_LONG, "composition exceeds the complete answer word budget"

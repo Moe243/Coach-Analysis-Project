@@ -23,7 +23,7 @@ GROQ_PROVIDER_IMPLEMENTATION_VERSION = (
     STAGE_D_IMPLEMENTATION_VERSION + "/groq-draft-planner-v1-responses-3.14"
 )
 GROQ_WRITER_IMPLEMENTATION_VERSION = (
-    STAGE_D_IMPLEMENTATION_VERSION + "/groq-composition-writer-v2.1-responses-3.14"
+    STAGE_D_IMPLEMENTATION_VERSION + "/groq-composition-writer-v2.2-responses-3.14"
 )
 
 _DRAFT_INSTRUCTIONS = """\

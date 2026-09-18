@@ -28,7 +28,10 @@ from nfl_coaching_impact.conversation.provider_orchestration import ProviderOrch
 from nfl_coaching_impact.conversation.providers import ProviderRuntime
 from nfl_coaching_impact.conversation.serialization import canonical_json_bytes
 from nfl_coaching_impact.conversation.writer_composition import (
+    _CONNECTORS,
     CompositionPlan,
+    Connector,
+    _render_composition,
     approved_phrases,
     composition_provider_input,
     validate_composition,
@@ -469,3 +472,96 @@ def test_comparison_direction_is_exact_generic_description(player_rate, team_rat
     assert variants[0].startswith("Fixture QB") and variants[1].startswith("Fixture Team")
     assert all(player_rate in text and team_rate in text for text in variants)
     assert not any("fit" in text or "improve" in text for text in variants)
+
+
+@pytest.mark.parametrize("connector", ["continuation", "comparison", "contrast"])
+def test_repeated_connectors_render_three_distinct_same_class_surfaces(engine, connector):
+    brief = brief_for(engine, KYLER)
+    plan = composed_plan(brief).model_dump(mode="json")
+    items = plan["paragraphs"][0]["items"]
+    for item in items[1:]:
+        item["connector"] = connector
+    original = canonical_json_bytes(plan)
+    answer = render(engine, brief, plan)
+    surfaces = _CONNECTORS[Connector(connector)]
+    assert len(items) == 4
+    assert all(answer.count(surface) == 1 for surface in surfaces)
+    assert [answer.index(surface) for surface in surfaces] == sorted(
+        answer.index(surface) for surface in surfaces
+    )
+    assert render(engine, brief, plan) == answer
+    assert canonical_json_bytes(plan) == original
+    assert answer.endswith(
+        next(p.text for p in approved_phrases(brief) if p.kind is BriefSupportKind.LIMITATION)
+    )
+
+
+@pytest.mark.parametrize("paragraph_break", [False, True])
+def test_near_adjacent_repetition_is_avoided_across_unprefixed_clause_and_paragraph(
+    engine, paragraph_break
+):
+    brief = brief_for(engine, KYLER)
+    plan = composed_plan(brief).model_dump(mode="json")
+    facts = plan["paragraphs"][0]["items"]
+    facts[1]["connector"] = "comparison"
+    facts[3]["connector"] = "comparison"
+    if paragraph_break:
+        plan["paragraphs"] = [{"items": facts[:2]}, {"items": facts[2:]}, plan["paragraphs"][1]]
+    answer = render(engine, brief, plan)
+    assert answer.count("Meanwhile, ") == 1
+    assert answer.count("For comparison, ") == 1
+
+
+def test_mixed_connector_classes_are_not_swapped_for_variety(engine):
+    brief = brief_for(engine, KYLER)
+    plan = composed_plan(brief).model_dump(mode="json")
+    for item, connector in zip(
+        plan["paragraphs"][0]["items"][1:],
+        ("continuation", "contrast", "comparison"),
+        strict=True,
+    ):
+        item["connector"] = connector
+    answer = render(engine, brief, plan)
+    assert all(surface in answer for surface in ("Also, ", "However, ", "Meanwhile, "))
+    assert not any(surface in answer for surface in ("Additionally, ", "By contrast, "))
+
+
+@pytest.mark.parametrize("connector", [c for c in Connector if c is not Connector.NONE])
+def test_all_connector_families_are_deterministic_neutral_and_avoid_repetition(engine, connector):
+    # Isolate rendering for every family, including several context introductions.
+    # Full validation still restricts context introductions to actual caveats.
+    brief = brief_for(engine, KYLER)
+    plan = composed_plan(brief).model_dump(mode="json")
+    plan["paragraphs"] = plan["paragraphs"][:1]
+    for item in plan["paragraphs"][0]["items"][1:]:
+        item["connector"] = connector.value
+    parsed = CompositionPlan.model_validate(plan)
+    by_id = {p.phrase_id: p for p in approved_phrases(brief)}
+    answer = _render_composition(parsed, by_id)
+    assert _render_composition(parsed, by_id) == answer
+    assert all(answer.count(surface) == 1 for surface in _CONNECTORS[connector])
+    assert not any(
+        causal in surface.casefold()
+        for surface in _CONNECTORS[connector]
+        for causal in ("therefore", "because", "as a result", "which caused")
+    )
+    for item in parsed.paragraphs[0].items:
+        assert by_id[item.phrase_id].text in answer
+
+
+def test_latest_live_scenario_connector_pattern_is_polished_without_payload_change(engine):
+    brief = brief_for(engine, KYLER)
+    before = canonical_json_bytes(composition_provider_input(brief))
+    plan = composed_plan(brief).model_dump(mode="json")
+    # Replay the live deep/short/scramble selections and repeated continuation IDs.
+    facts = plan["paragraphs"][0]["items"]
+    plan["paragraphs"][0]["items"] = [facts[0], facts[1], facts[3]]
+    for item in plan["paragraphs"][0]["items"][1:]:
+        item["connector"] = "continuation"
+    answer = render(engine, brief, plan)
+    assert answer.count("Also, ") == 1 and answer.count("Additionally, ") == 1
+    assert "For context" not in answer
+    assert all(value in answer for value in ("10.5%", "12.8%", "69.9%", "64.9%", "6.5%", "2.8%"))
+    assert "cannot forecast performance or improvement with a different team" in answer
+    assert canonical_json_bytes(composition_provider_input(brief)) == before
+    assert len(before) == 2481

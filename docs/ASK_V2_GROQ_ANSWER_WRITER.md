@@ -302,7 +302,7 @@ No frontend source, analytical pipeline/model, frozen snapshot, database/migrati
 production configuration or deployment file changed. No live Groq/OpenAI calls occurred;
 Render and Neon were not accessed. The future paced smoke plan above remains required.
 
-## Current descriptive-scenario composition polish
+## Historical descriptive-scenario composition polish
 
 The subsequent paced smoke accepted all four planner/writer compositions without
 fallback, retry or 429. Its product gate failed only for Kyler/Minnesota: fragmented
@@ -346,3 +346,36 @@ zero failures/skips. TypeScript, ESLint, Prettier, Ruff, Python formatting (104 
 compilation, production frontend build and `git diff --check` pass. Allen 2022,
 Reid/Tomlin, Allen 2026, McCarthy and Rodgers goldens remain grounded and pass.
 The live result is intentionally not asserted by this offline commit.
+
+## Current connector-only polish
+
+The subsequent single-question smoke passed planner/writer HTTP 200, parsing,
+composition validation and grounding with unchanged backend authority. Product
+quality still failed: two consecutive comparisons began with “Also,”. No additional
+request or repair followed that failed check.
+
+The renderer now has three backend-owned neutral surfaces per non-empty connector
+class. It remembers the preceding two clauses across paragraph boundaries and
+unprefixed clauses, choosing the first surface not used in that window. Selection
+remains deterministic and within the provider-selected semantic class; continuation
+is never changed into contrast or causation for variety. The `none` connector stays
+empty. Facts, phrase IDs, scientific limitations, validation and word-budget checks
+remain unchanged. Repetition is reduced without provider-authored transition text.
+
+Private writer implementation identity is
+`ask-v2-stage-d/groq-composition-writer-v2.2-responses-3.14`; the approved 120B model,
+planner identity, schema, instructions and wire catalog do not change. Kyler's wire
+catalog remains **2,481 bytes**. Regressions cover consecutive/near-adjacent repetition,
+paragraph boundaries, mixed classes, neutral wording, deterministic output and the
+exact last live deep/short/scramble connector pattern. The prior extra-warning,
+predictive-prose, context and causal defenses remain in force.
+
+The final authorized live check must occur only after this offline fix is committed
+and provider reset requirements are satisfied: one planner and one writer for the
+Kyler/Minnesota question, no retry/repair, with no production activation.
+
+Offline gate: **757 backend tests passed**, including **66 composition tests**,
+and **66 frontend Ask tests passed**, with zero failures/skips. TypeScript, ESLint,
+Prettier, Ruff, Python formatting (104 files), compilation, production build and
+`git diff --check` pass. All six product goldens remain grounded and pass; the final
+live result is not asserted by this offline commit.
