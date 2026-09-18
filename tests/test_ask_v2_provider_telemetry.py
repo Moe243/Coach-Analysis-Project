@@ -20,7 +20,6 @@ from nfl_coaching_impact import release_snapshot as release
 from nfl_coaching_impact.api import app
 from nfl_coaching_impact.ask_api import _load
 from nfl_coaching_impact.conversation import provider_telemetry as telemetry
-from nfl_coaching_impact.conversation.answer_writer import WriterResult, WriterSentence
 from nfl_coaching_impact.conversation.api import _cached_evidence
 from nfl_coaching_impact.conversation.contracts import AskV2Request
 from nfl_coaching_impact.conversation.evidence import EvidenceService
@@ -112,32 +111,9 @@ class Writer:
     model_version = "openai/gpt-oss-120b"
 
     def write(self, brief, *, timeout):
-        support = brief.supports[0]
-        limitations = tuple(
-            s for s in brief.supports if s.support_id in brief.required_limitation_ids
-        )
+        from test_ask_v2_groq_provider import compliant_composition_plan
 
-        def sentence(supports):
-            return WriterSentence(
-                text=" ".join(s.text for s in supports),
-                support_ids=tuple(s.support_id for s in supports),
-                entity_ids=tuple(dict.fromkeys(e for s in supports for e in s.entity_ids)),
-                measurement_ids=tuple(
-                    m.measurement_id
-                    for m in brief.measurements
-                    if m.support_id in {s.support_id for s in supports}
-                ),
-            )
-
-        main = sentence((support,))
-        limitation = sentence(limitations) if limitations else None
-        parts = (main, *((limitation,) if limitation else ()))
-        return WriterResult(
-            sentences=(main,),
-            limitation=limitation,
-            used_support_ids=tuple(s for part in parts for s in part.support_ids),
-            used_measurement_ids=tuple(m for part in parts for m in part.measurement_ids),
-        )
+        return compliant_composition_plan(brief)
 
 
 def ask(evidence, planner, **overrides):
@@ -234,6 +210,34 @@ def test_invalid_http_status_is_not_serialized(events, status):
     )
     assert events()[-1]["http_status"] is None
     assert "SECRET_KEY" not in json.dumps(events())
+
+
+def test_structured_groq_failure_has_closed_error_classification(events):
+    error = RuntimeError("SECRET raw exception")
+    error.status_code = 400
+    error.body = {
+        "error": {
+            "type": "invalid_request_error",
+            "code": "json_validate_failed",
+            "param": "max_output_tokens",
+            "message": "SECRET question evidence",
+            "failed_generation": "SECRET provider prose",
+        }
+    }
+    telemetry.provider_event(
+        ProviderConfiguration.from_environment(environment()),
+        phase=telemetry.ProviderPhase.REQUEST,
+        component="writer",
+        error=error,
+    )
+    event = events()[-1]
+    assert event["provider_error_type"] == "invalid_request_error"
+    assert event["provider_error_code"] == "json_validate_failed"
+    assert event["provider_parameter"] == "max_output_tokens"
+    assert not any(
+        text in json.dumps(event)
+        for text in ("SECRET", "question", "evidence", "failed_generation")
+    )
 
 
 def test_parse_failure_is_distinct_from_semantic_rejection(evidence, events):
@@ -545,9 +549,9 @@ def test_writer_failures_are_bounded_and_content_free(evidence, events, failure)
                 raise error
             result = super().write(brief, timeout=timeout).model_dump(mode="python")
             if failure == "support":
-                result["sentences"][0]["support_ids"] = ("invalid_support",)
+                result["paragraphs"][0]["items"][0]["phrase_id"] = "phrase_0000000000000000"
             else:
-                result["sentences"][0]["text"] += " He caused stronger quarterback performance."
+                result["custom_text"] = "He caused stronger quarterback performance."
             return result
 
     runtime = ProviderRuntime(
@@ -565,7 +569,7 @@ def test_writer_failures_are_bounded_and_content_free(evidence, events, failure)
         assert event["fallback_category"] == "permission_error" and event["http_status"] == 403
     else:
         assert event["validation_outcome"] == (
-            "unknown_support_id" if failure == "support" else "causal_violation"
+            "unknown_support_id" if failure == "support" else "schema_invalid"
         )
     assert all(
         text not in json.dumps(events())

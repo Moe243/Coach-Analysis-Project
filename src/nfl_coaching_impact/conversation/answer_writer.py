@@ -244,8 +244,8 @@ def _public_limitation(text: str) -> str:
             "The player profile reflects preseason history, not current or live performance."
         ),
         "The destination-team research does not support a prediction or improvement adjustment.": (
-            "Historical comparisons cannot reliably predict performance "
-            "or improvement with a different team."
+            "Historical profiles show similarities and differences, but cannot forecast "
+            "performance or improvement with a different team."
         ),
         "Historical scheme is observed team-season behavior, not causal coach ownership.": (
             "Historical offensive tendencies describe team-season behavior, "
@@ -265,8 +265,9 @@ def _public_limitation(text: str) -> str:
             "coverage is incomplete and nonrandom."
         ),
         "Verified roles and QB contexts do not identify comparative development quality.": (
-            "Documented roles and quarterback histories cannot establish "
-            "who developed quarterbacks better."
+            "We can compare documented quarterback environments and responsibilities, "
+            "but cannot isolate either coach as the cause of development "
+            "or establish who developed quarterbacks better."
         ),
         "Missing scheme values remain unavailable and are never league-average filled.": (
             "Missing offensive-tendency measurements remain unavailable, "
@@ -277,9 +278,8 @@ def _public_limitation(text: str) -> str:
             "so the project does not estimate a team-specific performance change. "
             "Historical profile and scheme evidence may still be compared."
         ): (
-            "Destination-team predictions failed out-of-sample validation. "
-            "We can compare historical profiles and offensive tendencies, "
-            "but cannot forecast a team-specific performance change."
+            "Historical profiles show similarities and differences, but cannot forecast "
+            "performance or improvement with a different team."
         ),
         "Expectation intervals are not newly fitted PAE intervals.": (
             "The expectation's uncertainty interval is not a separate uncertainty interval "
@@ -287,6 +287,23 @@ def _public_limitation(text: str) -> str:
         ),
         "Season-level intervals are not converted into weekly certainty.": (
             "A season-level assignment does not establish exact weekly coaching exposure."
+        ),
+        (
+            "No forward PAE, yards, touchdowns, interceptions, "
+            "or team-specific improvement is approved."
+        ): (
+            "This forecasts EPA per dropback only, not future PAE, yards, touchdowns, "
+            "interceptions or team-specific improvement."
+        ),
+        (
+            "Projection is team-independent and makes no destination, coach, "
+            "playing-time, or roster claim."
+        ): ("It does not predict a destination, coaching adjustment, playing time or roster spot."),
+        "Only verified source-backed assignments enter approved evidence.": (
+            "These are documented roles, not a measure of coaching effectiveness."
+        ),
+        "Play-calling responsibility is never inferred from an OC title.": (
+            "An offensive-coordinator title alone does not establish who called plays."
         ),
     }
     return translations.get(text, text)
@@ -298,7 +315,7 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
     The language layer can choose, reorder and combine these clauses. Complete-clause
     matching keeps metric labels, entities, polarity and contextual years bound to facts.
     """
-    phrasings = [text]
+    phrasings = []
     if predicate == "historical_qb_performance":
         match = re.fullmatch(
             r"(.+?) recorded ([-\d.]+) EPA/dropback for (.+?) in (\d{4}) across "
@@ -310,13 +327,14 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
             name, actual, team, year, volume, expected, direction, delta, pae = match.groups()
             phrasings.append(
                 f"{name} {direction} his preseason expectation in {year} with {team}: "
-                f"{actual} EPA per dropback against an expected {expected}, "
-                f"leaving a {pae} PAE across {volume} dropbacks."
+                f"{actual} EPA per dropback versus {expected} expected, "
+                f"giving him a {'+' if Decimal(pae) > 0 else ''}{pae} PAE "
+                f"across {volume} dropbacks."
             )
             phrasings.append(
                 f"With {team} in {year}, {name} produced {actual} EPA per dropback "
-                f"against a preseason expectation of {expected}. His PAE was {pae} "
-                f"across {volume} dropbacks."
+                f"versus a preseason expectation of {expected} across {volume} dropbacks. "
+                f"His PAE was {pae}."
             )
     elif predicate == "team_independent_epa_projection":
         match = re.fullmatch(
@@ -332,6 +350,11 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
                 f"EPA per dropback, with a {coverage}% historical-residual band "
                 f"from {lower} to {upper}."
             )
+            phrasings.append(
+                f"For {year}, the team-independent research model projects {name} at "
+                f"{estimate} EPA per dropback. Its {coverage}% historical-residual band "
+                f"runs from {lower} to {upper}."
+            )
     elif predicate == "verified_role_attribution":
         match = re.fullmatch(
             r"(.+?) had a verified (.+?) assignment with (.+?) in (\d{4}) "
@@ -343,6 +366,10 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
             phrasings.append(
                 f"{name} served in a verified {role} role with {team} in {year}, "
                 f"with a recorded assignment covering weeks {start}–{end}."
+            )
+            phrasings.append(
+                f"The verified record lists {name} as {team}' {role} in {year}, "
+                f"covering weeks {start}–{end} of the recorded assignment."
             )
     elif predicate == "verified_role_evidence_comparison":
         match = re.fullmatch(
@@ -359,6 +386,11 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
                 f"evidence for {name}, not proof of better quarterback development. "
                 f"Verified roles: {roles}."
             )
+            phrasings.append(
+                f"{name}'s documented responsibilities give us clearer offensive and "
+                f"quarterback-role evidence, not proof of better quarterback development. "
+                f"The verified history lists {roles}."
+            )
     elif predicate == "descriptive_player_scheme_alignment":
         match = re.fullmatch(
             r"(.+?)'s measured recent (.+?) was ([\d.]+%); (.+?)' historical \2 "
@@ -371,7 +403,75 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
                 f"{player}'s recent measured {metric}: {player_value}, "
                 f"versus {team}' historical {team_value}."
             )
+            phrasings.append(
+                f"Historical {metric}: {player}'s recent measured {player_value}, "
+                f"versus {team}' historical {team_value}."
+            )
+    elif predicate == "qb_context_summary":
+        match = re.fullmatch(
+            r"The recorded history links (.+?)'s verified coaching roles to (\d+) "
+            r"quarterback seasons on the same teams\.",
+            text,
+        )
+        if match:
+            name, count = match.groups()
+            phrasings.append(
+                f"{name}'s documented team history includes {count} quarterback seasons "
+                "alongside his verified roles; this is team-season context, "
+                "not exact weekly exposure."
+            )
     return tuple(phrasings)
+
+
+def _brief_limitations(result: AuthoritativeResult) -> tuple[str, ...]:
+    """Presentation applicability only; authoritative limitations remain unchanged.
+
+    Never drop an unknown caveat. Storage-grain notes are already explicit in complete
+    player/team/year facts. Play-calling research caveats matter when those facts appear;
+    warnings about uncertainty intervals matter when uncertainty intervals are discussed.
+    """
+    propositions = result.conclusions.propositions[:4]
+    has_pcae = any("PCAE" in p.statement or "pcae" in p.predicate for p in propositions)
+    grain_notes = {
+        "Multi-team seasons remain separate at player_id + team_id + season.",
+        "QB performance samples are distinct player_id + team_id + season observations.",
+    }
+    pcae_notes = {
+        (
+            "Only verified non-shared caller intervals are present; "
+            "coverage is incomplete and nonrandom."
+        ),
+        "PCAE is observational research evidence, not QB PAE or a universal Coach Effect.",
+        "PCAE, verified roles, QB context, and scheme remain distinct evidence families.",
+    }
+    interval_notes = {
+        "Expectation intervals are not newly fitted PAE intervals.",
+        "No coach-interval confidence interval was published.",
+    }
+    has_intervals = any(
+        re.search(r"(?i)\b(?:uncertainty|confidence|band)\b", p.statement) for p in propositions
+    )
+    texts = []
+    for text in (
+        *result.response.limitations,
+        *(portion.explanation for portion in result.response.unsupported_portions),
+    ):
+        if text in grain_notes or (text in pcae_notes and not has_pcae):
+            continue
+        if text in interval_notes and not has_intervals:
+            continue
+        translated = _public_limitation(text)
+        if translated not in texts:
+            texts.append(translated)
+    # One concise caveat paragraph where possible. Every applicable restriction is
+    # still mandatory; grouping avoids repeated reference arrays for separate notes.
+    paragraphs: list[str] = []
+    for text in texts:
+        if paragraphs and len(paragraphs[-1]) + len(text) + 1 <= 500:
+            paragraphs[-1] += " " + text
+        else:
+            paragraphs.append(text)
+    return tuple(paragraphs)
 
 
 def approved_answer_brief(result: AuthoritativeResult) -> ApprovedAnswerBrief:
@@ -408,27 +508,16 @@ def approved_answer_brief(result: AuthoritativeResult) -> ApprovedAnswerBrief:
         )
 
     required_limitations: list[str] = []
-    for index, text in enumerate(result.response.limitations, start=1):
+    for index, text in enumerate(_brief_limitations(result), start=1):
         support_id = f"limitation_{index}"
         supports.append(
             ApprovedAnswerSupport(
                 support_id=support_id,
                 kind=BriefSupportKind.LIMITATION,
-                text=_public_limitation(text),
+                text=text,
             )
         )
         required_limitations.append(support_id)
-    for index, portion in enumerate(result.response.unsupported_portions, start=1):
-        support_id = f"unsupported_{index}"
-        supports.append(
-            ApprovedAnswerSupport(
-                support_id=support_id,
-                kind=BriefSupportKind.LIMITATION,
-                text=_public_limitation(portion.explanation),
-            )
-        )
-        required_limitations.append(support_id)
-
     if any(
         support.kind is BriefSupportKind.PROPOSITION and "PAE" in support.text
         for support in supports
@@ -559,7 +648,7 @@ def _validate_phrases(sentence: WriterSentence, supports: Mapping[str, ApprovedA
         (support.support_id, _phrase_tokens(phrase))
         for support_id in sentence.support_ids
         for support in (supports[support_id],)
-        for phrase in (support.phrasings or (support.text,))
+        for phrase in dict.fromkeys((support.text, *support.phrasings))
     ]
     pending = [(0, frozenset())]
     visited = set()

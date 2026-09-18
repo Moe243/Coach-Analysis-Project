@@ -260,6 +260,28 @@ class LocalSynthesizer(SynthesizerProvider):
         return compliant_synthesis(request) if self.value is None else self.value
 
 
+def compliant_composition_plan(brief: ApprovedAnswerBrief):
+    from nfl_coaching_impact.conversation.writer_composition import (
+        CompositionPlan,
+        approved_phrases,
+    )
+
+    phrases = approved_phrases(brief)
+    primary = [p for p in phrases if p.support_id == brief.supports[0].support_id][-1]
+    items = [{"phrase_id": primary.phrase_id, "connector": "none"}]
+    limits = [
+        {
+            "phrase_id": next(p.phrase_id for p in phrases if p.support_id == sid),
+            "connector": "none",
+        }
+        for sid in brief.required_limitation_ids
+    ]
+    paragraphs = [{"items": items}]
+    if limits:
+        paragraphs.append({"items": limits})
+    return CompositionPlan.model_validate({"paragraphs": paragraphs})
+
+
 def compliant_writer_result(brief: ApprovedAnswerBrief) -> WriterResult:
     proposition = next(item for item in brief.supports if item.kind.value == "proposition")
     main_measurements = tuple(
@@ -314,7 +336,7 @@ class LocalWriter(AnswerWriterProvider):
         self.calls += 1
         if self.error:
             raise self.error
-        return compliant_writer_result(request) if self.value is None else self.value
+        return compliant_composition_plan(request) if self.value is None else self.value
 
 
 def groq_orchestrator(evidence, planner=None, writer=None):
@@ -466,12 +488,14 @@ def test_groq_adapters_use_strict_responses_contract_without_tools(evidence):
     assert synthesis_call["max_output_tokens"] == 800
 
     brief = approved_answer_brief(result)
-    writer_value = compliant_writer_result(brief)
+    writer_value = compliant_composition_plan(brief)
     writer_client = FakeClient(writer_value)
     writer = GroqAnswerWriter(writer_client, groq_configuration())
     assert writer.write(brief, timeout=14) == writer_value
     writer_call = writer_client.responses.calls[0]
-    assert writer_call["text_format"] is WriterResult
+    from nfl_coaching_impact.conversation.writer_composition import CompositionPlan
+
+    assert writer_call["text_format"] is CompositionPlan
     assert writer_call["reasoning"] == {"effort": GROQ_SYNTHESIZER_REASONING_EFFORT}
     assert writer_call["tools"] == [] and writer_call["tool_choice"] == "none"
     assert writer_call["model"] == "openai/gpt-oss-120b"

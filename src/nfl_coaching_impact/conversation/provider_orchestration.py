@@ -12,8 +12,6 @@ from .answer_writer import (
     WriterRejected,
     approved_answer_brief,
     entity_catalog,
-    render_writer_answer,
-    validate_writer_result,
 )
 from .contracts import AskV2Request, AskV2Response, PlannerProposal
 from .enums import AnswerMode
@@ -37,6 +35,7 @@ from .providers import (
     classify_provider_failure,
 )
 from .serialization import canonical_json_bytes
+from .writer_composition import composition_provider_input, validate_composition
 
 _PROVIDER_CALL_SLOTS = BoundedSemaphore(value=4)
 
@@ -116,7 +115,13 @@ class ProviderOrchestrator:
             phase = ProviderPhase.PAYLOAD
             try:
                 brief = approved_answer_brief(result)
-                if len(canonical_json_bytes(brief)) > MAX_PROVIDER_PAYLOAD_BYTES:
+                if (
+                    max(
+                        len(canonical_json_bytes(brief)),
+                        len(canonical_json_bytes(composition_provider_input(brief))),
+                    )
+                    > MAX_PROVIDER_PAYLOAD_BYTES
+                ):
                     raise ProviderPayloadTooLarge("provider writer payload exceeds 48 KiB")
                 remaining = self.runtime.configuration.total_timeout_seconds - (
                     time.monotonic() - started
@@ -135,7 +140,7 @@ class ProviderOrchestrator:
                     component="writer",
                 )
                 phase = ProviderPhase.WRITER_VALIDATION
-                validated = validate_writer_result(
+                validated = validate_composition(
                     raw_writer,
                     brief,
                     catalog=self._entity_catalog,
@@ -155,7 +160,7 @@ class ProviderOrchestrator:
                     {
                         **result.response.model_dump(mode="python"),
                         "answer_mode": AnswerMode.GROUNDED_AI,
-                        "answer": render_writer_answer(validated),
+                        "answer": validated,
                         "versions": versions,
                     }
                 )

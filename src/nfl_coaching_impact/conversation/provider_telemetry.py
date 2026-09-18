@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from threading import Lock
 
+from .provider_diagnostics import safe_provider_error_details
 from .providers import (
     ProviderConfiguration,
     ProviderFailureCategory,
@@ -177,6 +178,8 @@ def _emit_provider_event(
         ),
         "fallback": bool(fallback),
     }
+    if configuration.provider is ProviderName.GROQ and status in {400, 429}:
+        payload.update(safe_provider_error_details(error))
     if phase in {ProviderPhase.READINESS, ProviderPhase.INITIALIZATION}:
         payload.update(
             external_sharing_enabled=bool(configuration.external_sharing_enabled),

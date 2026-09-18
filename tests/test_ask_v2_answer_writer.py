@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from test_ask_v2_groq_provider import (
     LocalPlanner,
     LocalWriter,
+    compliant_composition_plan,
     compliant_writer_result,
     groq_configuration,
 )
@@ -22,6 +23,7 @@ from nfl_coaching_impact.conversation.answer_writer import (
     BriefSupportKind,
     WriterRejected,
     WriterResult,
+    _public_phrasings,
     _support_measurements,
     approved_answer_brief,
     entity_catalog,
@@ -31,7 +33,7 @@ from nfl_coaching_impact.conversation.answer_writer import (
 from nfl_coaching_impact.conversation.contracts import AskV2Request
 from nfl_coaching_impact.conversation.enums import AnswerMode
 from nfl_coaching_impact.conversation.evidence import EvidenceService
-from nfl_coaching_impact.conversation.groq_provider import GroqAnswerWriter
+from nfl_coaching_impact.conversation.groq_provider import GroqAnswerWriter, writer_provider_input
 from nfl_coaching_impact.conversation.orchestration import AskV2Orchestrator
 from nfl_coaching_impact.conversation.provider_drafts import (
     FollowupKind,
@@ -128,11 +130,168 @@ def test_allen_2022_natural_prose_exact_numbers(engine):
     }
 
 
+def test_historical_answer_combines_related_numbers_without_technical_caveats(engine):
+    analysis = engine.analyze(AskV2Request(question=ALLEN))
+    original = canonical_json_bytes(analysis.response)
+    brief = approved_answer_brief(analysis)
+    result = compliant_writer_result(brief).model_dump(mode="python")
+    result["sentences"][0]["text"] = brief.supports[0].phrasings[0]
+    text = render_writer_answer(validate(engine, brief, result))
+    assert "outperformed his preseason expectation" in text
+    assert "versus 0.122 expected" in text and "+0.115 PAE" in text
+    assert "651 dropbacks" in text and text.count("0.115") == 1
+    assert len(text.split()) <= 60 and text.count(".") < 8
+    assert not brief.required_limitation_ids and result["limitation"] is None
+    assert "uncertainty" not in text and "remain separate" not in text
+    assert canonical_json_bytes(analysis.response) == original
+
+
+def test_historical_phrasings_are_reusable_and_do_not_round_or_invent_grades():
+    text = (
+        "A Fixture QB recorded -0.12345 EPA/dropback for Fixture Team in 2020 across "
+        "111 dropbacks. The preseason expectation was -0.10000; A Fixture QB "
+        "underperformed it by -0.02345 EPA/dropback (PAE -0.02345)."
+    )
+    for variant in _public_phrasings("historical_qb_performance", text):
+        assert all(
+            number in variant for number in ("-0.12345", "-0.10000", "-0.02345", "111", "2020")
+        )
+        assert "elite" not in variant
+        assert "underperformed" in variant or "PAE was" in variant
+
+
+@pytest.mark.parametrize(
+    "question", [ALLEN, REID, KYLER, PROJECTION, "Show Mike McCarthy's verified offensive roles"]
+)
+def test_product_quality_goldens_remain_grounded_and_concise(engine, question):
+    if "McCarthy" in question:
+        brief = brief_for(
+            engine,
+            "Show verified offensive roles",
+            {
+                "entities": [{"kind": "coach", "id": "coach-mike-mccarthy"}],
+                "turns": [{"role": "user", "content": "Who was Mike McCarthy?"}],
+            },
+        )
+    else:
+        brief = brief_for(engine, question)
+    result = compliant_writer_result(brief)
+    text = render_writer_answer(validate(engine, brief, result))
+    assert len(text.split()) <= 180
+    assert not any(
+        term in text
+        for term in ("offensive/QB-role attribution", "C16", "canonical", "publication")
+    )
+    if question == REID:
+        assert "Andy Reid" in text and "Mike Tomlin" in text
+        assert "not proof of better quarterback development" in text
+        assert "cannot isolate either coach as the cause" in text
+        assert len(brief.required_limitation_ids) == 1
+    elif question == KYLER:
+        assert "Kyler Murray" in text and "Minnesota Vikings" in text
+        assert "not a predictive fit rating" in text
+        assert "cannot forecast" in text
+    elif question == PROJECTION:
+        assert all(x in text for x in ("team-independent", "0.120", "-0.248", "0.488", "95%"))
+        assert "not future PAE" in text
+    elif "McCarthy" in question:
+        assert "Mike McCarthy" in text and "verified" in text
+        assert "play caller" in text or "offensive coordinator" in text
+        assert "not a measure of coaching effectiveness" in text
+        assert "does not establish exact weekly" in text
+
+
+def test_unknown_scientific_caveat_remains_required(engine):
+    from dataclasses import replace
+
+    analysis = engine.analyze(AskV2Request(question=ALLEN))
+    changed = replace(
+        analysis,
+        response=analysis.response.model_copy(
+            update={
+                "limitations": (
+                    *analysis.response.limitations,
+                    "Unknown scientific restriction must remain.",
+                )
+            }
+        ),
+    )
+    brief = approved_answer_brief(changed)
+    assert "Unknown scientific restriction must remain." in brief.supports[-2].text
+    result = compliant_writer_result(brief).model_dump(mode="python")
+    result["limitation"]["text"] = "Historical results are supported."
+    with pytest.raises(WriterRejected):
+        validate(engine, brief, result)
+
+
+def test_pcae_restrictions_remain_required_when_pcae_facts_are_present(engine):
+    brief = brief_for(engine, "What is Andy Reid's PCAE?")
+    assert any("play-calling" in s.text or "PCAE" in s.text for s in brief.supports)
+    assert any("incomplete and nonrandom" in s.text for s in brief.supports)
+    assert any("not a quarterback-performance measure" in s.text for s in brief.supports)
+
+
+def test_reid_writer_request_has_static_bounded_strict_schema(engine):
+    from openai.lib._parsing._responses import type_to_text_format_param
+
+    writer = GroqAnswerWriter(None, groq_configuration())
+    allen = writer._request_arguments(brief_for(engine, ALLEN), 18)
+    reid = writer._request_arguments(brief_for(engine, REID), 18)
+    # This is the exact SDK schema, not the model's non-strict raw schema.
+    schema = type_to_text_format_param(reid["text_format"])
+    assert schema == type_to_text_format_param(allen["text_format"])
+    assert schema["strict"] is True
+    assert len(canonical_json_bytes(schema)) < 2000
+    assert schema["schema"]["$defs"]["Connector"]["enum"] == [
+        "none",
+        "continuation",
+        "contrast",
+        "comparison",
+        "limitation_transition",
+    ]
+    assert "enum" not in json.dumps(
+        schema["schema"]["$defs"]["CompositionItem"]["properties"]["phrase_id"]
+    )
+    for node in (
+        schema["schema"],
+        schema["schema"]["$defs"]["CompositionItem"],
+        schema["schema"]["$defs"]["CompositionParagraph"],
+    ):
+        assert node["additionalProperties"] is False
+        assert set(node["required"]) == set(node["properties"])
+    assert reid["model"] == allen["model"] == "openai/gpt-oss-120b"
+    assert reid["reasoning"] == allen["reasoning"] == {"effort": "low"}
+    assert reid["max_output_tokens"] == allen["max_output_tokens"] == 800
+    payload = json.loads(reid["input"])
+    assert len(payload["phrases"]) <= 72
+    assert len(payload["required_limitations"]) == 1
+    assert all(len(s["support_id"]) <= 100 for s in payload["phrases"])
+
+
+def test_wire_projection_removes_redundant_original_and_keeps_authorization(engine):
+    for question in GOLDEN:
+        brief = brief_for(engine, question)
+        original = canonical_json_bytes(brief)
+        wire = writer_provider_input(brief)
+        assert len(canonical_json_bytes(wire)) < len(original)
+        from nfl_coaching_impact.conversation.writer_composition import approved_phrases
+
+        assert wire["required_limitations"] == brief.required_limitation_ids
+        assert wire["required_fact"] == brief.supports[0].support_id
+        for phrase, transmitted in zip(approved_phrases(brief), wire["phrases"], strict=True):
+            assert transmitted["phrase_id"] == phrase.phrase_id
+            assert transmitted["text"] == phrase.text
+            assert phrase.measurement_ids == tuple(
+                m.measurement_id for m in brief.measurements if m.support_id == phrase.support_id
+            )
+        assert canonical_json_bytes(brief) == original
+
+
 def test_projection_is_not_destination_or_forward_pae(engine):
     brief = brief_for(engine, PROJECTION)
     text = render_writer_answer(validate(engine, brief, compliant_writer_result(brief)))
     assert all(x in text for x in ("team-independent", "2026", "0.120", "-0.248", "0.488"))
-    assert "No forward PAE" in text
+    assert "not future PAE" in text
     assert brief.team_independent_projection_allowed
     assert not brief.predictive_fit_allowed and not brief.causal_conclusion_allowed
 
@@ -349,16 +508,20 @@ def test_semantic_numeric_attack_falls_back_atomically(evidence, engine, replace
     assert ProviderOrchestrator(evidence, runtime).answer(request) == engine.answer(request)
 
 
-@pytest.mark.parametrize("duplicate", ["top_level", "nested", "escaped_nested", "none"])
+@pytest.mark.parametrize(
+    "duplicate", ["top_level", "escaped_top_level", "nested", "escaped_nested", "none"]
+)
 def test_raw_writer_json_duplicate_keys_fail_closed(evidence, engine, duplicate):
     brief = brief_for(engine)
-    value = compliant_writer_result(brief)
+    value = compliant_composition_plan(brief)
     raw = value.model_dump_json()
     if duplicate == "top_level":
-        raw = raw.replace('{"sentences":', '{"sentences":[],"sentences":', 1)
+        raw = raw.replace('{"paragraphs":', '{"paragraphs":[],"paragraphs":', 1)
+    elif duplicate == "escaped_top_level":
+        raw = raw.replace('{"paragraphs":', '{"\\u0070aragraphs":[],"paragraphs":', 1)
     elif duplicate in {"nested", "escaped_nested"}:
-        key = "text" if duplicate == "nested" else r"\u0074ext"
-        raw = raw.replace('{"text":', '{"' + key + '":"UNTRUSTED_PROSE","text":', 1)
+        key = "phrase_id" if duplicate == "nested" else r"\u0070hrase_id"
+        raw = raw.replace('{"phrase_id":', '{"' + key + '":"UNTRUSTED_PROSE","phrase_id":', 1)
 
     class Responses:
         calls = 0
@@ -394,12 +557,13 @@ def test_comparison_and_alignment_have_shorter_approved_football_phrasings(engin
     if question == REID:
         assert "Andy Reid" in text and "Mike Tomlin" in text
         assert "not proof of better quarterback development" in text
-        assert "cannot establish who developed quarterbacks better" in text
-        assert "incomplete and nonrandom" in text
+        assert "cannot isolate either coach as the cause" in text
+        assert "or establish who developed quarterbacks better" in text
+        assert "bounded historical summary" in text
     else:
         assert "Kyler Murray" in text and "Minnesota Vikings" in text
         assert "not a predictive fit rating" in text
-        assert "cannot forecast a team-specific performance change" in text
+        assert "cannot forecast performance or improvement with a different team" in text
         assert "not current or live performance" in text
 
 
@@ -442,9 +606,51 @@ def test_writer_http_failure_is_atomic_exact_fallback(evidence, engine, status):
     assert ProviderOrchestrator(evidence, runtime).answer(request) == engine.answer(request)
 
 
+def test_actual_sdk_writer_429_has_one_attempt_and_exact_fallback(evidence, engine):
+    import httpx
+    from openai import OpenAI
+
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(
+            429,
+            headers={"retry-after": "60"},
+            json={
+                "error": {
+                    "type": "rate_limit_error",
+                    "code": "rate_limit_exceeded",
+                    "message": "PRIVATE",
+                }
+            },
+        )
+
+    config = groq_configuration()
+    client = OpenAI(
+        api_key=config.api_key,
+        base_url="https://api.groq.com/openai/v1",
+        max_retries=0,
+        http_client=httpx.Client(transport=httpx.MockTransport(respond)),
+    )
+    try:
+        planner = LocalPlanner(evidence)
+        runtime = ProviderRuntime(config, planner=planner, writer=GroqAnswerWriter(client, config))
+        request = AskV2Request(question=REID)
+        response = ProviderOrchestrator(evidence, runtime).answer(request)
+        assert response == engine.answer(request)
+        assert planner.calls == 1 and len(calls) == 1
+        assert response.versions.planner_model_version is None
+        assert response.versions.synthesizer_model_version is None
+        assert "PRIVATE" not in response.answer and "rate limit" not in response.answer.lower()
+    finally:
+        client.close()
+
+
 @pytest.mark.parametrize("failure", ["timeout", "malformed", "number", "support", "limitation"])
 def test_validation_failure_returns_exact_stage_c_response(evidence, engine, failure):
-    result = compliant_writer_result(brief_for(engine)).model_dump(mode="python")
+    question = KYLER if failure == "limitation" else ALLEN
+    result = compliant_writer_result(brief_for(engine, question)).model_dump(mode="python")
     error = None
     if failure == "timeout":
         error = TimeoutError("PRIVATE_TIMEOUT")
@@ -461,7 +667,7 @@ def test_validation_failure_returns_exact_stage_c_response(evidence, engine, fai
         planner=LocalPlanner(evidence),
         writer=LocalWriter(value=result, error=error),
     )
-    request = AskV2Request(question=ALLEN)
+    request = AskV2Request(question=question)
     assert ProviderOrchestrator(evidence, runtime).answer(request) == engine.answer(request)
 
 
@@ -647,7 +853,7 @@ def test_multi_team_facts_cannot_exchange_measurements(engine):
 
 
 def test_fact_omission_duplicate_support_and_excess_length_fail(engine):
-    brief = brief_for(engine)
+    brief = brief_for(engine, KYLER)
     for mutate in ("omit_primary", "duplicate", "too_long"):
         result = compliant_writer_result(brief).model_dump(mode="python")
         if mutate == "omit_primary":

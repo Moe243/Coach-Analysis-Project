@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .answer_writer import ApprovedAnswerBrief, WriterResult
+from .answer_writer import ApprovedAnswerBrief
 from .contracts import (
     STAGE_D_IMPLEMENTATION_VERSION,
     ProviderSynthesisInput,
@@ -14,6 +14,7 @@ from .openai_provider import OpenAISynthesizer, _parsed
 from .provider_drafts import ProviderDraftInput, ProviderPlanDraft
 from .providers import ProviderConfiguration, ProviderMalformedOutput, ProviderRuntime
 from .serialization import canonical_json_bytes
+from .writer_composition import CompositionPlan, composition_provider_input
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_PLANNER_REASONING_EFFORT = "medium"
@@ -22,7 +23,7 @@ GROQ_PROVIDER_IMPLEMENTATION_VERSION = (
     STAGE_D_IMPLEMENTATION_VERSION + "/groq-draft-planner-v1-responses-3.14"
 )
 GROQ_WRITER_IMPLEMENTATION_VERSION = (
-    STAGE_D_IMPLEMENTATION_VERSION + "/groq-grounded-writer-v1-responses-3.14"
+    STAGE_D_IMPLEMENTATION_VERSION + "/groq-composition-writer-v2-responses-3.14"
 )
 
 _DRAFT_INSTRUCTIONS = """\
@@ -48,21 +49,23 @@ forward PAE, rookie, or Coach Effect request. Classify the actual requested inte
 """
 
 _WRITER_INSTRUCTIONS = """\
-Write a concise, natural football-analysis answer using only the supplied approved answer brief.
-Return the strict WriterResult schema and nothing else. Do not calculate, round, infer, or add
-facts, entities, seasons, rankings, scores, probabilities, causal claims, or predictions. Every
-factual sentence must cite its approved support IDs, every number must cite its exact approved
-measurement IDs, and every named football entity must cite its approved canonical entity ID.
-Select complete clauses from each support's phrasings (or text when no phrasings exist).
-You may reorder/combine those clauses with punctuation or and/also/in addition/for context/
-however/meanwhile. Do not freely paraphrase factual clauses: backend validation requires
-complete approved clauses with their metric labels and context intact. Leading + on a positive
-number and percent/% typography are allowed. Choose natural phrasings over technical originals.
-Use every required limitation ID in the separate limitation sentence, retaining its complete
-approved caveat text. Never expose IDs in sentence text. Do not repeat navigation options, discuss
-provider internals, or provide reasoning steps. Keep the complete answer under the brief's word
-limit. A team-independent projection must remain explicitly team-independent.
+Compose a natural football answer by selecting approved phrase IDs only. Return CompositionPlan.
+Never write sentence text, reasoning, calculations or new claims. The backend renders every word.
+Choose useful facts, ordering, variants and one to three short paragraphs. Include required_fact
+and ALL required_limitations exactly once. Choose at most one variant for any support_id.
+Lead with a proposition; a supported commonality or comparison can lead. Definitions are optional.
+Use only connector enum values: none, continuation, contrast, comparison, limitation_transition.
+The first item must use none. Use limitation_transition only before a limitation.
+Place limitations naturally, without separating them into a visible list. Preserve projection
+scope. Aim for 60–180 words, less when sufficient; never exceed maximum_words including connectors.
+Do not repeat navigation options, IDs, metadata or reasoning. At most eight factual/definition
+phrases and sixteen total phrases. Choose fewer facts when needed to fit all mandatory caveats.
 """
+
+
+def writer_provider_input(brief: ApprovedAnswerBrief) -> dict[str, Any]:
+    """Transmit a bounded approved phrase catalog, without arbitrary prose fields."""
+    return composition_provider_input(brief)
 
 
 class GroqPlanner:
@@ -109,7 +112,7 @@ class GroqSynthesizer(OpenAISynthesizer):
 
 
 class GroqAnswerWriter:
-    """Author natural prose from a bounded backend-approved answer brief."""
+    """Select approved language; backend alone renders factual prose."""
 
     implementation_version = GROQ_WRITER_IMPLEMENTATION_VERSION
 
@@ -118,16 +121,16 @@ class GroqAnswerWriter:
         self.configuration = configuration
         self.model_version = configuration.synthesizer_model
 
-    def write(self, request: ApprovedAnswerBrief, *, timeout: float) -> WriterResult:
+    def write(self, request: ApprovedAnswerBrief, *, timeout: float) -> CompositionPlan:
         response = self.client.responses.parse(**self._request_arguments(request, timeout))
-        parsed = _parsed(response, WriterResult)
+        parsed = _parsed(response, CompositionPlan)
         # The SDK's Pydantic parser accepts duplicate JSON keys with last-value wins.
         # Reject ambiguous raw output, including nested keys, before using that model.
         raw_text = getattr(response, "output_text", None)
         if raw_text is not None:
             try:
                 raw = json.loads(raw_text, object_pairs_hook=_unique_json_object)
-                if WriterResult.model_validate(raw) != parsed:
+                if CompositionPlan.model_validate(raw) != parsed:
                     raise ValueError("raw writer output differs from the parsed output")
             except (TypeError, ValueError) as error:
                 raise ProviderMalformedOutput(
@@ -139,8 +142,8 @@ class GroqAnswerWriter:
         return dict(
             model=self.model_version,
             instructions=_WRITER_INSTRUCTIONS,
-            input=canonical_json_bytes(request).decode("ascii"),
-            text_format=WriterResult,
+            input=canonical_json_bytes(writer_provider_input(request)).decode("ascii"),
+            text_format=CompositionPlan,
             store=False,
             background=False,
             stream=False,
