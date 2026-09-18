@@ -31,6 +31,7 @@ from nfl_coaching_impact.conversation.answer_writer import (
 from nfl_coaching_impact.conversation.contracts import AskV2Request
 from nfl_coaching_impact.conversation.enums import AnswerMode
 from nfl_coaching_impact.conversation.evidence import EvidenceService
+from nfl_coaching_impact.conversation.groq_provider import GroqAnswerWriter
 from nfl_coaching_impact.conversation.orchestration import AskV2Orchestrator
 from nfl_coaching_impact.conversation.provider_drafts import (
     FollowupKind,
@@ -346,6 +347,37 @@ def test_semantic_numeric_attack_falls_back_atomically(evidence, engine, replace
     )
     request = AskV2Request(question=ALLEN)
     assert ProviderOrchestrator(evidence, runtime).answer(request) == engine.answer(request)
+
+
+@pytest.mark.parametrize("duplicate", ["top_level", "nested", "escaped_nested", "none"])
+def test_raw_writer_json_duplicate_keys_fail_closed(evidence, engine, duplicate):
+    brief = brief_for(engine)
+    value = compliant_writer_result(brief)
+    raw = value.model_dump_json()
+    if duplicate == "top_level":
+        raw = raw.replace('{"sentences":', '{"sentences":[],"sentences":', 1)
+    elif duplicate in {"nested", "escaped_nested"}:
+        key = "text" if duplicate == "nested" else r"\u0074ext"
+        raw = raw.replace('{"text":', '{"' + key + '":"UNTRUSTED_PROSE","text":', 1)
+
+    class Responses:
+        calls = 0
+
+        def parse(self, **_kwargs):
+            self.calls += 1
+            return type("Response", (), {"output_parsed": value, "output_text": raw})()
+
+    client = type("Client", (), {"responses": Responses()})()
+    writer = GroqAnswerWriter(client, groq_configuration())
+    runtime = ProviderRuntime(groq_configuration(), planner=LocalPlanner(evidence), writer=writer)
+    request = AskV2Request(question=ALLEN)
+    response = ProviderOrchestrator(evidence, runtime).answer(request)
+    assert client.responses.calls == 1
+    if duplicate == "none":
+        assert response.answer_mode is AnswerMode.GROUNDED_AI
+    else:
+        assert response == engine.answer(request)
+        assert "UNTRUSTED_PROSE" not in response.answer
 
 
 @pytest.mark.parametrize("question", [REID, KYLER])

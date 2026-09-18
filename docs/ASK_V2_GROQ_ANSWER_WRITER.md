@@ -47,6 +47,9 @@ used only by the existing bounded planner/context interface, not as writer evide
 unit, and exact used-support/measurement summaries. Each unit includes text, support
 IDs, measurement IDs and entity IDs. Extra fields, duplicate references, unknown IDs,
 unresolved entities, missing primary support and repeated factual support fail.
+The raw Responses output is also checked for duplicate JSON keys (including nested
+and escaped keys) and agreement with the SDK-parsed result; last-value-wins ambiguity
+is rejected without logging or retaining the raw response.
 
 This first implementation intentionally uses **bounded compositional writing**, not
 unrestricted factual paraphrase. The writer chooses/reorders/combines complete
@@ -132,7 +135,7 @@ arithmetic symbols and atomic fallback. The review also added shorter approved
 comparison/caveat wording without removing any mandatory restriction, and repaired
 the metric-explainer detection described above.
 
-Final review gate on 2026-09-17: 657 backend Ask/provider/context/release/C19 tests,
+Final review gate on 2026-09-17: 661 backend Ask/provider/context/release/C19 tests,
 66 targeted frontend Ask/API/context/exploration tests and 21 mocked browser tests
 across desktop/tablet/mobile passed, with no failures or skips. Browser checks include
 accessibility and page-overflow assertions. TypeScript, ESLint, Prettier, Ruff, Python

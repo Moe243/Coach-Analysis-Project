@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .answer_writer import ApprovedAnswerBrief, WriterResult
@@ -11,7 +12,7 @@ from .contracts import (
 )
 from .openai_provider import OpenAISynthesizer, _parsed
 from .provider_drafts import ProviderDraftInput, ProviderPlanDraft
-from .providers import ProviderConfiguration, ProviderRuntime
+from .providers import ProviderConfiguration, ProviderMalformedOutput, ProviderRuntime
 from .serialization import canonical_json_bytes
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
@@ -119,7 +120,20 @@ class GroqAnswerWriter:
 
     def write(self, request: ApprovedAnswerBrief, *, timeout: float) -> WriterResult:
         response = self.client.responses.parse(**self._request_arguments(request, timeout))
-        return _parsed(response, WriterResult)
+        parsed = _parsed(response, WriterResult)
+        # The SDK's Pydantic parser accepts duplicate JSON keys with last-value wins.
+        # Reject ambiguous raw output, including nested keys, before using that model.
+        raw_text = getattr(response, "output_text", None)
+        if raw_text is not None:
+            try:
+                raw = json.loads(raw_text, object_pairs_hook=_unique_json_object)
+                if WriterResult.model_validate(raw) != parsed:
+                    raise ValueError("raw writer output differs from the parsed output")
+            except (TypeError, ValueError) as error:
+                raise ProviderMalformedOutput(
+                    "writer returned ambiguous structured output"
+                ) from error
+        return parsed
 
     def _request_arguments(self, request: ApprovedAnswerBrief, timeout: float) -> dict[str, Any]:
         return dict(
@@ -137,6 +151,15 @@ class GroqAnswerWriter:
             max_output_tokens=self.configuration.synthesizer_max_output_tokens,
             timeout=timeout,
         )
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate structured-output key")
+        result[key] = value
+    return result
 
 
 def groq_runtime(configuration: ProviderConfiguration) -> ProviderRuntime:
