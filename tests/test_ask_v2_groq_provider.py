@@ -23,6 +23,9 @@ from nfl_coaching_impact.conversation.answer_writer import (
 from nfl_coaching_impact.conversation.contracts import (
     AnalyticalTaskProposal,
     AskV2Request,
+    CanonicalEntityReference,
+    ConversationContext,
+    ConversationTurn,
     GroundedSynthesisProposal,
     PlannerEntityProposal,
     PlannerProposal,
@@ -33,6 +36,7 @@ from nfl_coaching_impact.conversation.contracts import (
 from nfl_coaching_impact.conversation.enums import (
     AnalyticalTask,
     AnswerMode,
+    ConversationRole,
     EntityKind,
     QuestionType,
     RequestedOutput,
@@ -59,6 +63,7 @@ from nfl_coaching_impact.conversation.orchestration import AskV2Orchestrator
 from nfl_coaching_impact.conversation.provider_drafts import (
     FollowupKind,
     ProviderDraftInput,
+    ProviderDraftTranslator,
     ProviderEntityMention,
     ProviderPlanDraft,
     RequestedCapability,
@@ -1128,3 +1133,292 @@ def test_planner_failure_short_circuits_before_writer(evidence):
     actual = groq_orchestrator(evidence, planner=planner, writer=writer).answer(request)
     assert canonical_json_bytes(actual) == canonical_json_bytes(expected)
     assert planner.calls == 1 and writer.calls == 0
+
+
+_ENUM_FIELDS = (
+    ("question_type", QuestionType),
+    ("entity_kinds", EntityKind),
+    ("requested_capabilities", RequestedCapability),
+    ("followup_kind", FollowupKind),
+)
+_ENUM_CASES = [(field, item.value) for field, enum in _ENUM_FIELDS for item in enum]
+
+
+def enum_wire(field, value):
+    wire = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    wire[field] = [value] if field in {"entity_kinds", "requested_capabilities"} else value
+    if field == "entity_kinds":
+        wire["entity_texts"] = ["Example Entity"]
+    return wire
+
+
+@pytest.mark.parametrize("field,value", _ENUM_CASES)
+def test_every_backend_enum_value_passes_groq_structural_contract(field, value):
+    client = FakeClient(json.dumps(enum_wire(field, value)))
+    planner = GroqPlanner(client, groq_configuration())
+    actual = planner.plan(
+        ProviderDraftInput(
+            question="Compare Andy Reid and Mike Tomlin.",
+            prior_user_questions=(),
+            context_mentions=(),
+            context_seasons=(),
+        ),
+        timeout=9,
+    )
+    backend_field = "entity_mentions" if field == "entity_kinds" else field
+    parsed = getattr(actual, backend_field)
+    if field == "entity_kinds":
+        assert parsed[0].kind_hint.value == value
+    elif field == "requested_capabilities":
+        assert parsed[0].value == value
+    else:
+        assert parsed.value == value
+    assert len(client.responses.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        (field, mutation)
+        for field, value in _ENUM_CASES
+        for mutation in (
+            value[:-1] + "?",
+            value.swapcase(),
+            "UNRECOGNIZED",
+            "",
+            "natural language label",
+        )
+    ],
+)
+def test_enum_mutations_and_natural_language_labels_fail_closed(field, value):
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(enum_wire(field, value)))
+    assert caught.value.planner_validation_outcome is PlannerValidationCategory.JSON_SHAPE_INVALID
+
+
+@pytest.mark.parametrize("field", tuple(GroqPlannerDraft.model_fields))
+def test_null_is_rejected_for_each_required_key(field):
+    wire = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    wire[field] = None
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(wire))
+    assert caught.value.planner_structure.null_field_names == (field,)
+
+
+@pytest.mark.parametrize("text_count,kind_count", [(1, 0), (2, 1), (0, 1)])
+def test_all_asymmetric_entity_pairings_fail(text_count, kind_count):
+    wire = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    wire.update(entity_texts=["Example Entity"] * text_count, entity_kinds=["coach"] * kind_count)
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(wire))
+    assert caught.value.planner_structure.entity_text_count == text_count
+    assert caught.value.planner_structure.entity_kind_count == kind_count
+
+
+@pytest.mark.parametrize("seasons", [[2009], [2027], ["2022"], [2022.0], [None], [2022, 2022]])
+def test_season_bounds_types_and_duplicates_fail(seasons):
+    wire = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    wire["season_mentions"] = seasons
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(wire))
+    assert caught.value.planner_validation_outcome is PlannerValidationCategory.JSON_SHAPE_INVALID
+
+
+@pytest.mark.parametrize(
+    "question,kind,mentions,seasons,capability,comparison,followup,expected_ids",
+    [
+        (
+            "How did Josh Allen perform in 2022?",
+            QuestionType.QB_HISTORY,
+            (("Josh Allen", EntityKind.QB),),
+            (2022,),
+            RequestedCapability.QB_HISTORY,
+            False,
+            FollowupKind.NONE,
+            ("00-0034857",),
+        ),
+        (
+            "Compare Andy Reid and Mike Tomlin's evidence around quarterback development.",
+            QuestionType.COMPARISON,
+            (("Andy Reid", EntityKind.COACH), ("Mike Tomlin", EntityKind.COACH)),
+            (),
+            RequestedCapability.COACH_COMPARISON,
+            True,
+            FollowupKind.NONE,
+            ("coach-andy-reid", "coach-mike-tomlin"),
+        ),
+        (
+            "How would Kyler Murray fit Minnesota?",
+            QuestionType.PLAYER_SCHEME_ALIGNMENT,
+            (("Kyler Murray", EntityKind.QB), ("Minnesota", EntityKind.TEAM)),
+            (),
+            RequestedCapability.PLAYER_TEAM_DESCRIPTIVE_COMPARISON,
+            True,
+            FollowupKind.NONE,
+            ("00-0035228", "team_min"),
+        ),
+        (
+            "What does the model project for Josh Allen in 2026?",
+            QuestionType.QB_PROJECTION,
+            (("Josh Allen", EntityKind.QB),),
+            (2026,),
+            RequestedCapability.QB_PROJECTION,
+            False,
+            FollowupKind.NONE,
+            ("00-0034857",),
+        ),
+        (
+            "Why?",
+            QuestionType.COMPARISON,
+            (),
+            (),
+            RequestedCapability.EXPLANATION,
+            False,
+            FollowupKind.EXPLANATION,
+            ("coach-andy-reid", "coach-mike-tomlin"),
+        ),
+        (
+            "What about McVay?",
+            QuestionType.COMPARISON,
+            (("McVay", EntityKind.COACH),),
+            (),
+            RequestedCapability.COACH_COMPARISON,
+            True,
+            FollowupKind.COMPARISON,
+            ("coach-andy-reid", "coach-sean-mcvay"),
+        ),
+    ],
+)
+def test_golden_wire_to_canonical_authorization(
+    evidence,
+    question,
+    kind,
+    mentions,
+    seasons,
+    capability,
+    comparison,
+    followup,
+    expected_ids,
+):
+    context = ConversationContext()
+    if followup is not FollowupKind.NONE:
+        context = ConversationContext(
+            turns=(
+                ConversationTurn(
+                    role=ConversationRole.USER,
+                    content=(
+                        "Compare Andy Reid and Mike Tomlin's evidence "
+                        "around quarterback development."
+                    ),
+                ),
+            ),
+            entities=(
+                CanonicalEntityReference(kind=EntityKind.COACH, id="coach-andy-reid"),
+                CanonicalEntityReference(kind=EntityKind.COACH, id="coach-mike-tomlin"),
+            ),
+        )
+    request = AskV2Request(question=question, context=context)
+    authority = AskV2Orchestrator(evidence)
+    translator = ProviderDraftTranslator(authority.planner)
+    draft = planner_draft(
+        kind, mentions, seasons, capability, comparison=comparison, followup=followup
+    )
+    client = FakeClient(json.dumps(planner_wire(draft).model_dump(mode="json")))
+    actual = GroqPlanner(client, groq_configuration()).plan(
+        translator.provider_input(request), timeout=9
+    )
+    assert actual.question_type is kind
+    plan = translator.translate(request, actual)
+    assert tuple(e.id for e in plan.resolved_by_index.values()) == expected_ids
+    authorization = authority.authorizer.authorize(plan.proposal, plan.resolved_by_index)
+    assert authorization.approved and not authorization.rejected
+    if capability is RequestedCapability.QB_HISTORY:
+        assert plan.proposal.question_type is QuestionType.QB_HISTORY
+        assert [task.task for task in authorization.approved] == [AnalyticalTask.GET_QB_HISTORY]
+    if seasons:
+        assert all(
+            t.seasons.start_season == seasons[0] and t.seasons.end_season == seasons[0]
+            for t in plan.proposal.tasks
+        )
+    assert len(client.responses.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "failure", ["400", "429", "transport", "syntax", "shape", "enum", "semantic"]
+)
+def test_all_planner_failure_stages_skip_writer_and_never_retry(evidence, failure):
+    from openai import BadRequestError
+    from openai import RateLimitError as SDKRateLimitError
+
+    request = AskV2Request(question="How did Josh Allen perform in 2022?")
+    expected = AskV2Orchestrator(evidence).answer(request)
+    if failure in {"400", "429", "transport"}:
+        error = ConnectionError("PRIVATE_ERROR_TEXT")
+        if failure != "transport":
+            response = httpx.Response(int(failure), request=httpx.Request("POST", GROQ_BASE_URL))
+            cls = BadRequestError if failure == "400" else SDKRateLimitError
+            error = cls("PRIVATE_ERROR_TEXT", response=response, body=None)
+        planner = LocalPlanner(evidence, error=error)
+
+        def count():
+            return planner.calls
+    else:
+        wire = planner_wire(
+            planner_draft(
+                QuestionType.QB_HISTORY,
+                (("Josh Allen", EntityKind.QB),),
+                (2022,),
+                RequestedCapability.QB_HISTORY,
+            )
+        ).model_dump(mode="json")
+        if failure == "enum":
+            wire["question_type"] = "PRIVATE_INVALID_ENUM"
+        elif failure == "semantic":
+            wire["season_mentions"] = [2023]
+        raw = (
+            "not json" if failure == "syntax" else "{}" if failure == "shape" else json.dumps(wire)
+        )
+        client = FakeClient(raw)
+        planner = GroqPlanner(client, groq_configuration())
+
+        def count():
+            return len(client.responses.calls)
+
+    writer = LocalWriter(error=AssertionError("writer cannot run after planner failure"))
+    actual = groq_orchestrator(evidence, planner=planner, writer=writer).answer(request)
+    assert canonical_json_bytes(actual) == canonical_json_bytes(expected)
+    assert count() == 1 and writer.calls == 0
+
+
+def test_shape_diagnostics_never_enter_public_response_or_server_log(evidence, monkeypatch):
+    import io
+    import logging
+
+    from nfl_coaching_impact.conversation import provider_telemetry
+
+    stream = io.StringIO()
+    logger = logging.Logger("offline_groq_review", level=logging.INFO)
+    logger.addHandler(logging.StreamHandler(stream))
+    monkeypatch.setattr(provider_telemetry, "_logger", lambda: logger)
+    wire = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    wire["question_type"] = "PRIVATE_INVALID_ENUM"
+    wire["entity_texts"] = ["PRIVATE_ENTITY_TEXT", "PRIVATE_SECOND_ENTITY"]
+    client = FakeClient(json.dumps(wire))
+    writer = LocalWriter(error=AssertionError("writer cannot run"))
+    request = AskV2Request(question="How did Josh Allen perform in 2022?")
+    actual = groq_orchestrator(
+        evidence, planner=GroqPlanner(client, groq_configuration()), writer=writer
+    ).answer(request)
+    log = stream.getvalue()
+    assert json.loads(log.splitlines()[-1])["planner_validation_outcome"] == "json_shape_invalid"
+    public = canonical_json_bytes(actual).decode("ascii")
+    for forbidden in (
+        "PRIVATE_INVALID_ENUM",
+        "PRIVATE_ENTITY_TEXT",
+        "PRIVATE_SECOND_ENTITY",
+        "planner_structure",
+        "invalid_enum_field_name",
+    ):
+        assert forbidden not in log and forbidden not in public
+    assert request.question not in log
+    assert writer.calls == 0
