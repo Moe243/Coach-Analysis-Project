@@ -37,6 +37,7 @@ from nfl_coaching_impact.conversation.provider_drafts import (
 )
 from nfl_coaching_impact.conversation.provider_orchestration import ProviderOrchestrator
 from nfl_coaching_impact.conversation.providers import (
+    PlannerValidationCategory,
     ProviderConfiguration,
     ProviderFailureCategory,
     ProviderMalformedOutput,
@@ -241,10 +242,19 @@ def test_structured_groq_failure_has_closed_error_classification(events):
 
 
 def test_parse_failure_is_distinct_from_semantic_rejection(evidence, events):
-    orchestrator, request = ask(evidence, Planner(ProviderMalformedOutput("SECRET_KEY")))
+    orchestrator, request = ask(
+        evidence,
+        Planner(
+            ProviderMalformedOutput(
+                "SECRET_KEY",
+                planner_validation_outcome=PlannerValidationCategory.JSON_TRUNCATED,
+            )
+        ),
+    )
     orchestrator.answer(request)
     assert events()[-1]["fallback_category"] == "malformed_output"
     assert events()[-1]["phase"] == "request"
+    assert events()[-1]["planner_validation_outcome"] == "json_truncated"
     orchestrator, request = ask(evidence, Planner(mention="Patrick Mahomes"))
     assert orchestrator.answer(request) == AskV2Orchestrator(evidence).answer(request)
     assert events()[-1]["fallback_category"] == "grounding_rejected"
@@ -350,7 +360,7 @@ def test_sdk_exact_wire_parameters_and_json_object_contract_are_captured_offline
     assert body["background"] is False and body["stream"] is False
     assert body["tools"] == [] and body["tool_choice"] == "none"
     assert body["parallel_tool_calls"] is False
-    assert body["reasoning"] == {"effort": "medium"}
+    assert body["reasoning"] == {"effort": "low"}
     assert body["max_output_tokens"] == 600
     assert set(body).isdisjoint(
         {

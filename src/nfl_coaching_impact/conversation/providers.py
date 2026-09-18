@@ -52,6 +52,17 @@ class WriterValidationCategory(StrEnum):
     UNSUPPORTED_SENTENCE = "unsupported_sentence"
 
 
+class PlannerValidationCategory(StrEnum):
+    """Content-free classifications for untrusted planner output."""
+
+    JSON_MISSING = "json_missing"
+    JSON_SYNTAX_INVALID = "json_syntax_invalid"
+    JSON_SHAPE_INVALID = "json_shape_invalid"
+    JSON_TRUNCATED = "json_truncated"
+    DUPLICATE_KEY = "duplicate_key"
+    PROVIDER_PARSE_FAILED = "provider_parse_failed"
+
+
 class ProviderName(StrEnum):
     NONE = "none"
     OPENAI = "openai"
@@ -68,8 +79,37 @@ class ProviderRefusal(ProviderError):
     category = ProviderFailureCategory.REFUSAL
 
 
+@dataclass(frozen=True, slots=True)
+class PlannerStructuralDiagnostics:
+    """Local/internal metadata only; never contains provider values or exception text."""
+
+    missing_field_names: tuple[str, ...] = ()
+    unexpected_field_names: tuple[str, ...] = ()
+    field_type_categories: tuple[tuple[str, str], ...] = ()
+    array_lengths: tuple[tuple[str, int], ...] = ()
+    null_field_names: tuple[str, ...] = ()
+    invalid_enum_field_name: str | None = None
+    entity_text_count: int | None = None
+    entity_kind_count: int | None = None
+    season_count: int | None = None
+    capability_count: int | None = None
+    duplicate_key_detected: bool = False
+    top_level_object: bool = False
+
+
 class ProviderMalformedOutput(ProviderError):
     category = ProviderFailureCategory.MALFORMED_OUTPUT
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        planner_validation_outcome: PlannerValidationCategory | None = None,
+        planner_structure: PlannerStructuralDiagnostics | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.planner_validation_outcome = planner_validation_outcome
+        self.planner_structure = planner_structure
 
 
 class ProviderPayloadTooLarge(ProviderError):

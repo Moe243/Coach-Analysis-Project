@@ -345,6 +345,20 @@ def test_missing_extra_fabricated_or_unsupported_seasons_fail_closed(evidence, q
         )
 
 
+def test_historical_draft_cannot_replace_literal_season(evidence):
+    with pytest.raises(DraftRejected, match="omitted or invented a literal season"):
+        translate(
+            evidence,
+            AskV2Request(question="How did Josh Allen perform in 2022?"),
+            draft(
+                RequestedCapability.QB_HISTORY,
+                (("Josh Allen", EntityKind.QB),),
+                (2023,),
+                kind=QuestionType.QB_HISTORY,
+            ),
+        )
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

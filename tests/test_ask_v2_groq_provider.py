@@ -6,7 +6,9 @@ import json
 import re
 import socket
 import sys
+from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -46,6 +48,9 @@ from nfl_coaching_impact.conversation.groq_provider import (
     GroqPlanner,
     GroqPlannerDraft,
     GroqSynthesizer,
+    _parse_planner_output,
+    _planner_response_text,
+    _planner_structure,
     groq_runtime,
 )
 from nfl_coaching_impact.conversation.grounding import provider_synthesis_input
@@ -62,6 +67,7 @@ from nfl_coaching_impact.conversation.provider_orchestration import ProviderOrch
 from nfl_coaching_impact.conversation.providers import (
     AnswerWriterProvider,
     PlannerProvider,
+    PlannerValidationCategory,
     ProviderConfiguration,
     ProviderMalformedOutput,
     ProviderName,
@@ -527,6 +533,19 @@ def test_groq_planner_uses_json_object_and_adapters_use_no_tools(evidence):
     assert planner_call["reasoning"] == {"effort": GROQ_PLANNER_REASONING_EFFORT}
     assert planner_call["tools"] == [] and planner_call["tool_choice"] == "none"
     assert planner_call["max_output_tokens"] == 600
+    instructions = planner_call["instructions"]
+    assert "include ALL seven keys; no key is optional" in instructions
+    assert "Never use null" in instructions and "even for one item" in instructions
+    for enum in (QuestionType, EntityKind, RequestedCapability, FollowupKind):
+        assert ", ".join(item.value for item in enum) in instructions
+    historical_example = instructions.rsplit(" -> ", 1)[1].strip()
+    expected_history = planner_draft(
+        QuestionType.QB_HISTORY,
+        (("Josh Allen", EntityKind.QB),),
+        (2022,),
+        RequestedCapability.QB_HISTORY,
+    )
+    assert _parse_planner_output(historical_example) == expected_history
 
     result = AskV2Orchestrator(evidence).analyze(
         AskV2Request(question="How did Josh Allen perform in 2022?")
@@ -824,7 +843,7 @@ def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
                     }
                 ],
                 "parallel_tool_calls": False,
-                "reasoning": {"effort": "medium", "summary": None},
+                "reasoning": {"effort": "low", "summary": None},
                 "store": False,
                 "temperature": 1.0,
                 "text": {"format": captured["text"]["format"], "verbosity": "medium"},
@@ -860,7 +879,7 @@ def test_realistic_groq_responses_shape_parses_with_pinned_openai_sdk():
     )
     assert planner.plan(planner_input, timeout=9) == proposal
     assert captured["tools"] == [] and captured["tool_choice"] == "none"
-    assert captured["reasoning"] == {"effort": "medium"}
+    assert captured["reasoning"] == {"effort": "low"}
     response_format = captured["text"]["format"]
     assert response_format == {"type": "json_object"}
 
@@ -915,3 +934,197 @@ def test_flat_planner_rejects_malformed_duplicate_unbounded_or_unknown_json(raw)
     )
     with pytest.raises(ProviderMalformedOutput):
         planner.plan(request, timeout=9)
+
+
+def test_flat_planner_accepts_only_plain_or_whole_fenced_json():
+    expected = coach_comparison_draft()
+    raw = canonical_json_bytes(planner_wire(expected)).decode("ascii")
+    for accepted in (raw, f"  \n{raw}\n\t", f"```json\n{raw}\n```"):
+        assert _parse_planner_output(accepted) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "category"),
+    [
+        ("", PlannerValidationCategory.JSON_MISSING),
+        (
+            "prefix " + '{"question_type":"QB_HISTORY"}',
+            PlannerValidationCategory.JSON_SYNTAX_INVALID,
+        ),
+        ('{"question_type":"QB_HISTORY"} suffix', PlannerValidationCategory.JSON_SYNTAX_INVALID),
+        ("{}{}", PlannerValidationCategory.JSON_SYNTAX_INVALID),
+        ('{"question_type":"QB_HISTORY"', PlannerValidationCategory.JSON_TRUNCATED),
+        (
+            '{"question_type":"QB_HISTORY","question_type":"COMPARISON"}',
+            PlannerValidationCategory.DUPLICATE_KEY,
+        ),
+        ("{}", PlannerValidationCategory.JSON_SHAPE_INVALID),
+        ("null", PlannerValidationCategory.JSON_SHAPE_INVALID),
+        ("```json\n{}\n``` trailing", PlannerValidationCategory.JSON_SYNTAX_INVALID),
+        ("```\n{}\n```", PlannerValidationCategory.JSON_SYNTAX_INVALID),
+    ],
+)
+def test_planner_json_syntax_matrix_fails_closed(raw, category):
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(raw)
+    assert caught.value.planner_validation_outcome is category
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"unknown_field": "not allowed"},
+        {"comparison_requested": "yes"},
+        {"question_type": "INVALID_ENUM"},
+        {"entity_texts": ["x" * 101, "Mike Tomlin"]},
+        {"season_mentions": [2027]},
+        {"requested_capabilities": ["UNKNOWN_CAPABILITY"]},
+    ],
+)
+def test_planner_json_shape_matrix_fails_closed(mutation):
+    value = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    value.update(mutation)
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(canonical_json_bytes(value).decode("ascii"))
+    assert caught.value.planner_validation_outcome is PlannerValidationCategory.JSON_SHAPE_INVALID
+
+
+def test_planner_text_fallback_reads_one_sdk_output_text_only():
+    expected = coach_comparison_draft()
+    raw = canonical_json_bytes(planner_wire(expected)).decode("ascii")
+    content = SimpleNamespace(type="output_text", text=raw)
+    response = SimpleNamespace(output_text=None, output=[SimpleNamespace(content=[content])])
+    assert _parse_planner_output(_planner_response_text(response)) == expected
+    empty_aggregate = SimpleNamespace(output_text="", output=[SimpleNamespace(content=[content])])
+    assert _parse_planner_output(_planner_response_text(empty_aggregate)) == expected
+
+    parsed_only = SimpleNamespace(output_text=None, output=[], output_parsed=planner_wire(expected))
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _planner_response_text(parsed_only)
+    assert caught.value.planner_validation_outcome is PlannerValidationCategory.JSON_MISSING
+
+    multiple = SimpleNamespace(
+        output_text=None,
+        output=[SimpleNamespace(content=[content, content])],
+    )
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _planner_response_text(multiple)
+    assert (
+        caught.value.planner_validation_outcome is PlannerValidationCategory.PROVIDER_PARSE_FAILED
+    )
+
+
+def test_planner_parser_is_deterministic_under_production_like_formatting_stress():
+    expected = coach_comparison_draft()
+    raw = canonical_json_bytes(planner_wire(expected)).decode("ascii")
+    variants = (raw, f"\n{raw}\n", f"```json\n{raw}\n```")
+    for index in range(120):
+        assert _parse_planner_output(variants[index % len(variants)]) == expected
+
+
+def test_planner_parser_rejects_oversized_output_before_decoding():
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output("{" + (" " * 16_384) + "}")
+    assert caught.value.planner_validation_outcome is PlannerValidationCategory.JSON_SHAPE_INVALID
+
+
+@pytest.mark.parametrize("field", tuple(GroqPlannerDraft.model_fields))
+def test_every_planner_key_is_required_with_no_optional_defaults(field):
+    value = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    del value[field]
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(value))
+    assert caught.value.planner_structure.missing_field_names == (field,)
+    assert dict(caught.value.planner_structure.field_type_categories)[field] == "missing"
+
+
+@pytest.mark.parametrize(
+    "field,value,category,enum_field",
+    [
+        ("entity_texts", None, "null", None),
+        ("entity_kinds", None, "null", None),
+        ("season_mentions", None, "null", None),
+        ("requested_capabilities", None, "null", None),
+        ("question_type", [], "array", None),
+        ("entity_texts", "private value", "string", None),
+        ("entity_kinds", "coach", "string", None),
+        ("comparison_requested", "false", "string", None),
+        ("followup_kind", None, "null", None),
+        ("question_type", "UNKNOWN_PRIVATE_ENUM", "string", "question_type"),
+        ("followup_kind", "UNKNOWN_PRIVATE_ENUM", "string", "followup_kind"),
+        ("requested_capabilities", ["UNKNOWN_PRIVATE_ENUM"], "array", "requested_capabilities"),
+        ("entity_kinds", ["UNKNOWN_PRIVATE_ENUM", "coach"], "array", "entity_kinds"),
+        ("season_mentions", "private value", "string", None),
+        ("season_mentions", ["private value"], "array", None),
+    ],
+)
+def test_planner_structural_deviations_are_content_free(field, value, category, enum_field):
+    raw = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    raw[field] = value
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(raw))
+    diagnostics = caught.value.planner_structure
+    assert caught.value.planner_validation_outcome is PlannerValidationCategory.JSON_SHAPE_INVALID
+    assert dict(diagnostics.field_type_categories)[field] == category
+    assert diagnostics.invalid_enum_field_name == enum_field
+    assert (field in diagnostics.null_field_names) is (value is None)
+    safe = json.dumps(asdict(diagnostics))
+    assert "private value" not in safe and "UNKNOWN_PRIVATE_ENUM" not in safe
+    assert "Andy Reid" not in safe and "Mike Tomlin" not in safe
+
+
+def test_planner_structure_reports_pairing_without_entity_values():
+    value = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    value["entity_kinds"] = ["coach"]
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(value))
+    structure = caught.value.planner_structure
+    assert structure.entity_text_count == 2 and structure.entity_kind_count == 1
+    assert structure.season_count == 0 and structure.capability_count == 1
+
+
+def test_empty_entity_and_season_arrays_pass_without_normalization():
+    value = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    value.update(entity_texts=[], entity_kinds=[], season_mentions=[])
+    actual = _parse_planner_output(json.dumps(value))
+    assert actual.entity_mentions == () and actual.season_mentions == ()
+    value["requested_capabilities"] = []
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(value))
+    assert caught.value.planner_structure.capability_count == 0
+
+
+def test_structural_diagnostics_never_disclose_arbitrary_property_names_or_values():
+    value = planner_wire(coach_comparison_draft()).model_dump(mode="json")
+    value.update({"seasons": [2022], "private user content": "private provider content"})
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output(json.dumps(value))
+    structure = caught.value.planner_structure
+    assert structure.unexpected_field_names == ("UNKNOWN_FIELD", "seasons")
+    serialized = json.dumps(asdict(structure))
+    assert "private" not in serialized and "2022" not in serialized
+    assert "Andy Reid" not in serialized
+
+
+def test_duplicate_and_non_object_structural_metadata_remain_bounded():
+    with pytest.raises(ProviderMalformedOutput) as caught:
+        _parse_planner_output('{"question_type":"QB_HISTORY","question_type":"COMPARISON"}')
+    assert caught.value.planner_structure.duplicate_key_detected
+    assert not _planner_structure(None).top_level_object
+    assert not _planner_structure([]).top_level_object
+
+
+def test_planner_failure_short_circuits_before_writer(evidence):
+    planner = LocalPlanner(
+        evidence,
+        error=ProviderMalformedOutput(
+            "private provider output",
+            planner_validation_outcome=PlannerValidationCategory.JSON_SYNTAX_INVALID,
+        ),
+    )
+    writer = LocalWriter(error=AssertionError("writer must not run after planner failure"))
+    request = AskV2Request(question="How did Josh Allen perform in 2022?")
+    expected = AskV2Orchestrator(evidence).answer(request)
+    actual = groq_orchestrator(evidence, planner=planner, writer=writer).answer(request)
+    assert canonical_json_bytes(actual) == canonical_json_bytes(expected)
+    assert planner.calls == 1 and writer.calls == 0

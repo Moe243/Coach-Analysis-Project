@@ -29,6 +29,7 @@ from .providers import (
     MAX_PROVIDER_PAYLOAD_BYTES,
     ProviderConcurrencyLimit,
     ProviderFailureCategory,
+    ProviderMalformedOutput,
     ProviderPayloadTooLarge,
     ProviderRuntime,
     WriterValidationCategory,
@@ -307,5 +308,10 @@ class ProviderOrchestrator:
             error=error,
             latency_ms=attempt.latency_ms,
             validation_outcome=validation_outcome,
+            planner_validation_outcome=(
+                error.planner_validation_outcome
+                if component == "planner" and isinstance(error, ProviderMalformedOutput)
+                else None
+            ),
             fallback=True,
         )

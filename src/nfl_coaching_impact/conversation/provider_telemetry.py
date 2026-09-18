@@ -12,6 +12,7 @@ from threading import Lock
 
 from .provider_diagnostics import safe_provider_error_details
 from .providers import (
+    PlannerValidationCategory,
     ProviderConfiguration,
     ProviderFailureCategory,
     ProviderName,
@@ -119,6 +120,7 @@ def provider_event(
     latency_ms: int | None = None,
     runtime_ready: bool | None = None,
     validation_outcome: WriterValidationCategory | None = None,
+    planner_validation_outcome: PlannerValidationCategory | None = None,
     fallback: bool = False,
 ) -> None:
     """Best effort: invalid fields, formatters and sinks can never break Ask."""
@@ -134,6 +136,7 @@ def provider_event(
             latency_ms=latency_ms,
             runtime_ready=runtime_ready,
             validation_outcome=validation_outcome,
+            planner_validation_outcome=planner_validation_outcome,
             fallback=fallback,
         )
     except Exception:
@@ -153,6 +156,7 @@ def _emit_provider_event(
     latency_ms: int | None,
     runtime_ready: bool | None,
     validation_outcome: WriterValidationCategory | None,
+    planner_validation_outcome: PlannerValidationCategory | None,
     fallback: bool,
 ) -> None:
     """No arbitrary message/extra dict, exception text, headers, or request input."""
@@ -174,6 +178,11 @@ def _emit_provider_event(
         "validation_outcome": (
             WriterValidationCategory(validation_outcome).value
             if validation_outcome is not None
+            else None
+        ),
+        "planner_validation_outcome": (
+            PlannerValidationCategory(planner_validation_outcome).value
+            if planner_validation_outcome is not None
             else None
         ),
         "fallback": bool(fallback),
