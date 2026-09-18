@@ -133,6 +133,44 @@ test("Josh Allen answer leads with key numbers and supports a contextual follow-
   ).toBe(true);
 });
 
+test("grounded writer prose preserves accessible responsive answer and exploration", async ({
+  page,
+}) => {
+  const answer =
+    "With Buffalo Bills in 2022, Josh Allen produced 0.237 EPA per dropback " +
+    "against a preseason expectation of 0.122. His PAE was +0.115 across 651 dropbacks.\n\n" +
+    "The expectation's uncertainty interval is not a separate uncertainty interval " +
+    "for performance above expectation. A quarterback's results with different " +
+    "teams in the same season remain separate.";
+  await mockAskV2(page, () =>
+    askV2Response({ answer, answer_mode: "grounded_ai" }),
+  );
+  await page.goto("/ask");
+  await submit(page, "How did Josh Allen perform in 2022?");
+  await expect(page.locator(".ask-v2-answer-copy")).toHaveText(answer);
+  await expect(
+    page.getByText(/EPA\/dropback estimates expected scoring value/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Key numbers" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".ask-v2-explore-grid").first().locator(":scope > *"),
+  ).toHaveCount(4);
+  await expect(
+    page.getByRole("link", { name: /2022 statistics/ }),
+  ).toHaveAttribute("href", "/statistics?player=Josh+Allen&season=2022");
+  await expect(
+    page.getByText(/Groq|provider disabled|fallback mode/i),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await expectNoAxeViolations(page);
+});
+
 test("Reid versus Tomlin remains neutral and carries context into Why", async ({
   page,
 }, testInfo) => {

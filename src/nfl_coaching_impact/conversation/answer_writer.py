@@ -33,7 +33,7 @@ MAX_WRITER_MEASUREMENTS = 64
 MAX_WRITER_SENTENCES = 8
 MAX_WRITER_WORDS = 220
 
-_NUMBER = re.compile(r"(?<![A-Za-z0-9])[-+]?\d[\d,]*(?:\.\d+)?%?")
+_NUMBER = re.compile(r"(?<![A-Za-z0-9])[-+\N{MINUS SIGN}]?\d[\d,]*(?:\.\d+)?%?")
 
 
 class BriefSupportKind(StrEnum):
@@ -159,7 +159,7 @@ def _numeric_tokens(text: str) -> tuple[str, ...]:
 
 
 def _canonical_number(value: str) -> str:
-    cleaned = value.replace(",", "").rstrip("%").lstrip("+")
+    cleaned = value.replace("\N{MINUS SIGN}", "-").replace(",", "").rstrip("%").lstrip("+")
     try:
         number = Decimal(cleaned)
     except InvalidOperation as error:  # pragma: no cover - regex pre-validates values
@@ -224,24 +224,24 @@ def _permission_allowed(result: AuthoritativeResult, kind: ConclusionKind) -> bo
 def _public_limitation(text: str) -> str:
     """Translate backend caveats, never remove their scientific restrictions."""
     if text.startswith("BOUNDED_SCOPE:"):
-        return "This is a bounded historical summary, not a review of every individual record."
+        return "This is a bounded historical summary, not an exhaustive record review."
     translations = {
         "Multi-team seasons remain separate at player_id + team_id + season.": (
             "A quarterback's results with different teams in the same season remain separate."
         ),
         "QB performance samples are distinct player_id + team_id + season observations.": (
-            "Quarterback samples are separate player, team and season records."
+            "Quarterback samples remain separate player, team and season records."
         ),
         "PCAE is observational research evidence, not QB PAE or a universal Coach Effect.": (
-            "Play-calling evidence is observational; it is not quarterback performance "
-            "or an overall coaching grade."
+            "Play-calling evidence is observational, not a quarterback-performance measure "
+            "or overall coaching grade."
         ),
         "PCAE, verified roles, QB context, and scheme remain distinct evidence families.": (
-            "Play-calling decisions, documented roles, quarterback history and offensive "
-            "tendencies are different kinds of evidence."
+            "Roles, quarterback history, offensive tendencies and play-calling "
+            "are separate evidence."
         ),
         "Player State is entering-season evidence, not current or live performance.": (
-            "The player profile describes entering-season history, not current or live performance."
+            "The player profile reflects preseason history, not current or live performance."
         ),
         "The destination-team research does not support a prediction or improvement adjustment.": (
             "Historical comparisons cannot reliably predict performance "
@@ -249,20 +249,37 @@ def _public_limitation(text: str) -> str:
         ),
         "Historical scheme is observed team-season behavior, not causal coach ownership.": (
             "Historical offensive tendencies describe team-season behavior, "
-            "not what a coach caused."
+            "not a coach's causal contribution."
         ),
         "Alignment compares declared compatible tendencies only; it is not a fit score.": (
-            "These comparisons describe measured tendencies; they are not a predictive fit rating."
+            "These are measured tendencies, not a predictive fit rating."
         ),
         "No coach-interval confidence interval was published.": (
-            "There is no published uncertainty interval for an individual coach's assignment."
+            "No assignment-level uncertainty interval is available."
         ),
         (
             "Only verified non-shared caller intervals are present; "
             "coverage is incomplete and nonrandom."
         ): (
-            "The play-calling evidence covers only verified, non-shared assignments "
-            "and is incomplete and nonrandom."
+            "Only verified, non-shared play-calling assignments are covered; "
+            "coverage is incomplete and nonrandom."
+        ),
+        "Verified roles and QB contexts do not identify comparative development quality.": (
+            "Documented roles and quarterback histories cannot establish "
+            "who developed quarterbacks better."
+        ),
+        "Missing scheme values remain unavailable and are never league-average filled.": (
+            "Missing offensive-tendency measurements remain unavailable, "
+            "never replaced with league averages."
+        ),
+        (
+            "The destination-team model did not improve prediction on unseen seasons, "
+            "so the project does not estimate a team-specific performance change. "
+            "Historical profile and scheme evidence may still be compared."
+        ): (
+            "Destination-team predictions failed out-of-sample validation. "
+            "We can compare historical profiles and offensive tendencies, "
+            "but cannot forecast a team-specific performance change."
         ),
         "Expectation intervals are not newly fitted PAE intervals.": (
             "The expectation's uncertainty interval is not a separate uncertainty interval "
@@ -327,6 +344,33 @@ def _public_phrasings(predicate: str, text: str) -> tuple[str, ...]:
                 f"{name} served in a verified {role} role with {team} in {year}, "
                 f"with a recorded assignment covering weeks {start}–{end}."
             )
+    elif predicate == "verified_role_evidence_comparison":
+        match = re.fullmatch(
+            r"(.+?) has clearer directly verified offensive/QB-role attribution in the "
+            r"available comparison evidence; this is not proof of better QB development\. "
+            r"That distinction concerns documented responsibilities, not who made "
+            r"quarterbacks better\. The verified roles in this history are: (.+)\.",
+            text,
+        )
+        if match:
+            name, roles = match.groups()
+            phrasings.append(
+                f"The documented roles give us clearer offensive and quarterback-role "
+                f"evidence for {name}, not proof of better quarterback development. "
+                f"Verified roles: {roles}."
+            )
+    elif predicate == "descriptive_player_scheme_alignment":
+        match = re.fullmatch(
+            r"(.+?)'s measured recent (.+?) was ([\d.]+%); (.+?)' historical \2 "
+            r"was ([\d.]+%)\.",
+            text,
+        )
+        if match:
+            player, metric, player_value, team, team_value = match.groups()
+            phrasings.append(
+                f"{player}'s recent measured {metric}: {player_value}, "
+                f"versus {team}' historical {team_value}."
+            )
     return tuple(phrasings)
 
 
@@ -380,7 +424,7 @@ def approved_answer_brief(result: AuthoritativeResult) -> ApprovedAnswerBrief:
             ApprovedAnswerSupport(
                 support_id=support_id,
                 kind=BriefSupportKind.LIMITATION,
-                text=portion.explanation,
+                text=_public_limitation(portion.explanation),
             )
         )
         required_limitations.append(support_id)
@@ -483,7 +527,10 @@ def _phrase_tokens(text: str) -> tuple[str, ...]:
         ),
         text,
     )
-    return tuple(re.findall(r"[a-z0-9]+", text.casefold()))
+    # Formatting punctuation may vary; arithmetic/unit symbols may not disappear.
+    # Otherwise, e.g. a Unicode minus or percent sign could change a displayed
+    # measurement while leaving the normalized approved clause unchanged.
+    return tuple(re.findall(r"[a-z0-9]+|[+\-%<>=*/^]|[^\x00-\x7f\s]", text.casefold()))
 
 
 _JOINERS = tuple(

@@ -52,7 +52,8 @@ This first implementation intentionally uses **bounded compositional writing**, 
 unrestricted factual paraphrase. The writer chooses/reorders/combines complete
 backend-approved clauses with punctuation and a small non-factual transition allowlist.
 Backend-authored natural variants cover historical EPA/expectation/PAE, verified role
-history and team-independent projections; other facts keep their approved wording.
+history, role-evidence comparisons, descriptive player/scheme comparisons and
+team-independent projections; other facts keep their approved wording.
 The validator matches every emitted factual span to a full clause. A support ID alone
 is never treated as proof that arbitrary prose follows from that support.
 
@@ -60,7 +61,10 @@ This conservative gate binds numbers to metric labels, entities, years, units, p
 and intervals. It rejects swapped actual/expected values, attaching one stint's numbers
 to another, invented grades/rankings, unseen names (including names absent from the
 catalog), causal upgrades and unsupported predictions. Decimal normalization permits
-a leading positive sign and `%`/`percent` typography, not new rounding or calculations.
+a leading positive sign, a Unicode minus for an already-negative value and
+`%`/`percent` typography, not new rounding or calculations. Unmatched arithmetic and
+Unicode unit/sign symbols remain tokens rather than disappearing as punctuation;
+they cannot reverse a sign or silently turn EPA/PAE into a percentage.
 Missing values never become zero. Mandatory caveats must contain complete approved
 text: citing a caveat ID while replacing its warning fails. Ordinary negated caveats
 such as “not causal” or “no forward PAE” are valid, not global banned-word violations.
@@ -108,19 +112,37 @@ four, **not measured Groq tokenizer counts**, excluding schema/instructions):
 | Flow | Bytes | Approximate tokens |
 | --- | ---: | ---: |
 | Allen 2022 | 2,629 | 657 |
-| Reid/Tomlin | 4,730 | 1,182 |
-| Kyler/Minnesota | 4,620 | 1,155 |
+| Reid/Tomlin | 4,910 | 1,227 |
+| Kyler/Minnesota | 4,995 | 1,248 |
 | Allen 2026 | 2,096 | 524 |
 | McCarthy | 4,962 | 1,240 |
-| Rodgers 2011 | 2,675 | 669 |
+| Rodgers 2011 | 2,675 | 668 |
 
-On this machine, median warm construction was about 0.08–0.20 ms and validation
-0.21–0.55 ms over 25 repetitions per flow, excluding evidence retrieval/provider time.
+On this machine, median warm construction was about 0.09–0.25 ms and validation
+0.24–0.56 ms over 25 repetitions per flow, excluding evidence retrieval/provider time.
 Name matching uses a bounded cached snapshot matcher. Cold compilation is not included
-in these warm measurements. Frontend rendering needs no UI change: validated prose
-uses the existing answer area, Key numbers, caveats and Keep Exploring.
+in these warm measurements. The existing answer area, Key numbers, caveats and Keep
+Exploring are preserved; the metric explainer recognizes both `EPA/dropback` and
+`EPA per dropback` so natural unit wording cannot hide the explanation.
 
-Final local gate on 2026-09-17: 624 backend Ask/provider/context/release/C19 tests
-and 66 targeted frontend Ask/API/context/exploration tests passed, with no failures
-or skips. TypeScript, ESLint, Prettier, Ruff, Python formatting/compilation, the local
-production frontend build and diff checks passed. No live provider calls were made.
+Independent review reproduced a blocking numeric-typography bypass in the initial
+candidate: Unicode minus and percent symbols were discarded by phrase normalization.
+The corrective regression cases cover sign/unit substitutions, double negation,
+arithmetic symbols and atomic fallback. The review also added shorter approved
+comparison/caveat wording without removing any mandatory restriction, and repaired
+the metric-explainer detection described above.
+
+Final review gate on 2026-09-17: 657 backend Ask/provider/context/release/C19 tests,
+66 targeted frontend Ask/API/context/exploration tests and 21 mocked browser tests
+across desktop/tablet/mobile passed, with no failures or skips. Browser checks include
+accessibility and page-overflow assertions. TypeScript, ESLint, Prettier, Ruff, Python
+formatting/compilation, the local production frontend build and diff checks passed.
+Playwright emitted only the existing `NO_COLOR`/`FORCE_COLOR` environment warning.
+Sandbox cache-access failures were rerun with approval; they were not skipped tests.
+No live provider calls were made.
+
+Offline examples improve concise statistical and role wording; the value of another
+model call for comparisons remains modest and unproven live. Before merge, a separately
+authorized bounded local smoke should assess Allen 2022, Reid/Tomlin, Kyler/Minnesota
+and Allen 2026 for grounding acceptance, readability, tokens and total latency. This
+does not authorize production sharing or activation.

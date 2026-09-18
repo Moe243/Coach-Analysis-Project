@@ -57,6 +57,9 @@ describe("Ask Anything v2", () => {
     renderRoute(<AskPreviewPage />, "/ask");
     await submit("How did Josh Allen perform in 2022?");
     expect(await screen.findByText(answer)).toBeVisible();
+    expect(
+      screen.getByText(/EPA\/dropback estimates expected scoring value/),
+    ).toBeVisible();
     expect(screen.getByRole("heading", { name: "Key numbers" })).toBeVisible();
     expect(screen.getByText("Keep in mind:")).toBeVisible();
     expect(document.querySelectorAll(".ask-v2-explore-grid > *")).toHaveLength(

@@ -276,6 +276,129 @@ def test_numeric_signs_and_interval_endpoints_cannot_switch(engine):
         validate(engine, brief, result)
 
 
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        "\N{MINUS SIGN}0.115",
+        "\N{EN DASH}0.115",
+        "\N{EM DASH}0.115",
+        "\N{FULLWIDTH HYPHEN-MINUS}0.115",
+        "\N{SMALL HYPHEN-MINUS}0.115",
+        "\N{SUPERSCRIPT MINUS}0.115",
+        "\N{SUBSCRIPT MINUS}0.115",
+        "0.115\N{FULLWIDTH PERCENT SIGN}",
+        "0.115\N{SMALL PERCENT SIGN}",
+        "0.115\N{ARABIC PERCENT SIGN}",
+        "0.115\N{COMMERCIAL MINUS SIGN}",
+        "0.115\N{PER MILLE SIGN}",
+        "0.115\N{PER TEN THOUSAND SIGN}",
+        "0.115% %",
+        "\N{PLUS-MINUS SIGN}0.115",
+        "0.115 *",
+        "0.115 /",
+    ],
+)
+def test_numeric_semantic_symbols_cannot_disappear_during_validation(engine, replacement):
+    brief = brief_for(engine)
+    result = compliant_writer_result(brief).model_dump(mode="python")
+    result["sentences"][0]["text"] = result["sentences"][0]["text"].replace("0.115", replacement)
+    with pytest.raises(WriterRejected):
+        validate(engine, brief, result)
+
+
+def test_unicode_minus_preserves_an_approved_negative_value_without_double_negation(engine):
+    brief = brief_for(engine, PROJECTION)
+    result = compliant_writer_result(brief).model_dump(mode="python")
+    original = result["sentences"][0]["text"]
+    result["sentences"][0]["text"] = original.replace("-0.248", "\N{MINUS SIGN}0.248")
+    validate(engine, brief, result)
+    for replacement in ("--0.248", "-\N{MINUS SIGN}0.248", "\N{MINUS SIGN}-0.248"):
+        result["sentences"][0]["text"] = original.replace("-0.248", replacement)
+        with pytest.raises(WriterRejected):
+            validate(engine, brief, result)
+
+
+@pytest.mark.parametrize("replacement", ["0.238", "0.116", "650", "652", "23.7%", "0.237%"])
+def test_requested_adversarial_values_cannot_replace_approved_allen_numbers(engine, replacement):
+    brief = brief_for(engine)
+    result = compliant_writer_result(brief).model_dump(mode="python")
+    result["sentences"][0]["text"] = result["sentences"][0]["text"].replace("0.237", replacement)
+    with pytest.raises(WriterRejected):
+        validate(engine, brief, result)
+
+
+@pytest.mark.parametrize("unapproved", ["top 5", "No. 3", "75%", "8/10"])
+def test_requested_unapproved_rankings_and_scores_are_rejected(engine, unapproved):
+    brief = brief_for(engine)
+    result = compliant_writer_result(brief).model_dump(mode="python")
+    result["sentences"][0]["text"] += " " + unapproved
+    with pytest.raises(WriterRejected):
+        validate(engine, brief, result)
+
+
+@pytest.mark.parametrize("replacement", ["\N{MINUS SIGN}0.115", "0.115\N{FULLWIDTH PERCENT SIGN}"])
+def test_semantic_numeric_attack_falls_back_atomically(evidence, engine, replacement):
+    brief = brief_for(engine)
+    result = compliant_writer_result(brief).model_dump(mode="python")
+    result["sentences"][0]["text"] = result["sentences"][0]["text"].replace("0.115", replacement)
+    runtime = ProviderRuntime(
+        groq_configuration(), planner=LocalPlanner(evidence), writer=LocalWriter(value=result)
+    )
+    request = AskV2Request(question=ALLEN)
+    assert ProviderOrchestrator(evidence, runtime).answer(request) == engine.answer(request)
+
+
+@pytest.mark.parametrize("question", [REID, KYLER])
+def test_comparison_and_alignment_have_shorter_approved_football_phrasings(engine, question):
+    brief = brief_for(engine, question)
+    primary = brief.supports[0]
+    assert len(primary.phrasings) > 1
+    assert primary.phrasings[-1] != primary.text
+    assert len(primary.phrasings[-1].split()) < len(primary.text.split())
+    text = render_writer_answer(validate(engine, brief, compliant_writer_result(brief)))
+    assert len(text.split()) <= 180
+    assert "offensive/QB-role attribution" not in text
+    assert "distinct verified coverage" not in text
+    if question == REID:
+        assert "Andy Reid" in text and "Mike Tomlin" in text
+        assert "not proof of better quarterback development" in text
+        assert "cannot establish who developed quarterbacks better" in text
+        assert "incomplete and nonrandom" in text
+    else:
+        assert "Kyler Murray" in text and "Minnesota Vikings" in text
+        assert "not a predictive fit rating" in text
+        assert "cannot forecast a team-specific performance change" in text
+        assert "not current or live performance" in text
+
+
+def test_late_planner_leaves_only_the_remaining_total_budget_for_writer(
+    evidence, engine, monkeypatch
+):
+    clock = [0.0]
+    monkeypatch.setattr(
+        "nfl_coaching_impact.conversation.provider_orchestration.time.monotonic", lambda: clock[0]
+    )
+
+    class LatePlanner(LocalPlanner):
+        def plan(self, request, *, timeout):
+            clock[0] = 29.0
+            return super().plan(request, timeout=timeout)
+
+    class RemainingWriter(LocalWriter):
+        def write(self, request, *, timeout):
+            assert timeout == 1.0
+            clock[0] += 0.5
+            return super().write(request, timeout=timeout)
+
+    runtime = ProviderRuntime(
+        groq_configuration(), planner=LatePlanner(evidence), writer=RemainingWriter()
+    )
+    request = AskV2Request(question=ALLEN)
+    response = ProviderOrchestrator(evidence, runtime).answer(request)
+    assert response.answer_mode is AnswerMode.GROUNDED_AI
+    assert response.answerability == engine.answer(request).answerability
+
+
 @pytest.mark.parametrize("status", [400, 401, 403, 429, 500, 503])
 def test_writer_http_failure_is_atomic_exact_fallback(evidence, engine, status):
     error = RuntimeError("PRIVATE_PROVIDER_BODY")

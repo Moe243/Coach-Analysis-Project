@@ -24,7 +24,7 @@ interface AssistantTurnProps {
 }
 
 function MetricExplainer({ response }: { response: AskV2Response }) {
-  const hasEpa = response.answer.includes("EPA/dropback");
+  const hasEpa = /EPA(?:\/| per )dropback/i.test(response.answer);
   const hasPae = response.answer.includes("PAE");
   if (!hasEpa && !hasPae) return null;
   return (
